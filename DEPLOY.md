@@ -2,7 +2,7 @@
 
 ## Architecture
 Two Railway services in one project:
-1. **Frontend** — Next.js (this repo root)
+1. **Frontend** — Next.js (this repo root) → https://dragonslayer-production.up.railway.app
 2. **Backend** — FastAPI + PostgreSQL (`/backend` folder)
 
 ---

@@ -15,7 +15,7 @@ from telegram.ext import ContextTypes, CommandHandler
 
 logger = logging.getLogger(__name__)
 
-TWA_BASE_URL = "https://dragonslayer.up.railway.app"  # Update after deploy
+TWA_BASE_URL = "https://dragonslayer-production.up.railway.app"
 TWA_GAME_PATH = "/twa"
 
 
