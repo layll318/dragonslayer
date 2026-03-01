@@ -3,82 +3,109 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Loader2, CheckCircle, XCircle, Wallet } from 'lucide-react';
 
+const PENDING_KEY = 'xaman_pending_uuid';
+
 interface XamanConnectProps {
   onConnected: (address: string) => void;
 }
 
 type Phase = 'idle' | 'loading' | 'waiting' | 'success' | 'error';
 
+function isMobileDevice() {
+  if (typeof navigator === 'undefined') return false;
+  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+}
+
 export default function XamanConnect({ onConnected }: XamanConnectProps) {
   const [phase, setPhase] = useState<Phase>('idle');
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [deeplink, setDeeplink] = useState<string | null>(null);
-  const [uuid, setUuid] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const uuidRef = useRef<string | null>(null);
 
   const stopPolling = useCallback(() => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
   }, []);
 
   useEffect(() => () => stopPolling(), [stopPolling]);
 
+  // Check payload and resolve — shared by polling and visibilitychange
+  const checkPayload = useCallback(async (uuid: string): Promise<boolean> => {
+    try {
+      const res = await fetch(`/frontend-api/wallet/payload?uuid=${uuid}`);
+      if (!res.ok) return false;
+      const data = await res.json();
+      if (data.signed && data.resolved && data.account?.startsWith('r') && data.account.length >= 25) {
+        stopPolling();
+        localStorage.removeItem(PENDING_KEY);
+        setPhase('success');
+        onConnected(data.account);
+        return true;
+      }
+      if (data.cancelled || data.expired) {
+        stopPolling();
+        localStorage.removeItem(PENDING_KEY);
+        setPhase('error');
+        setErrorMsg(data.cancelled ? 'Sign-in was cancelled.' : 'Request expired — please try again.');
+        return true; // resolved (negatively), stop further checks
+      }
+    } catch { /* transient error, keep trying */ }
+    return false;
+  }, [onConnected, stopPolling]);
+
+  // Start background polling for a given uuid
+  const startPolling = useCallback((uuid: string) => {
+    stopPolling();
+    pollRef.current = setInterval(() => checkPayload(uuid), 2000);
+  }, [checkPayload, stopPolling]);
+
+  // Immediately check on tab focus (user returns from Xaman app)
+  useEffect(() => {
+    const onVisible = () => {
+      if (!document.hidden && uuidRef.current) checkPayload(uuidRef.current);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [checkPayload]);
+
   const startConnect = useCallback(async () => {
     setPhase('loading');
     setErrorMsg(null);
-    setQrUrl(null);
-    setDeeplink(null);
     stopPolling();
 
     try {
       const res = await fetch('/frontend-api/wallet/connect', { method: 'POST' });
       const data = await res.json();
+      if (!res.ok || !data.uuid) throw new Error(data.error || 'Failed to create sign-in request');
 
-      if (!res.ok || !data.uuid) {
-        throw new Error(data.error || 'Failed to create sign-in request');
-      }
+      const { uuid, qr_png, deeplink: dl } = data;
+      uuidRef.current = uuid;
+      // Persist so /wallet-connected page can find it if Xaman strips params
+      localStorage.setItem(PENDING_KEY, uuid);
 
-      setUuid(data.uuid);
-      setQrUrl(data.qr_png);
-      setDeeplink(data.deeplink);
+      setQrUrl(qr_png);
+      setDeeplink(dl);
       setPhase('waiting');
+      startPolling(uuid);
 
-      pollRef.current = setInterval(async () => {
-        try {
-          const poll = await fetch(`/frontend-api/wallet/payload?uuid=${data.uuid}`);
-          const status = await poll.json();
-
-          if (status.cancelled || status.expired) {
-            stopPolling();
-            setPhase('error');
-            setErrorMsg(status.cancelled ? 'Sign-in cancelled' : 'Request expired');
-            return;
-          }
-
-          if (status.resolved && status.signed && status.account) {
-            stopPolling();
-            setPhase('success');
-            onConnected(status.account);
-          }
-        } catch {
-          // Keep polling silently on transient errors
-        }
-      }, 2000);
+      // On mobile: auto-open Xaman and let /wallet-connected handle the return
+      if (isMobileDevice()) {
+        setTimeout(() => { window.location.href = dl; }, 300);
+      }
     } catch (err: any) {
       setPhase('error');
       setErrorMsg(err.message || 'Connection failed');
     }
-  }, [onConnected, stopPolling]);
+  }, [startPolling, stopPolling]);
 
   const cancel = useCallback(() => {
     stopPolling();
+    localStorage.removeItem(PENDING_KEY);
+    uuidRef.current = null;
     setPhase('idle');
     setQrUrl(null);
     setDeeplink(null);
-    setUuid(null);
     setErrorMsg(null);
   }, [stopPolling]);
 
@@ -96,13 +123,13 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
       <div className="space-y-2">
         <button
           onClick={startConnect}
-          className="flex items-center gap-2 w-full px-4 py-3 rounded-xl font-bold text-white
+          className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl font-bold text-white
             bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700
             transition-all shadow-lg active:scale-95"
         >
           <img
             src="https://xumm.app/assets/icons/favicon-196x196.png"
-            alt="Xaman"
+            alt=""
             className="w-5 h-5 rounded"
             onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
           />
@@ -128,11 +155,18 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
     );
   }
 
-  // phase === 'waiting'
+  // ── 'waiting' phase: show QR for desktop, or spinner for mobile (Xaman opened) ──
+  const mobile = isMobileDevice();
+
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 border border-orange-500/30 rounded-2xl p-6 max-w-sm w-full shadow-2xl">
-
+      <div
+        className="rounded-2xl p-6 max-w-sm w-full shadow-2xl"
+        style={{
+          background: 'linear-gradient(180deg, rgba(22,16,8,0.99) 0%, rgba(12,8,4,1) 100%)',
+          border: '1px solid rgba(212,160,23,0.25)',
+        }}
+      >
         <div className="text-center mb-4">
           <div className="flex items-center justify-center gap-2 mb-1">
             <img
@@ -141,29 +175,47 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
               className="w-7 h-7 rounded-lg"
               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
             />
-            <h2 className="text-xl font-bold text-white">Connect Xaman</h2>
+            <h2 className="text-xl font-bold text-[#f0c040] font-cinzel">Connect Xaman</h2>
           </div>
-          <p className="text-gray-400 text-sm">Scan the QR code or open in your Xaman app</p>
+          <p className="text-[#6b5a3a] text-sm">
+            {mobile ? 'Approve the sign-in request in your Xaman app' : 'Scan the QR code with Xaman'}
+          </p>
         </div>
 
-        {/* QR code */}
-        <div className="bg-white rounded-xl p-3 mb-4 flex items-center justify-center min-h-[220px]">
-          {qrUrl ? (
-            <img
-              src={qrUrl}
-              alt="Xaman QR Code"
-              className="w-full max-w-[200px] h-auto mx-auto"
-            />
-          ) : (
-            <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
-          )}
-        </div>
+        {/* Desktop: QR code */}
+        {!mobile && (
+          <div className="bg-white rounded-xl p-3 mb-4 flex items-center justify-center min-h-[210px]">
+            {qrUrl ? (
+              <img src={qrUrl} alt="Xaman QR Code" className="w-full max-w-[190px] h-auto mx-auto" />
+            ) : (
+              <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+            )}
+          </div>
+        )}
 
-        {/* Deep link button */}
-        {deeplink && (
+        {/* Mobile: spinner + re-open button */}
+        {mobile && (
+          <div className="flex flex-col items-center gap-3 py-6">
+            <Loader2 className="w-12 h-12 animate-spin text-orange-400" />
+            <p className="text-[#6b5a3a] text-sm">Waiting for Xaman approval…</p>
+            {deeplink && (
+              <a
+                href={deeplink}
+                className="mt-2 px-5 py-2.5 rounded-xl font-bold text-white text-sm
+                  bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700
+                  transition-all shadow-lg"
+              >
+                Re-open Xaman App
+              </a>
+            )}
+          </div>
+        )}
+
+        {/* Desktop: open in app button */}
+        {!mobile && deeplink && (
           <a
             href={deeplink}
-            className="block w-full py-3 px-4 mb-3 text-center font-bold text-white rounded-xl
+            className="block w-full py-3 px-4 mb-3 text-center font-bold text-white rounded-xl text-sm
               bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700
               transition-all shadow-lg"
           >
@@ -171,31 +223,14 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
           </a>
         )}
 
-        {/* Steps */}
-        <div className="space-y-2 text-sm mb-4">
-          {[
-            'Open Xaman on your phone',
-            'Tap scan and point at the QR code',
-            'Approve the sign-in request',
-          ].map((step, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <span className="w-5 h-5 rounded-full bg-orange-500/20 flex items-center justify-center
-                flex-shrink-0 text-xs font-bold text-orange-400">
-                {i + 1}
-              </span>
-              <p className="text-gray-300">{step}</p>
-            </div>
-          ))}
-        </div>
-
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mt-2">
           <div className="flex items-center gap-2">
-            <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
-            <p className="text-xs text-gray-400">Waiting for approval…</p>
+            <Loader2 className="w-3 h-3 animate-spin text-[#6b5a3a]" />
+            <p className="text-xs text-[#6b5a3a]">Waiting for approval…</p>
           </div>
           <button
             onClick={cancel}
-            className="text-xs text-gray-500 hover:text-gray-300 transition-colors underline"
+            className="text-xs text-[#4a3a2a] hover:text-[#6b5a3a] transition-colors underline"
           >
             Cancel
           </button>

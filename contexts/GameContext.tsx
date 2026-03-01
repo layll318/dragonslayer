@@ -372,6 +372,38 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       });
     }
 
+    // Pick up wallet address from Xaman return redirect or localStorage fallback
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const linkedAddr = params.get('wallet_linked') || localStorage.getItem('xaman_linked_address');
+      if (linkedAddr && linkedAddr.startsWith('r') && linkedAddr.length >= 25) {
+        localStorage.removeItem('xaman_linked_address');
+        window.history.replaceState({}, '', window.location.pathname);
+        setState(prev => ({ ...prev, walletAddress: linkedAddr }));
+        // Also register with backend to get playerId
+        const apiUrl2 = process.env.NEXT_PUBLIC_API_URL ?? '';
+        if (apiUrl2) {
+          fetch(`${apiUrl2}/api/auth/wallet`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ wallet_address: linkedAddr }),
+          })
+            .then(r => r.json())
+            .then(data => {
+              if (data.success) {
+                setState(prev => ({
+                  ...prev,
+                  walletAddress: linkedAddr,
+                  playerId: data.player_id,
+                  isSynced: true,
+                }));
+              }
+            })
+            .catch(() => {/* ignore */});
+        }
+      }
+    }
+
     // TWA auth — if running inside Telegram, register the user
     const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? '';
     if (apiUrl && typeof window !== 'undefined' && window.Telegram?.WebApp?.initDataUnsafe?.user) {
