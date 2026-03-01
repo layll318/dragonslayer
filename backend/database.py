@@ -1,4 +1,5 @@
 import asyncpg
+import ssl
 import os
 import logging
 
@@ -7,11 +8,37 @@ logger = logging.getLogger(__name__)
 pool: asyncpg.Pool | None = None
 
 
+def _fix_url(database_url: str) -> str:
+    """Railway sometimes provides postgres:// — asyncpg needs postgresql://"""
+    if database_url.startswith("postgres://"):
+        database_url = database_url.replace("postgres://", "postgresql://", 1)
+    return database_url
+
+
 async def init_db(database_url: str):
     global pool
-    pool = await asyncpg.create_pool(database_url, min_size=2, max_size=10)
+    database_url = _fix_url(database_url)
+
+    # Railway PostgreSQL requires SSL
+    ssl_ctx = ssl.create_default_context()
+    ssl_ctx.check_hostname = False
+    ssl_ctx.verify_mode = ssl.CERT_NONE
+
+    try:
+        pool = await asyncpg.create_pool(
+            database_url,
+            min_size=2,
+            max_size=10,
+            ssl=ssl_ctx,
+        )
+        logger.info("✅ Database pool created (SSL)")
+    except Exception as e:
+        logger.warning(f"SSL connection failed ({e}), retrying without SSL...")
+        pool = await asyncpg.create_pool(database_url, min_size=2, max_size=10)
+        logger.info("✅ Database pool created (no SSL)")
+
     await create_tables()
-    logger.info("✅ Database pool created and tables ready")
+    logger.info("✅ Tables ready")
 
 
 async def close_db():

@@ -62,7 +62,33 @@ app.include_router(admin.router)
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "service": "dragonslayer-api"}
+    from database import get_pool
+    try:
+        pool = get_pool()
+        async with pool.acquire() as conn:
+            tables = await conn.fetch(
+                "SELECT tablename FROM pg_tables WHERE schemaname='public'"
+            )
+            table_names = [r["tablename"] for r in tables]
+        return {
+            "status": "ok",
+            "service": "dragonslayer-api",
+            "db": "connected",
+            "tables": table_names,
+        }
+    except Exception as e:
+        return {"status": "degraded", "service": "dragonslayer-api", "db_error": str(e)}
+
+
+@app.post("/api/setup")
+async def manual_setup():
+    """Force table creation — safe to call multiple times (IF NOT EXISTS)."""
+    from database import create_tables
+    try:
+        await create_tables()
+        return {"success": True, "message": "Tables created / verified"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
 if __name__ == "__main__":
