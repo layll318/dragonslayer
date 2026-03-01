@@ -4,6 +4,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Loader2, CheckCircle, XCircle, Wallet } from 'lucide-react';
 
 const PENDING_KEY = 'xaman_pending_uuid';
+const PENDING_QR_KEY = 'xaman_pending_qr';
+const PENDING_DL_KEY = 'xaman_pending_dl';
 
 interface XamanConnectProps {
   onConnected: (address: string) => void;
@@ -14,6 +16,19 @@ type Phase = 'idle' | 'loading' | 'waiting' | 'success' | 'error';
 function isMobileDevice() {
   if (typeof navigator === 'undefined') return false;
   return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+}
+
+function openXaman(url: string) {
+  // In Telegram WebApp: use openLink so the WebApp stays alive
+  const tg = (window as any).Telegram?.WebApp;
+  if (tg?.openLink) {
+    tg.openLink(url);
+  } else {
+    // Regular browser: open in new tab/window so current page keeps polling
+    const win = window.open(url, '_blank');
+    // Fallback: if popup blocked, navigate in same tab
+    if (!win) window.location.href = url;
+  }
 }
 
 export default function XamanConnect({ onConnected }: XamanConnectProps) {
@@ -39,6 +54,8 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
       if (data.signed && data.resolved && data.account?.startsWith('r') && data.account.length >= 25) {
         stopPolling();
         localStorage.removeItem(PENDING_KEY);
+        localStorage.removeItem(PENDING_QR_KEY);
+        localStorage.removeItem(PENDING_DL_KEY);
         setPhase('success');
         onConnected(data.account);
         return true;
@@ -46,9 +63,11 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
       if (data.cancelled || data.expired) {
         stopPolling();
         localStorage.removeItem(PENDING_KEY);
+        localStorage.removeItem(PENDING_QR_KEY);
+        localStorage.removeItem(PENDING_DL_KEY);
         setPhase('error');
         setErrorMsg(data.cancelled ? 'Sign-in was cancelled.' : 'Request expired — please try again.');
-        return true; // resolved (negatively), stop further checks
+        return true;
       }
     } catch { /* transient error, keep trying */ }
     return false;
@@ -59,6 +78,23 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
     stopPolling();
     pollRef.current = setInterval(() => checkPayload(uuid), 2000);
   }, [checkPayload, stopPolling]);
+
+  // On mount: resume any pending connection (e.g. user returned after page reload)
+  useEffect(() => {
+    const pendingUuid = localStorage.getItem(PENDING_KEY);
+    if (pendingUuid) {
+      const savedQr = localStorage.getItem(PENDING_QR_KEY);
+      const savedDl = localStorage.getItem(PENDING_DL_KEY);
+      uuidRef.current = pendingUuid;
+      setQrUrl(savedQr);
+      setDeeplink(savedDl);
+      setPhase('waiting');
+      // Immediately check — might already be signed
+      checkPayload(pendingUuid).then(resolved => {
+        if (!resolved) startPolling(pendingUuid);
+      });
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Immediately check on tab focus (user returns from Xaman app)
   useEffect(() => {
@@ -81,17 +117,18 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
 
       const { uuid, qr_png, deeplink: dl } = data;
       uuidRef.current = uuid;
-      // Persist so /wallet-connected page can find it if Xaman strips params
       localStorage.setItem(PENDING_KEY, uuid);
+      if (qr_png) localStorage.setItem(PENDING_QR_KEY, qr_png);
+      if (dl) localStorage.setItem(PENDING_DL_KEY, dl);
 
       setQrUrl(qr_png);
       setDeeplink(dl);
       setPhase('waiting');
       startPolling(uuid);
 
-      // On mobile: auto-open Xaman and let /wallet-connected handle the return
+      // On mobile: open Xaman WITHOUT navigating away so polling keeps running
       if (isMobileDevice()) {
-        setTimeout(() => { window.location.href = dl; }, 300);
+        setTimeout(() => openXaman(dl), 300);
       }
     } catch (err: any) {
       setPhase('error');
@@ -102,6 +139,8 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
   const cancel = useCallback(() => {
     stopPolling();
     localStorage.removeItem(PENDING_KEY);
+    localStorage.removeItem(PENDING_QR_KEY);
+    localStorage.removeItem(PENDING_DL_KEY);
     uuidRef.current = null;
     setPhase('idle');
     setQrUrl(null);
