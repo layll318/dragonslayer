@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import { useGame } from '@/contexts/GameContext';
 import { formatNumber } from '@/utils/format';
 import { useTelegramWebApp } from '@/hooks/useTelegramWebApp';
+import XamanConnect from '@/components/XamanConnect';
 
 const TIER_NAMES = ['Peasant', 'Squire', 'Knight', 'Dragon Knight', 'Dragonslayer'];
 const TIER_ICONS = ['🧑‍🌾', '🛡️', '⚔️', '🐲', '👑'];
@@ -18,28 +19,6 @@ export default function ProfileTab() {
   const minutes = Math.floor((timePlayed % 3600) / 60);
   const totalBuildings = state.buildings.reduce((sum, b) => sum + b.owned, 0);
   const xpPercent = state.xpToNext > 0 ? (state.xp / state.xpToNext) * 100 : 0;
-
-  const [walletInput, setWalletInput] = useState('');
-  const [linking, setLinking] = useState(false);
-  const [linkError, setLinkError] = useState('');
-
-  const handleLinkWallet = async () => {
-    const addr = walletInput.trim();
-    if (!addr.startsWith('r') || addr.length < 25) {
-      setLinkError('Enter a valid XRPL address (starts with r)');
-      return;
-    }
-    setLinking(true);
-    setLinkError('');
-    try {
-      await connectWallet(addr);
-      setWalletInput('');
-    } catch {
-      setLinkError('Failed to link wallet. Try again.');
-    } finally {
-      setLinking(false);
-    }
-  };
 
   return (
     <div className="flex flex-col flex-1 pb-4 overflow-y-auto relative z-10 page-fade">
@@ -113,7 +92,12 @@ export default function ProfileTab() {
           {state.walletAddress ? (
             <div className="space-y-2">
               <div className="flex items-center gap-2 p-2 rounded-lg bg-black/30 border border-[rgba(212,160,23,0.2)]">
-                <span className="text-sm">💳</span>
+                <img
+                  src="https://xumm.app/assets/icons/favicon-196x196.png"
+                  alt="Xaman"
+                  className="w-4 h-4 rounded"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
                 <p className="text-[#f0c040] text-[9px] font-mono flex-1 truncate">{state.walletAddress}</p>
               </div>
               <button
@@ -128,23 +112,7 @@ export default function ProfileTab() {
               <p className="text-[#6b5a3a] text-[10px] leading-relaxed">
                 Link your XRPL wallet to sync progress across devices and earn DragonSlayer tokens.
               </p>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={walletInput}
-                  onChange={e => { setWalletInput(e.target.value); setLinkError(''); }}
-                  placeholder="rYour...XRPLaddress"
-                  className="flex-1 bg-black/40 border border-[rgba(212,160,23,0.2)] rounded-lg px-2 py-1.5 text-[10px] text-[#d8c8a8] font-mono placeholder-[#3a2a1a] focus:outline-none focus:border-[rgba(212,160,23,0.5)]"
-                />
-                <button
-                  onClick={handleLinkWallet}
-                  disabled={linking || !walletInput.trim()}
-                  className="action-btn text-[10px] px-3 py-1.5 disabled:opacity-40"
-                >
-                  {linking ? '…' : 'LINK'}
-                </button>
-              </div>
-              {linkError && <p className="text-red-400 text-[9px]">{linkError}</p>}
+              <XamanConnect onConnected={connectWallet} />
             </div>
           )}
         </div>

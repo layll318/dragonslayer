@@ -305,6 +305,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<GameState>(createInitialState);
   const initialized = useRef(false);
   const tickRef = useRef<ReturnType<typeof setInterval>>();
+  const stateRef = useRef<GameState>(state);
 
   // Load saved state on mount
   useEffect(() => {
@@ -467,34 +468,38 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  // Auto-save every 5 seconds (localStorage) + server sync every 30s
+  // Keep stateRef current so intervals always access the latest state
   useEffect(() => {
-    const interval = setInterval(() => {
-      saveState(state);
-    }, 5000);
-    return () => clearInterval(interval);
+    stateRef.current = state;
+  });
+
+  // Auto-save to localStorage immediately on every state change
+  useEffect(() => {
+    saveState(state);
   }, [state]);
 
+  // Server sync every 30s (stable interval — uses ref, not state dep)
   useEffect(() => {
-    if (!state.playerId) return;
     const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? '';
     if (!apiUrl) return;
     const interval = setInterval(() => {
-      fetch(`${apiUrl}/api/save/${state.playerId}`, {
+      const s = stateRef.current;
+      if (!s.playerId) return;
+      fetch(`${apiUrl}/api/save/${s.playerId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ save_json: state }),
+        body: JSON.stringify({ save_json: s }),
       }).catch(() => {/* ignore */});
     }, 30_000);
     return () => clearInterval(interval);
-  }, [state.playerId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Save on unmount / tab close
+  // Save on tab close / refresh
   useEffect(() => {
-    const handleUnload = () => saveState(state);
+    const handleUnload = () => saveState(stateRef.current);
     window.addEventListener('beforeunload', handleUnload);
     return () => window.removeEventListener('beforeunload', handleUnload);
-  }, [state]);
+  }, []);
 
   const careMultiplier = calcCareMultiplier(state.fed, state.energy, state.mood);
 
