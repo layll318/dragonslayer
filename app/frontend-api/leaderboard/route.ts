@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
+const API_URL = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || '';
 
 export async function GET(request: NextRequest) {
   try {
@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     if (playerId) params.set('player_id', playerId);
 
     const res = await fetch(`${API_URL}/api/leaderboard?${params}`, {
-      next: { revalidate: 30 }, // cache 30s
+      cache: 'no-store',
     });
 
     if (!res.ok) {

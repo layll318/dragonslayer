@@ -25,7 +25,7 @@ async def get_leaderboard(
                 COALESCE((gs.save_json->>'totalTaps')::bigint, 0)       AS total_taps
             FROM players p
             LEFT JOIN game_saves gs ON gs.player_id = p.id
-            ORDER BY total_gold DESC
+            ORDER BY COALESCE((gs.save_json->>'totalGoldEarned')::bigint, 0) DESC
             LIMIT $1
             """,
             limit,

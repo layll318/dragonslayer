@@ -57,7 +57,7 @@ body {
     /* dark top */
     radial-gradient(ellipse 120% 40% at 50% 0%,  rgba(0,0,5,1) 0%, transparent 80%),
     linear-gradient(180deg, #030206 0%, #08050a 40%, #0e0604 100%);
-  background-attachment: fixed;
+  background-attachment: scroll;
 }
 
 /* Animated background fire glow */

@@ -35,9 +35,9 @@ export default function RootLayout({
           strategy="beforeInteractive"
         />
       </head>
-      <body className="fire-bg min-h-screen">
+      <body className="fire-bg">
         <GameProvider>
-          <div className="w-full max-w-[430px] sm:max-w-[540px] mx-auto min-h-screen relative flex flex-col">
+          <div className="w-full max-w-[430px] sm:max-w-[540px] mx-auto min-h-dvh relative flex flex-col">
             {children}
           </div>
         </GameProvider>
