@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { useGame } from '@/contexts/GameContext';
+import { useGame, getCareCost, FEED_COST_BASE, REST_COST_BASE, TRAIN_COST_BASE } from '@/contexts/GameContext';
 import { formatNumber, formatPercent } from '@/utils/format';
 import CharacterDisplay from './CharacterDisplay';
 import QuestBanner from './QuestBanner';
@@ -46,6 +46,9 @@ export default function HeroTab() {
   const counter      = useRef(0);
   const prevLevelRef = useRef(state.level);
   const comboTimer   = useRef<ReturnType<typeof setTimeout>>();
+  // Holds fast-changing tap display values so handleTap deps stay stable
+  const tapValuesRef = useRef({ earned: 0, crit: false, gpt: 1 });
+  tapValuesRef.current = { earned: state.lastTapEarned, crit: state.lastTapCrit, gpt: goldPerTap };
 
   // Level-up ceremony + haptic
   useEffect(() => {
@@ -77,8 +80,8 @@ export default function HeroTab() {
     const currentCombo = getComboLevel(comboCount + 1);
     tap(currentCombo.mult);
 
-    const earned = state.lastTapEarned || goldPerTap;
-    const isCrit = state.lastTapCrit;
+    const { earned: lastEarned, crit: isCrit, gpt } = tapValuesRef.current;
+    const earned = lastEarned || gpt;
 
     // Haptic feedback
     if (isTWA) {
@@ -100,11 +103,11 @@ export default function HeroTab() {
 
     setFlash(true);
     setTimeout(() => setFlash(false), isCrit ? 140 : 80);
-  }, [tap, comboCount, goldPerTap, state.lastTapEarned, state.lastTapCrit]);
+  }, [tap, comboCount, isTWA, hapticFeedback]);
 
-  const feedCost  = Math.floor(25 * Math.pow(1.1, state.level - 1));
-  const restCost  = Math.floor(15 * Math.pow(1.1, state.level - 1));
-  const trainCost = Math.floor(20 * Math.pow(1.1, state.level - 1));
+  const feedCost  = getCareCost(FEED_COST_BASE,  state.level);
+  const restCost  = getCareCost(REST_COST_BASE,  state.level);
+  const trainCost = getCareCost(TRAIN_COST_BASE, state.level);
   const xpPercent = state.xpToNext > 0 ? (state.xp / state.xpToNext) * 100 : 0;
   const tier      = getCharacterTier();
   const careWarning = Math.min(state.fed, state.energy, state.mood) < 25;

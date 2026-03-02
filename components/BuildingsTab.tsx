@@ -93,20 +93,23 @@ export default function BuildingsTab() {
                           {formatNumber(cost)}
                         </span>
                       </div>
-                      {/* Buy ×10 — only show if affordable */}
-                      {canBuy10 && (
-                        <button
-                          onClick={() => buyBuilding(building.id, 10)}
-                          className="text-[8px] font-black text-[#1a1208] px-2 py-0.5 rounded w-[70px]"
-                          style={{
-                            background: 'linear-gradient(180deg, #ffaa33 0%, #d4a017 100%)',
-                            border: '1px solid #ffe88a',
-                            letterSpacing: '0.5px',
-                          }}
-                        >
-                          ×10
-                        </button>
-                      )}
+                      {/* Buy ×10 — always visible, greyed when unaffordable */}
+                      <button
+                        onClick={() => canBuy10 && buyBuilding(building.id, 10)}
+                        disabled={!canBuy10}
+                        className="text-[8px] font-black px-2 py-0.5 rounded w-[70px] transition-opacity"
+                        style={{
+                          background: canBuy10
+                            ? 'linear-gradient(180deg, #ffaa33 0%, #d4a017 100%)'
+                            : 'rgba(100,80,40,0.25)',
+                          border: canBuy10 ? '1px solid #ffe88a' : '1px solid rgba(100,80,40,0.3)',
+                          color: canBuy10 ? '#1a1208' : '#5a4a2a',
+                          letterSpacing: '0.5px',
+                          opacity: canBuy10 ? 1 : 0.55,
+                        }}
+                      >
+                        ×10
+                      </button>
                     </>
                   ) : (
                     <div className="text-center px-2 py-2 rounded-lg bg-black/20 border border-[rgba(100,80,40,0.15)]">

@@ -7,7 +7,8 @@ import BuildingsTab from '@/components/BuildingsTab';
 import BottomNav from '@/components/BottomNav';
 import { useGame } from '@/contexts/GameContext';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? '';
+const API_URL = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || '';
+const FRONTEND_URL = process.env.NEXT_PUBLIC_FRONTEND_URL || 'https://dragonslayer-production.up.railway.app';
 
 function EmbedContent() {
   const searchParams = useSearchParams();
@@ -66,7 +67,7 @@ function EmbedContent() {
           This site is not permitted to embed DragonSlayer.
         </p>
         <a
-          href="https://dragonslayer.up.railway.app"
+          href={FRONTEND_URL}
           target="_blank"
           rel="noopener noreferrer"
           className="action-btn px-4 py-2 text-sm font-cinzel font-bold"
@@ -100,7 +101,7 @@ function EmbedContent() {
           <span className="font-cinzel text-[9px] font-bold tracking-widest uppercase">Forge</span>
         </button>
         <a
-          href="https://dragonslayer.up.railway.app"
+          href={FRONTEND_URL}
           target="_blank"
           rel="noopener noreferrer"
           className="flex flex-col items-center gap-0.5 px-4 py-1"

@@ -165,9 +165,9 @@ const INITIAL_BUILDINGS: Building[] = [
 
 const CARE_DECAY_PER_SECOND = 2 / 3600; // 2% per hour — full depletion in ~50 hours
 const OFFLINE_DECAY_CAP_SECONDS = 12 * 3600; // max 12 hours of offline decay
-const FEED_COST_BASE = 25;
-const REST_COST_BASE = 15;
-const TRAIN_COST_BASE = 20;
+export const FEED_COST_BASE = 25;
+export const REST_COST_BASE = 15;
+export const TRAIN_COST_BASE = 20;
 const FEED_RESTORE = 60;
 const REST_RESTORE = 50;
 const TRAIN_RESTORE = 45;
@@ -191,7 +191,7 @@ function calcCareMultiplier(fed: number, energy: number, mood: number): number {
   return 0.25;
 }
 
-function getCareCost(base: number, level: number): number {
+export function getCareCost(base: number, level: number): number {
   return Math.floor(base * Math.pow(1.1, level - 1));
 }
 
@@ -495,7 +495,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           dailyQuests,
         };
       });
-    }, 250);
+    }, 1000);
 
     return () => {
       if (tickRef.current) clearInterval(tickRef.current);
@@ -507,10 +507,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     stateRef.current = state;
   });
 
-  // Auto-save to localStorage immediately on every state change
+  // Auto-save every 5 s via ref — avoids 4×/sec localStorage writes
   useEffect(() => {
-    saveState(state);
-  }, [state]);
+    const interval = setInterval(() => saveState(stateRef.current), 5_000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Server sync every 30s (stable interval — uses ref, not state dep)
   useEffect(() => {

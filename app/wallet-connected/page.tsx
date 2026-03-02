@@ -37,7 +37,6 @@ function WalletConnectedContent() {
 
         const isValid =
           data.signed === true &&
-          data.resolved === true &&
           !data.cancelled &&
           !data.expired &&
           data.account &&
@@ -67,7 +66,7 @@ function WalletConnectedContent() {
             try {
               const r = await fetch(`/frontend-api/wallet/payload?uuid=${payloadId}`);
               const d = await r.json();
-              if (d.signed && d.resolved && d.account?.startsWith('r')) {
+              if (d.signed && d.account?.startsWith('r')) {
                 clearInterval(poll);
                 localStorage.removeItem('xaman_pending_uuid');
                 setAddress(d.account);
