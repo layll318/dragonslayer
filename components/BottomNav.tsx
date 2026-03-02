@@ -70,8 +70,8 @@ export default function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] z-50">
-      <div className="bottom-nav px-1 py-1.5">
+    <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] sm:max-w-[540px] z-50">
+      <div className="bottom-nav px-1 pt-1.5" style={{ paddingBottom: 'max(6px, env(safe-area-inset-bottom))' }}>
         <div className="flex items-center justify-around">
           {items.map((item) => {
             const isActive = activeTab === item.id;

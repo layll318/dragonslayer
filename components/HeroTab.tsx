@@ -313,8 +313,8 @@ function CareRow({
         <button
           onClick={onClick}
           disabled={!canAfford}
-          className="action-btn w-full py-1 text-[9px]"
-          style={{ letterSpacing: '1px' }}
+          className="action-btn w-full text-[9px]"
+          style={{ letterSpacing: '1px', minHeight: 44, touchAction: 'manipulation' }}
         >
           {btnLabel}
         </button>

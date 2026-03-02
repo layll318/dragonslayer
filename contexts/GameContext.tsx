@@ -163,13 +163,14 @@ const INITIAL_BUILDINGS: Building[] = [
   },
 ];
 
-const CARE_DECAY_PER_SECOND = 5 / 3600; // 5% per hour
+const CARE_DECAY_PER_SECOND = 2 / 3600; // 2% per hour — full depletion in ~50 hours
+const OFFLINE_DECAY_CAP_SECONDS = 12 * 3600; // max 12 hours of offline decay
 const FEED_COST_BASE = 25;
 const REST_COST_BASE = 15;
 const TRAIN_COST_BASE = 20;
-const FEED_RESTORE = 40;
-const REST_RESTORE = 35;
-const TRAIN_RESTORE = 30;
+const FEED_RESTORE = 60;
+const REST_RESTORE = 50;
+const TRAIN_RESTORE = 45;
 const XP_PER_TAP = 2;
 const XP_PER_CARE = 5;
 const CRIT_CHANCE = 0.08;
@@ -324,10 +325,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         return template ? { ...savedB, baseIncome: template.baseIncome } : savedB;
       });
 
-      // Decay care stats
-      let fed = Math.max(0, saved.fed - elapsed * CARE_DECAY_PER_SECOND);
-      let energy = Math.max(0, saved.energy - elapsed * CARE_DECAY_PER_SECOND);
-      let mood = Math.max(0, saved.mood - elapsed * CARE_DECAY_PER_SECOND);
+      // Decay care stats — cap offline time so long absences don't fully deplete stats
+      const cappedElapsed = Math.min(elapsed, OFFLINE_DECAY_CAP_SECONDS);
+      let fed = Math.max(0, saved.fed - cappedElapsed * CARE_DECAY_PER_SECOND);
+      let energy = Math.max(0, saved.energy - cappedElapsed * CARE_DECAY_PER_SECOND);
+      let mood = Math.max(0, saved.mood - cappedElapsed * CARE_DECAY_PER_SECOND);
 
       // Calculate offline gold from buildings (use migrated rates)
       const totalIncome = migratedBuildings.reduce((sum, b) => sum + b.baseIncome * b.owned, 0);

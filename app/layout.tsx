@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Cinzel } from 'next/font/google';
 import Script from 'next/script';
 import './globals.css';
@@ -13,6 +13,13 @@ const cinzel = Cinzel({
 export const metadata: Metadata = {
   title: 'DragonSlayer',
   description: 'Tap, build, and raise your DragonSlayer hero',
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({
@@ -30,7 +37,7 @@ export default function RootLayout({
       </head>
       <body className="fire-bg min-h-screen">
         <GameProvider>
-          <div className="max-w-[430px] mx-auto min-h-screen relative flex flex-col">
+          <div className="w-full max-w-[430px] sm:max-w-[540px] mx-auto min-h-screen relative flex flex-col">
             {children}
           </div>
         </GameProvider>
