@@ -6,6 +6,8 @@ import { Loader2, CheckCircle, XCircle, Wallet } from 'lucide-react';
 const PENDING_KEY = 'xaman_pending_uuid';
 const PENDING_QR_KEY = 'xaman_pending_qr';
 const PENDING_DL_KEY = 'xaman_pending_dl';
+const POLL_INTERVAL_MS = 2500;
+const POLL_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
 interface XamanConnectProps {
   onConnected: (address: string) => void;
@@ -19,14 +21,11 @@ function isMobileDevice() {
 }
 
 function openXaman(url: string) {
-  // In Telegram WebApp: use openLink so the WebApp stays alive
   const tg = (window as any).Telegram?.WebApp;
   if (tg?.openLink) {
     tg.openLink(url);
   } else {
-    // Regular browser: open in new tab/window so current page keeps polling
     const win = window.open(url, '_blank');
-    // Fallback: if popup blocked, navigate in same tab
     if (!win) window.location.href = url;
   }
 }
@@ -36,79 +35,105 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [deeplink, setDeeplink] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const uuidRef = useRef<string | null>(null);
 
-  const stopPolling = useCallback(() => {
-    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+  // Refs so interval callbacks always have fresh values without recreating
+  const pollRef      = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timeoutRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const uuidRef      = useRef<string | null>(null);
+  const onConnectedRef = useRef(onConnected);
+
+  // Keep onConnectedRef in sync without causing re-renders or callback recreation
+  useEffect(() => { onConnectedRef.current = onConnected; }, [onConnected]);
+
+  const clearTimers = useCallback(() => {
+    if (pollRef.current)    { clearInterval(pollRef.current);   pollRef.current    = null; }
+    if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
   }, []);
 
-  useEffect(() => () => stopPolling(), [stopPolling]);
+  useEffect(() => () => clearTimers(), [clearTimers]);
 
-  // Check payload and resolve — shared by polling and visibilitychange
-  const checkPayload = useCallback(async (uuid: string): Promise<boolean> => {
+  const clearPending = () => {
+    localStorage.removeItem(PENDING_KEY);
+    localStorage.removeItem(PENDING_QR_KEY);
+    localStorage.removeItem(PENDING_DL_KEY);
+  };
+
+  // Core poll — no dependencies on props so the interval never goes stale
+  const doPoll = useCallback(async (uuid: string) => {
     try {
       const res = await fetch(`/frontend-api/wallet/payload?uuid=${uuid}`);
-      if (!res.ok) return false;
+      if (!res.ok) return; // transient — keep trying
+
       const data = await res.json();
-      if (data.signed && data.resolved && data.account?.startsWith('r') && data.account.length >= 25) {
-        stopPolling();
-        localStorage.removeItem(PENDING_KEY);
-        localStorage.removeItem(PENDING_QR_KEY);
-        localStorage.removeItem(PENDING_DL_KEY);
+
+      // Success: signed. Don't require "resolved" — Xaman can set signed=true
+      // slightly before resolved=true, causing misses if we require both.
+      if (data.signed && data.account) {
+        clearTimers();
+        clearPending();
         setPhase('success');
-        onConnected(data.account);
-        return true;
+        onConnectedRef.current(data.account);
+        return;
       }
+
+      // Terminal failure states
       if (data.cancelled || data.expired) {
-        stopPolling();
-        localStorage.removeItem(PENDING_KEY);
-        localStorage.removeItem(PENDING_QR_KEY);
-        localStorage.removeItem(PENDING_DL_KEY);
+        clearTimers();
+        clearPending();
         setPhase('error');
         setErrorMsg(data.cancelled ? 'Sign-in was cancelled.' : 'Request expired — please try again.');
-        return true;
       }
-    } catch { /* transient error, keep trying */ }
-    return false;
-  }, [onConnected, stopPolling]);
+    } catch {
+      // Network error — keep trying until timeout fires
+    }
+  }, [clearTimers]);
 
-  // Start background polling for a given uuid
   const startPolling = useCallback((uuid: string) => {
-    stopPolling();
-    pollRef.current = setInterval(() => checkPayload(uuid), 2000);
-  }, [checkPayload, stopPolling]);
+    clearTimers();
 
-  // On mount: resume any pending connection (e.g. user returned after page reload)
+    // Poll every 2.5 s
+    pollRef.current = setInterval(() => doPoll(uuid), POLL_INTERVAL_MS);
+
+    // Hard timeout after 5 minutes
+    timeoutRef.current = setTimeout(() => {
+      clearTimers();
+      clearPending();
+      uuidRef.current = null;
+      setPhase('error');
+      setErrorMsg('Sign-in timed out — please try again.');
+    }, POLL_TIMEOUT_MS);
+  }, [clearTimers, doPoll]);
+
+  // On mount: resume any in-progress connection (handles page reload on mobile)
   useEffect(() => {
-    const pendingUuid = localStorage.getItem(PENDING_KEY);
-    if (pendingUuid) {
+    const uuid = localStorage.getItem(PENDING_KEY);
+    if (uuid) {
       const savedQr = localStorage.getItem(PENDING_QR_KEY);
       const savedDl = localStorage.getItem(PENDING_DL_KEY);
-      uuidRef.current = pendingUuid;
+      uuidRef.current = uuid;
       setQrUrl(savedQr);
       setDeeplink(savedDl);
       setPhase('waiting');
-      // Immediately check — might already be signed
-      checkPayload(pendingUuid).then(resolved => {
-        if (!resolved) startPolling(pendingUuid);
+      doPoll(uuid).then(() => {
+        // If still in waiting after immediate check, start interval
+        startPolling(uuid);
       });
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Immediately check on tab focus (user returns from Xaman app)
+  // Extra check on tab-focus — catches desktop users who switched tabs
   useEffect(() => {
     const onVisible = () => {
-      if (!document.hidden && uuidRef.current) checkPayload(uuidRef.current);
+      if (!document.hidden && uuidRef.current) doPoll(uuidRef.current);
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [checkPayload]);
+  }, [doPoll]);
 
   const startConnect = useCallback(async () => {
     setPhase('loading');
     setErrorMsg(null);
-    stopPolling();
+    clearTimers();
 
     try {
       const res = await fetch('/frontend-api/wallet/connect', { method: 'POST' });
@@ -119,14 +144,13 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
       uuidRef.current = uuid;
       localStorage.setItem(PENDING_KEY, uuid);
       if (qr_png) localStorage.setItem(PENDING_QR_KEY, qr_png);
-      if (dl) localStorage.setItem(PENDING_DL_KEY, dl);
+      if (dl)     localStorage.setItem(PENDING_DL_KEY, dl);
 
       setQrUrl(qr_png);
       setDeeplink(dl);
       setPhase('waiting');
       startPolling(uuid);
 
-      // On mobile: open Xaman WITHOUT navigating away so polling keeps running
       if (isMobileDevice()) {
         setTimeout(() => openXaman(dl), 300);
       }
@@ -134,19 +158,17 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
       setPhase('error');
       setErrorMsg(err.message || 'Connection failed');
     }
-  }, [startPolling, stopPolling]);
+  }, [clearTimers, startPolling]);
 
   const cancel = useCallback(() => {
-    stopPolling();
-    localStorage.removeItem(PENDING_KEY);
-    localStorage.removeItem(PENDING_QR_KEY);
-    localStorage.removeItem(PENDING_DL_KEY);
+    clearTimers();
+    clearPending();
     uuidRef.current = null;
     setPhase('idle');
     setQrUrl(null);
     setDeeplink(null);
     setErrorMsg(null);
-  }, [stopPolling]);
+  }, [clearTimers]);
 
   if (phase === 'success') {
     return (

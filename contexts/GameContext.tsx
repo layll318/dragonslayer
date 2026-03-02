@@ -725,6 +725,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const connectWallet = useCallback(async (address: string) => {
     if (!address) return;
+    // Always set wallet locally first so UI updates immediately
+    setState(prev => ({ ...prev, walletAddress: address, isSynced: false }));
     try {
       const res = await fetch(`${API_URL}/api/auth/wallet`, {
         method: 'POST',
@@ -739,22 +741,21 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           playerId: data.player_id,
           isSynced: true,
         }));
-        // Push current local save to server
+        // Push current local save to server using stateRef to avoid stale closure
         if (data.player_id) {
           try {
             await fetch(`${API_URL}/api/save/${data.player_id}`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ save_json: state }),
+              body: JSON.stringify({ save_json: stateRef.current }),
             });
           } catch {/* ignore */}
         }
       }
     } catch {
-      // API unavailable — store wallet locally only
-      setState(prev => ({ ...prev, walletAddress: address, isSynced: false }));
+      // API unavailable — wallet already stored locally above
     }
-  }, [API_URL, state]);
+  }, [API_URL]);
 
   const disconnectWallet = useCallback(() => {
     setState(prev => ({ ...prev, walletAddress: null, playerId: null, isSynced: false }));
