@@ -13,6 +13,9 @@ function WalletConnectedContent() {
   const [address, setAddress] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
 
+  // Read returnTo at component level so JSX can access it too
+  const returnTo = searchParams.get('returnTo') || '/';
+
   useEffect(() => {
     // Xaman appends ?payloadId= or ?id= to the return URL
     const payloadId =
@@ -20,8 +23,6 @@ function WalletConnectedContent() {
       searchParams.get('id') ||
       // Also check localStorage in case Xaman stripped params
       (typeof window !== 'undefined' ? localStorage.getItem('xaman_pending_uuid') : null);
-
-    const returnTo = searchParams.get('returnTo') || '/';
 
     if (!payloadId) {
       setStatus('error');
@@ -51,7 +52,7 @@ function WalletConnectedContent() {
           setAddress(data.account);
           setStatus('success');
           await connectWallet(data.account);
-          setTimeout(() => router.push(`/?wallet_linked=${encodeURIComponent(data.account)}`), 2000);
+          setTimeout(() => router.push(`${returnTo}?wallet_linked=${encodeURIComponent(data.account)}`), 2000);
         } else if (data.cancelled) {
           setStatus('error');
           setErrorMsg('Sign-in was cancelled.');
@@ -129,7 +130,7 @@ function WalletConnectedContent() {
             <h1 className="text-xl font-bold text-[#f0c040] font-cinzel mb-2">Connection Failed</h1>
             <p className="text-[#6b5a3a] text-sm mb-4">{errorMsg}</p>
             <button
-              onClick={() => router.push('/')}
+              onClick={() => router.push(returnTo)}
               className="px-6 py-2 rounded-xl font-bold text-white text-sm
                 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700
                 transition-all"

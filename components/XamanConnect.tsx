@@ -136,7 +136,12 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
     clearTimers();
 
     try {
-      const res = await fetch('/frontend-api/wallet/connect', { method: 'POST' });
+      const returnTo = typeof window !== 'undefined' ? window.location.pathname : '/';
+      const res = await fetch('/frontend-api/wallet/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ returnTo }),
+      });
       const data = await res.json();
       if (!res.ok || !data.uuid) throw new Error(data.error || 'Failed to create sign-in request');
 

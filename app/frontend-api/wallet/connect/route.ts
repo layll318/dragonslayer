@@ -15,11 +15,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const body = await request.json().catch(() => ({}));
+    const returnTo = typeof body?.returnTo === 'string' && body.returnTo.startsWith('/')
+      ? body.returnTo
+      : '/';
+
     const origin =
       request.headers.get('origin') ||
       'https://dragonslayer-production.up.railway.app';
     const cleanOrigin = origin.replace(/\/$/, '').split('/').slice(0, 3).join('/');
-    const returnUrl = `${cleanOrigin}/wallet-connected`;
+    const returnUrl = `${cleanOrigin}/wallet-connected?returnTo=${encodeURIComponent(returnTo)}`;
 
     const res = await fetch(`${XAMAN_BASE}/payload`, {
       method: 'POST',
