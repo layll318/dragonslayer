@@ -83,14 +83,6 @@ export interface DailyQuest {
   claimed: boolean;
 }
 
-export interface Boss {
-  active: boolean;
-  hp: number;
-  maxHp: number;
-  reward: number;
-  nextAt: number;
-}
-
 export interface GameState {
   gold: number;
   totalGoldEarned: number;
@@ -118,8 +110,6 @@ export interface GameState {
   tapGoldToday: number;
   buildingsBoughtToday: number;
   expeditionsToday: number;
-  // Boss
-  boss: Boss;
   // Last tap result
   lastTapEarned: number;
   lastTapCrit: boolean;
@@ -132,7 +122,6 @@ export interface GameState {
 interface GameContextType {
   state: GameState;
   tap: (comboMult?: number) => void;
-  tapBoss: () => void;
   claimLoginBonus: () => void;
   claimQuest: (id: string) => void;
   buyBuilding: (id: string, qty?: number) => void;
@@ -368,7 +357,6 @@ const INITIAL_BUILDINGS: Building[] = [
 const XP_PER_TAP = 2;
 const CRIT_CHANCE = 0.08;
 const CRIT_MULTIPLIER = 5;
-const BOSS_COOLDOWN_MS = 3 * 60 * 1000;
 const LOGIN_REWARDS = [500, 750, 1000, 1500, 2000, 3000, 5000];
 
 function calcXpToNext(level: number): number {
@@ -446,12 +434,6 @@ function generateDailyQuests(level: number): DailyQuest[] {
   ];
 }
 
-function spawnBoss(level: number, goldPerHour: number): Boss {
-  const maxHp = 15 + level * 3;
-  const reward = Math.max(200, Math.floor(goldPerHour / 12)); // ~5 min income
-  return { active: true, hp: maxHp, maxHp, reward, nextAt: 0 };
-}
-
 // ============================================================
 // CONTEXT
 // ============================================================
@@ -508,7 +490,6 @@ function createInitialState(): GameState {
     tapGoldToday: 0,
     buildingsBoughtToday: 0,
     expeditionsToday: 0,
-    boss: { active: false, hp: 0, maxHp: 0, reward: 0, nextAt: now + BOSS_COOLDOWN_MS },
     lastTapEarned: 0,
     lastTapCrit: false,
     playerId: null,
@@ -561,7 +542,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           : q
       );
 
-      const savedBoss = saved.boss || { active: false, hp: 0, maxHp: 0, reward: 0, nextAt: now + BOSS_COOLDOWN_MS };
 
       setState({
         ...saved,
@@ -584,7 +564,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         questDate: today,
         tapGoldToday: isNewDay ? 0 : (saved.tapGoldToday || 0),
         buildingsBoughtToday: isNewDay ? 0 : (saved.buildingsBoughtToday || 0),
-        boss: savedBoss,
         lastTapEarned: saved.lastTapEarned || 0,
         lastTapCrit: saved.lastTapCrit || false,
         playerId: saved.playerId ?? null,
@@ -669,7 +648,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Game tick every 1s — passive income + boss spawning only
+  // Game tick every 1s — passive income only
   useEffect(() => {
     tickRef.current = setInterval(() => {
       setState((prev) => {
@@ -681,18 +660,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         const gearMult = calcGearMultiplier(prev.equipment);
         const passiveGold = (totalIncome / 3600) * dt * gearMult;
 
-        // Boss spawning
-        let boss = prev.boss ?? { active: false, hp: 0, maxHp: 0, reward: 0, nextAt: now + BOSS_COOLDOWN_MS };
-        if (!boss.active && now >= boss.nextAt && boss.nextAt > 0) {
-          boss = spawnBoss(prev.level, Math.floor(totalIncome * gearMult));
-        }
-
         return {
           ...prev,
           gold: prev.gold + passiveGold,
           totalGoldEarned: prev.totalGoldEarned + passiveGold,
           lastTick: now,
-          boss,
         };
       });
     }, 1000);
@@ -769,6 +741,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const tap = useCallback((comboMult = 1) => {
     setState((prev) => {
+      if (prev.activeExpedition) return prev; // fighter is away
       const base = Math.max(1, Math.floor((1 + prev.level * 0.5) * calcGearMultiplier(prev.equipment)));
       const isCrit = Math.random() < CRIT_CHANCE;
       const earned = Math.floor(base * comboMult * (isCrit ? CRIT_MULTIPLIER : 1));
@@ -977,23 +950,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     });
   }, [addXp]);
 
-  const tapBoss = useCallback(() => {
-    setState((prev) => {
-      if (!prev.boss.active) return prev;
-      const base = Math.max(1, Math.floor((1 + prev.level * 0.5) * calcGearMultiplier(prev.equipment)));
-      const newHp = prev.boss.hp - base;
-      if (newHp <= 0) {
-        return {
-          ...prev,
-          gold: prev.gold + prev.boss.reward,
-          totalGoldEarned: prev.totalGoldEarned + prev.boss.reward,
-          boss: { active: false, hp: 0, maxHp: prev.boss.maxHp, reward: 0, nextAt: Date.now() + BOSS_COOLDOWN_MS },
-        };
-      }
-      return { ...prev, boss: { ...prev.boss, hp: newHp } };
-    });
-  }, []);
-
   const claimLoginBonus = useCallback(() => {
     setState((prev) => {
       if (!prev.loginBonusPending) return prev;
@@ -1074,7 +1030,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       value={{
         state,
         tap,
-        tapBoss,
         claimLoginBonus,
         claimQuest,
         buyBuilding,

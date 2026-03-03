@@ -41,6 +41,7 @@ class ClaimResponse(BaseModel):
 def _calc_yield(level: int, gear_mult: float, hours: int):
     rand = 0.85 + random.random() * 0.30
     gear_power = (gear_mult - 1.0) / 0.06
+    # Always at least 1 dragon slain
     dragons_slain = max(1, int((level * 2 + gear_power * 3) * hours * rand))
     gold_earned = dragons_slain * (50 + level * 8)
 
@@ -50,9 +51,11 @@ def _calc_yield(level: int, gear_mult: float, hours: int):
         else random.randint(2, 5) if hours == 8
         else random.randint(3, 8)
     )
+    # Always at least 1 material type dropped
+    total_mats = max(1, total_mats)
     chosen = random.sample(MATERIAL_TYPES, min(total_mats, len(MATERIAL_TYPES)))
     materials = [
-        {"type": t, "quality": quality, "quantity": random.randint(1, 3)}
+        {"type": t, "quality": quality, "quantity": max(1, random.randint(1, 3))}
         for t in chosen
     ]
     return dragons_slain, gold_earned, materials

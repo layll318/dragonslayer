@@ -1,11 +1,10 @@
 'use client';
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { useGame } from '@/contexts/GameContext';
+import { useGame, ActiveExpedition } from '@/contexts/GameContext';
 import { formatNumber } from '@/utils/format';
 import CharacterDisplay from './CharacterDisplay';
 import QuestBanner from './QuestBanner';
-import DragonBoss from './DragonBoss';
 import LoginBonusModal from './LoginBonusModal';
 import { useTelegramWebApp } from '@/hooks/useTelegramWebApp';
 
@@ -30,6 +29,15 @@ function getComboLevel(count: number) {
     if (count >= t.taps) level = t;
   }
   return level;
+}
+
+function fmtMs(ms: number) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (h > 0) return `${h}h ${m.toString().padStart(2, '0')}m`;
+  return `${m.toString().padStart(2, '0')}m ${sec.toString().padStart(2, '0')}s`;
 }
 
 export default function HeroTab() {
@@ -204,8 +212,10 @@ export default function HeroTab() {
 
           <CharacterDisplay />
 
-          {/* Dragon Boss overlay */}
-          <DragonBoss />
+          {/* Expedition-active overlay — blocks tapping */}
+          {state.activeExpedition && (
+            <ExpeditionOverlay exp={state.activeExpedition} />
+          )}
 
           {/* Tap ripples */}
           {ripples.map(r => (
@@ -304,3 +314,32 @@ export default function HeroTab() {
   );
 }
 
+function ExpeditionOverlay({ exp }: { exp: ActiveExpedition }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const msLeft = Math.max(0, exp.endsAt - now);
+  const done = msLeft === 0;
+  return (
+    <div
+      className="absolute inset-0 z-20 flex flex-col items-center justify-center rounded-xl"
+      style={{ background: 'rgba(5,3,1,0.78)', backdropFilter: 'blur(4px)' }}
+      onClick={e => e.stopPropagation()}
+    >
+      <span className="text-4xl mb-2">🗺️</span>
+      <p className="font-cinzel font-bold text-[#e8d8a8] text-sm tracking-wide">
+        Fighter on Expedition
+      </p>
+      {done ? (
+        <p className="text-[#4ade80] font-bold text-xs mt-1 animate-pulse">✓ Ready to claim!</p>
+      ) : (
+        <p className="font-cinzel text-[#f0c040] text-xl font-bold tabular-nums mt-1">
+          {fmtMs(msLeft)}
+        </p>
+      )}
+      <p className="text-[9px] text-[#4a3a2a] mt-2">Go to Expedition tab to claim rewards</p>
+    </div>
+  );
+}
