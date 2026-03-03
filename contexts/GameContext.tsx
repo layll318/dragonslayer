@@ -6,6 +6,58 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 // TYPES
 // ============================================================
 
+export type MaterialType = 'dragon_scale' | 'fire_crystal' | 'iron_ore' | 'bone_shard' | 'ancient_rune';
+export type MaterialQuality = 'common' | 'uncommon' | 'rare';
+export type ItemType = 'weapon' | 'shield' | 'helm' | 'armor' | 'ring';
+export type ItemRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
+
+export interface Material {
+  type: MaterialType;
+  quality: MaterialQuality;
+  quantity: number;
+}
+
+export interface InventoryItem {
+  id: string;
+  itemType: ItemType;
+  name: string;
+  rarity: ItemRarity;
+  power: number;
+  nftTokenId: string | null;
+  obtainedVia: 'crafted' | 'expedition_drop';
+  obtainedAt: number;
+}
+
+export type EquipmentSlots = {
+  weapon: InventoryItem | null;
+  shield: InventoryItem | null;
+  helm:   InventoryItem | null;
+  armor:  InventoryItem | null;
+  ring:   InventoryItem | null;
+};
+
+export interface ActiveExpedition {
+  startedAt: number;
+  durationHours: 4 | 8 | 12;
+  endsAt: number;
+}
+
+export interface ExpeditionResult {
+  dragonsSlain: number;
+  goldEarned: number;
+  materials: Material[];
+}
+
+export interface CraftingRecipe {
+  id: string;
+  itemType: ItemType;
+  name: string;
+  rarity: ItemRarity;
+  power: number;
+  goldCost: number;
+  materials: { type: MaterialType; quality: MaterialQuality; quantity: number }[];
+}
+
 export interface Building {
   id: string;
   name: string;
@@ -20,7 +72,7 @@ export interface Building {
 
 export interface DailyQuest {
   id: string;
-  type: 'tap_gold' | 'buy_buildings' | 'full_care';
+  type: 'tap_gold' | 'buy_buildings' | 'complete_expedition';
   description: string;
   target: number;
   progress: number;
@@ -41,13 +93,17 @@ export interface GameState {
   gold: number;
   totalGoldEarned: number;
   totalTaps: number;
+  totalDragonsSlain: number;
+  totalExpeditions: number;
   level: number;
   xp: number;
   xpToNext: number;
-  fed: number;
-  energy: number;
-  mood: number;
   buildings: Building[];
+  equipment: EquipmentSlots;
+  inventory: InventoryItem[];
+  materials: Material[];
+  activeExpedition: ActiveExpedition | null;
+  lastExpeditionResult: ExpeditionResult | null;
   lastTick: number;
   createdAt: number;
   // Login bonus
@@ -59,6 +115,7 @@ export interface GameState {
   questDate: string;
   tapGoldToday: number;
   buildingsBoughtToday: number;
+  expeditionsToday: number;
   // Boss
   boss: Boss;
   // Last tap result
@@ -76,23 +133,90 @@ interface GameContextType {
   tapBoss: () => void;
   claimLoginBonus: () => void;
   claimQuest: (id: string) => void;
-  feed: () => void;
-  rest: () => void;
-  train: () => void;
   buyBuilding: (id: string, qty?: number) => void;
+  startExpedition: (hours: 4 | 8 | 12) => void;
+  claimExpedition: () => void;
+  equipItem: (itemId: string) => void;
+  unequipItem: (slot: keyof EquipmentSlots) => void;
+  craftItem: (recipeId: string) => void;
   connectWallet: (address: string) => Promise<void>;
   disconnectWallet: () => void;
   goldPerTap: number;
   goldPerHour: number;
-  careMultiplier: number;
+  gearMultiplier: number;
   getBuildingCost: (building: Building) => number;
   canAfford: (cost: number) => boolean;
   getCharacterTier: () => number;
+  CRAFTING_RECIPES: CraftingRecipe[];
+  ITEM_UNLOCK_LEVELS: Record<ItemType, number>;
 }
 
 // ============================================================
 // CONSTANTS
 // ============================================================
+
+export const RARITY_SCORES: Record<ItemRarity, number> = {
+  common: 1, uncommon: 2, rare: 3, epic: 4, legendary: 5,
+};
+
+export const RARITY_COLORS: Record<ItemRarity, string> = {
+  common:    '#9a9a9a',
+  uncommon:  '#4ade80',
+  rare:      '#60a5fa',
+  epic:      '#c084fc',
+  legendary: '#f0c040',
+};
+
+export const ITEM_UNLOCK_LEVELS: Record<ItemType, number> = {
+  weapon: 1, shield: 1, helm: 3, armor: 6, ring: 10,
+};
+
+export const MATERIAL_LABELS: Record<MaterialType, string> = {
+  dragon_scale: '🐉 Dragon Scale',
+  fire_crystal:  '🔥 Fire Crystal',
+  iron_ore:      '⚙️ Iron Ore',
+  bone_shard:    '🦴 Bone Shard',
+  ancient_rune:  '✨ Ancient Rune',
+};
+
+export const CRAFTING_RECIPES: CraftingRecipe[] = [
+  {
+    id: 'iron_sword', itemType: 'weapon', name: 'Iron Sword', rarity: 'common', power: 5, goldCost: 500,
+    materials: [{ type: 'iron_ore', quality: 'common', quantity: 3 }, { type: 'dragon_scale', quality: 'common', quantity: 2 }],
+  },
+  {
+    id: 'oak_shield', itemType: 'shield', name: 'Oak Shield', rarity: 'common', power: 4, goldCost: 400,
+    materials: [{ type: 'iron_ore', quality: 'common', quantity: 3 }, { type: 'bone_shard', quality: 'common', quantity: 2 }],
+  },
+  {
+    id: 'iron_helm', itemType: 'helm', name: 'Iron Helm', rarity: 'common', power: 3, goldCost: 300,
+    materials: [{ type: 'bone_shard', quality: 'common', quantity: 2 }, { type: 'ancient_rune', quality: 'common', quantity: 1 }],
+  },
+  {
+    id: 'dragonscale_armor', itemType: 'armor', name: 'Dragonscale Armor', rarity: 'uncommon', power: 8, goldCost: 800,
+    materials: [{ type: 'dragon_scale', quality: 'common', quantity: 4 }, { type: 'iron_ore', quality: 'common', quantity: 2 }],
+  },
+  {
+    id: 'flame_ring', itemType: 'ring', name: 'Flame Ring', rarity: 'uncommon', power: 6, goldCost: 600,
+    materials: [{ type: 'fire_crystal', quality: 'common', quantity: 3 }, { type: 'ancient_rune', quality: 'common', quantity: 1 }],
+  },
+  {
+    id: 'steel_sword', itemType: 'weapon', name: 'Steel Sword', rarity: 'rare', power: 12, goldCost: 1500,
+    materials: [{ type: 'iron_ore', quality: 'uncommon', quantity: 4 }, { type: 'dragon_scale', quality: 'uncommon', quantity: 3 }],
+  },
+  {
+    id: 'dragonfire_shield', itemType: 'shield', name: 'Dragonfire Shield', rarity: 'rare', power: 10, goldCost: 1200,
+    materials: [{ type: 'dragon_scale', quality: 'uncommon', quantity: 3 }, { type: 'fire_crystal', quality: 'uncommon', quantity: 2 }],
+  },
+  {
+    id: 'runic_helm', itemType: 'helm', name: 'Runic Helm', rarity: 'rare', power: 9, goldCost: 1000,
+    materials: [{ type: 'ancient_rune', quality: 'uncommon', quantity: 3 }, { type: 'bone_shard', quality: 'uncommon', quantity: 2 }],
+  },
+];
+
+const MAX_INVENTORY = 20;
+
+const EMPTY_EQUIPMENT: EquipmentSlots = { weapon: null, shield: null, helm: null, armor: null, ring: null };
 
 const INITIAL_BUILDINGS: Building[] = [
   {
@@ -163,36 +287,44 @@ const INITIAL_BUILDINGS: Building[] = [
   },
 ];
 
-const CARE_DECAY_PER_SECOND = 2 / 3600; // 2% per hour — full depletion in ~50 hours
-const OFFLINE_DECAY_CAP_SECONDS = 12 * 3600; // max 12 hours of offline decay
-export const FEED_COST_BASE = 25;
-export const REST_COST_BASE = 15;
-export const TRAIN_COST_BASE = 20;
-const FEED_RESTORE = 60;
-const REST_RESTORE = 50;
-const TRAIN_RESTORE = 45;
 const XP_PER_TAP = 2;
-const XP_PER_CARE = 5;
 const CRIT_CHANCE = 0.08;
 const CRIT_MULTIPLIER = 5;
-const BOSS_COOLDOWN_MS = 3 * 60 * 1000; // 3 minutes
-const LOGIN_REWARDS = [500, 750, 1000, 1500, 2000, 3000, 5000]; // 7-day streak
+const BOSS_COOLDOWN_MS = 3 * 60 * 1000;
+const LOGIN_REWARDS = [500, 750, 1000, 1500, 2000, 3000, 5000];
 
 function calcXpToNext(level: number): number {
   return Math.floor(100 * Math.pow(1.5, level - 1));
 }
 
-function calcCareMultiplier(fed: number, energy: number, mood: number): number {
-  const avg = (fed + energy + mood) / 3;
-  if (avg >= 75) return 1.5;
-  if (avg >= 50) return 1.2;
-  if (avg >= 25) return 1.0;
-  if (avg >= 10) return 0.5;
-  return 0.25;
+export function calcGearMultiplier(equipment: EquipmentSlots): number {
+  const equipped = Object.values(equipment).filter(Boolean) as InventoryItem[];
+  const total = equipped.reduce((sum, item) => sum + RARITY_SCORES[item.rarity], 0);
+  return Math.max(1.0, 1.0 + total * 0.06);
 }
 
-export function getCareCost(base: number, level: number): number {
-  return Math.floor(base * Math.pow(1.1, level - 1));
+function calcExpeditionYield(
+  level: number,
+  gearMult: number,
+  hours: 4 | 8 | 12,
+): { dragonsSlain: number; goldEarned: number; materials: Material[] } {
+  const rand = 0.85 + Math.random() * 0.30;
+  const gearPower = (gearMult - 1.0) / 0.06;
+  const dragonsSlain = Math.max(1, Math.floor((level * 2 + gearPower * 3) * hours * rand));
+  const goldEarned = dragonsSlain * (50 + level * 8);
+
+  const allTypes: MaterialType[] = ['dragon_scale', 'fire_crystal', 'iron_ore', 'bone_shard', 'ancient_rune'];
+  const quality: MaterialQuality = hours >= 12 ? 'rare' : hours >= 8 ? 'uncommon' : 'common';
+  const totalMats = hours === 4 ? Math.floor(Math.random() * 3) + 1
+                  : hours === 8 ? Math.floor(Math.random() * 4) + 2
+                  :               Math.floor(Math.random() * 6) + 3;
+
+  const types = [...allTypes].sort(() => Math.random() - 0.5).slice(0, Math.min(totalMats, 4));
+  const materials: Material[] = types.map(type => ({
+    type, quality, quantity: Math.floor(Math.random() * 3) + 1,
+  }));
+
+  return { dragonsSlain, goldEarned, materials };
 }
 
 function getToday(): string {
@@ -224,9 +356,9 @@ function generateDailyQuests(level: number): DailyQuest[] {
       claimed: false,
     },
     {
-      id: 'full_care',
-      type: 'full_care',
-      description: 'Have all care stats above 80%',
+      id: 'complete_expedition',
+      type: 'complete_expedition',
+      description: 'Complete 1 expedition',
       target: 1,
       progress: 0,
       reward: Math.floor(level * 50 + 150),
@@ -277,13 +409,17 @@ function createInitialState(): GameState {
     gold: 100,
     totalGoldEarned: 100,
     totalTaps: 0,
+    totalDragonsSlain: 0,
+    totalExpeditions: 0,
     level: 1,
     xp: 0,
     xpToNext: calcXpToNext(1),
-    fed: 80,
-    energy: 80,
-    mood: 80,
     buildings: INITIAL_BUILDINGS.map((b) => ({ ...b })),
+    equipment: { ...EMPTY_EQUIPMENT },
+    inventory: [],
+    materials: [],
+    activeExpedition: null,
+    lastExpeditionResult: null,
     lastTick: now,
     createdAt: now,
     loginStreak: 0,
@@ -293,6 +429,7 @@ function createInitialState(): GameState {
     questDate: today,
     tapGoldToday: 0,
     buildingsBoughtToday: 0,
+    expeditionsToday: 0,
     boss: { active: false, hp: 0, maxHp: 0, reward: 0, nextAt: now + BOSS_COOLDOWN_MS },
     lastTapEarned: 0,
     lastTapCrit: false,
@@ -315,9 +452,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
     const saved = loadState();
     if (saved) {
-      // Apply offline progress
       const now = Date.now();
-      const elapsed = (now - saved.lastTick) / 1000; // seconds
+      const elapsed = (now - saved.lastTick) / 1000;
 
       // Migrate building income rates to current values
       const migratedBuildings = saved.buildings.map((savedB) => {
@@ -325,36 +461,41 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         return template ? { ...savedB, baseIncome: template.baseIncome } : savedB;
       });
 
-      // Decay care stats — cap offline time so long absences don't fully deplete stats
-      const cappedElapsed = Math.min(elapsed, OFFLINE_DECAY_CAP_SECONDS);
-      let fed = Math.max(0, saved.fed - cappedElapsed * CARE_DECAY_PER_SECOND);
-      let energy = Math.max(0, saved.energy - cappedElapsed * CARE_DECAY_PER_SECOND);
-      let mood = Math.max(0, saved.mood - cappedElapsed * CARE_DECAY_PER_SECOND);
-
-      // Calculate offline gold from buildings (use migrated rates)
+      // Calculate offline gold from buildings using gear multiplier
+      const savedEquipment = saved.equipment ?? { ...EMPTY_EQUIPMENT };
+      const gearMult = calcGearMultiplier(savedEquipment);
       const totalIncome = migratedBuildings.reduce((sum, b) => sum + b.baseIncome * b.owned, 0);
-      const careMult = calcCareMultiplier(fed, energy, mood);
-      const offlineGold = Math.floor((totalIncome / 3600) * elapsed * careMult * 0.5); // 50% offline efficiency
+      const offlineGold = Math.floor((totalIncome / 3600) * elapsed * gearMult * 0.5);
 
       const today = getToday();
       const lastLogin = saved.lastLoginDate || '';
       const isNewDay = lastLogin !== today;
       const newStreak = isNewDay ? (saved.loginStreak || 0) + 1 : (saved.loginStreak || 0);
 
-      // Reset daily quests if new day
-      const newQuests = isNewDay
+      // Migrate daily quests — replace full_care with complete_expedition if needed
+      const rawQuests = isNewDay
         ? generateDailyQuests(saved.level)
         : (saved.dailyQuests || generateDailyQuests(saved.level));
+      const newQuests = rawQuests.map((q: DailyQuest) =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (q as any).type === 'full_care'
+          ? { ...q, id: 'complete_expedition', type: 'complete_expedition' as const, description: 'Complete 1 expedition' }
+          : q
+      );
 
-      // Migrate boss nextAt if missing
       const savedBoss = saved.boss || { active: false, hp: 0, maxHp: 0, reward: 0, nextAt: now + BOSS_COOLDOWN_MS };
 
       setState({
         ...saved,
         buildings: migratedBuildings,
-        fed,
-        energy,
-        mood,
+        equipment: savedEquipment,
+        inventory: saved.inventory ?? [],
+        materials: saved.materials ?? [],
+        activeExpedition: saved.activeExpedition ?? null,
+        lastExpeditionResult: null,
+        totalDragonsSlain: saved.totalDragonsSlain ?? 0,
+        totalExpeditions: saved.totalExpeditions ?? 0,
+        expeditionsToday: isNewDay ? 0 : (saved.expeditionsToday ?? 0),
         gold: saved.gold + offlineGold,
         totalGoldEarned: saved.totalGoldEarned + offlineGold,
         lastTick: now,
@@ -450,49 +591,30 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Game tick every 250ms
+  // Game tick every 1s — passive income + boss spawning only
   useEffect(() => {
     tickRef.current = setInterval(() => {
       setState((prev) => {
         const now = Date.now();
         const dt = (now - prev.lastTick) / 1000;
 
-        // Decay care stats
-        const fed = Math.max(0, prev.fed - dt * CARE_DECAY_PER_SECOND);
-        const energy = Math.max(0, prev.energy - dt * CARE_DECAY_PER_SECOND);
-        const mood = Math.max(0, prev.mood - dt * CARE_DECAY_PER_SECOND);
-
-        // Passive income from buildings
+        // Passive income from buildings, boosted by gear
         const totalIncome = prev.buildings.reduce((sum, b) => sum + b.baseIncome * b.owned, 0);
-        const careMult = calcCareMultiplier(fed, energy, mood);
-        const passiveGold = (totalIncome / 3600) * dt * careMult;
+        const gearMult = calcGearMultiplier(prev.equipment);
+        const passiveGold = (totalIncome / 3600) * dt * gearMult;
 
         // Boss spawning
         let boss = prev.boss ?? { active: false, hp: 0, maxHp: 0, reward: 0, nextAt: now + BOSS_COOLDOWN_MS };
         if (!boss.active && now >= boss.nextAt && boss.nextAt > 0) {
-          const gph = Math.floor(totalIncome * careMult);
-          boss = spawnBoss(prev.level, gph);
-        }
-
-        // Care quest progress — mark complete if all stats > 80
-        let dailyQuests = prev.dailyQuests ?? [];
-        const careQuest = dailyQuests.find(q => q.type === 'full_care' && !q.completed);
-        if (careQuest && fed >= 80 && energy >= 80 && mood >= 80) {
-          dailyQuests = dailyQuests.map(q =>
-            q.id === 'full_care' ? { ...q, progress: 1, completed: true } : q
-          );
+          boss = spawnBoss(prev.level, Math.floor(totalIncome * gearMult));
         }
 
         return {
           ...prev,
-          fed,
-          energy,
-          mood,
           gold: prev.gold + passiveGold,
           totalGoldEarned: prev.totalGoldEarned + passiveGold,
           lastTick: now,
           boss,
-          dailyQuests,
         };
       });
     }, 1000);
@@ -500,7 +622,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     return () => {
       if (tickRef.current) clearInterval(tickRef.current);
     };
-  }, []);
+  }, [])
 
   // Keep stateRef current so intervals always access the latest state
   useEffect(() => {
@@ -536,12 +658,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('beforeunload', handleUnload);
   }, []);
 
-  const careMultiplier = calcCareMultiplier(state.fed, state.energy, state.mood);
+  const gearMultiplier = calcGearMultiplier(state.equipment);
 
-  const goldPerTap = Math.max(1, Math.floor((1 + state.level * 0.5) * careMultiplier));
+  const goldPerTap = Math.max(1, Math.floor((1 + state.level * 0.5) * gearMultiplier));
 
   const goldPerHour = Math.floor(
-    state.buildings.reduce((sum, b) => sum + b.baseIncome * b.owned, 0) * careMultiplier
+    state.buildings.reduce((sum, b) => sum + b.baseIncome * b.owned, 0) * gearMultiplier
   );
 
   const getBuildingCost = useCallback((building: Building): number => {
@@ -569,7 +691,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const tap = useCallback((comboMult = 1) => {
     setState((prev) => {
-      const base = Math.max(1, Math.floor((1 + prev.level * 0.5) * calcCareMultiplier(prev.fed, prev.energy, prev.mood)));
+      const base = Math.max(1, Math.floor((1 + prev.level * 0.5) * calcGearMultiplier(prev.equipment)));
       const isCrit = Math.random() < CRIT_CHANCE;
       const earned = Math.floor(base * comboMult * (isCrit ? CRIT_MULTIPLIER : 1));
       const xpUpdate = addXp(XP_PER_TAP, prev);
@@ -598,47 +720,119 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     });
   }, [addXp]);
 
-  const feed = useCallback(() => {
+  const startExpedition = useCallback((hours: 4 | 8 | 12) => {
     setState((prev) => {
-      const cost = getCareCost(FEED_COST_BASE, prev.level);
-      if (prev.gold < cost) return prev;
-      const xpUpdate = addXp(XP_PER_CARE, prev);
+      if (prev.activeExpedition) return prev;
+      const now = Date.now();
+      const activeExpedition: ActiveExpedition = {
+        startedAt: now,
+        durationHours: hours,
+        endsAt: now + hours * 3600 * 1000,
+      };
+      return { ...prev, activeExpedition };
+    });
+  }, []);
+
+  const claimExpedition = useCallback(() => {
+    setState((prev) => {
+      if (!prev.activeExpedition) return prev;
+      if (Date.now() < prev.activeExpedition.endsAt) return prev;
+      const gearMult = calcGearMultiplier(prev.equipment);
+      const { dragonsSlain, goldEarned, materials } = calcExpeditionYield(
+        prev.level, gearMult, prev.activeExpedition.durationHours,
+      );
+      const newMaterials = [...prev.materials];
+      for (const drop of materials) {
+        const existing = newMaterials.find(m => m.type === drop.type && m.quality === drop.quality);
+        if (existing) existing.quantity += drop.quantity;
+        else newMaterials.push({ ...drop });
+      }
+      const dailyQuests = prev.dailyQuests.map(q =>
+        q.type === 'complete_expedition' && !q.completed
+          ? { ...q, progress: 1, completed: true }
+          : q
+      );
+      const xpUpdate = addXp(dragonsSlain * 3, prev);
       return {
         ...prev,
         ...xpUpdate,
-        gold: prev.gold - cost,
-        fed: Math.min(100, prev.fed + FEED_RESTORE),
+        gold: prev.gold + goldEarned,
+        totalGoldEarned: prev.totalGoldEarned + goldEarned,
+        totalDragonsSlain: prev.totalDragonsSlain + dragonsSlain,
+        totalExpeditions: prev.totalExpeditions + 1,
+        expeditionsToday: prev.expeditionsToday + 1,
+        materials: newMaterials,
+        activeExpedition: null,
+        lastExpeditionResult: { dragonsSlain, goldEarned, materials },
+        dailyQuests,
       };
     });
   }, [addXp]);
 
-  const rest = useCallback(() => {
+  const equipItem = useCallback((itemId: string) => {
     setState((prev) => {
-      const cost = getCareCost(REST_COST_BASE, prev.level);
-      if (prev.gold < cost) return prev;
-      const xpUpdate = addXp(XP_PER_CARE, prev);
+      const item = prev.inventory.find(i => i.id === itemId);
+      if (!item) return prev;
+      if (prev.level < ITEM_UNLOCK_LEVELS[item.itemType]) return prev;
+      const slot = item.itemType as keyof EquipmentSlots;
+      const currentlyEquipped = prev.equipment[slot];
+      const newInventory = prev.inventory
+        .filter(i => i.id !== itemId)
+        .concat(currentlyEquipped ? [currentlyEquipped] : []);
       return {
         ...prev,
-        ...xpUpdate,
-        gold: prev.gold - cost,
-        energy: Math.min(100, prev.energy + REST_RESTORE),
+        equipment: { ...prev.equipment, [slot]: item },
+        inventory: newInventory,
       };
     });
-  }, [addXp]);
+  }, []);
 
-  const train = useCallback(() => {
+  const unequipItem = useCallback((slot: keyof EquipmentSlots) => {
     setState((prev) => {
-      const cost = getCareCost(TRAIN_COST_BASE, prev.level);
-      if (prev.gold < cost) return prev;
-      const xpUpdate = addXp(XP_PER_CARE, prev);
+      const item = prev.equipment[slot];
+      if (!item) return prev;
+      const newInventory = [...prev.inventory, item].slice(-MAX_INVENTORY);
       return {
         ...prev,
-        ...xpUpdate,
-        gold: prev.gold - cost,
-        mood: Math.min(100, prev.mood + TRAIN_RESTORE),
+        equipment: { ...prev.equipment, [slot]: null },
+        inventory: newInventory,
       };
     });
-  }, [addXp]);
+  }, []);
+
+  const craftItem = useCallback((recipeId: string) => {
+    setState((prev) => {
+      const recipe = CRAFTING_RECIPES.find(r => r.id === recipeId);
+      if (!recipe || prev.gold < recipe.goldCost) return prev;
+      for (const req of recipe.materials) {
+        const held = prev.materials.find(m => m.type === req.type && m.quality === req.quality);
+        if (!held || held.quantity < req.quantity) return prev;
+      }
+      const newMaterials = prev.materials
+        .map(m => {
+          const req = recipe.materials.find(r => r.type === m.type && r.quality === m.quality);
+          return req ? { ...m, quantity: m.quantity - req.quantity } : m;
+        })
+        .filter(m => m.quantity > 0);
+      const newItem: InventoryItem = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        itemType: recipe.itemType,
+        name: recipe.name,
+        rarity: recipe.rarity,
+        power: recipe.power,
+        nftTokenId: null,
+        obtainedVia: 'crafted',
+        obtainedAt: Date.now(),
+      };
+      const newInventory = [...prev.inventory, newItem].slice(-MAX_INVENTORY);
+      return {
+        ...prev,
+        gold: prev.gold - recipe.goldCost,
+        materials: newMaterials,
+        inventory: newInventory,
+      };
+    });
+  }, []);
 
   const buyBuilding = useCallback((id: string, qty = 1) => {
     setState((prev) => {
@@ -681,7 +875,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const tapBoss = useCallback(() => {
     setState((prev) => {
       if (!prev.boss.active) return prev;
-      const base = Math.max(1, Math.floor((1 + prev.level * 0.5) * calcCareMultiplier(prev.fed, prev.energy, prev.mood)));
+      const base = Math.max(1, Math.floor((1 + prev.level * 0.5) * calcGearMultiplier(prev.equipment)));
       const newHp = prev.boss.hp - base;
       if (newHp <= 0) {
         return {
@@ -778,18 +972,22 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         tapBoss,
         claimLoginBonus,
         claimQuest,
-        feed,
-        rest,
-        train,
         buyBuilding,
+        startExpedition,
+        claimExpedition,
+        equipItem,
+        unequipItem,
+        craftItem,
         connectWallet,
         disconnectWallet,
         goldPerTap,
         goldPerHour,
-        careMultiplier,
+        gearMultiplier,
         getBuildingCost,
         canAfford,
         getCharacterTier,
+        CRAFTING_RECIPES,
+        ITEM_UNLOCK_LEVELS,
       }}
     >
       {children}

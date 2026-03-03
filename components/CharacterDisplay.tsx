@@ -2,7 +2,7 @@
 
 import React, { useMemo } from 'react';
 import Image from 'next/image';
-import { useGame } from '@/contexts/GameContext';
+import { useGame, calcGearMultiplier } from '@/contexts/GameContext';
 
 const TIER_AURA = [
   { hasAura: false, auraColor: 'transparent', glowColor: 'rgba(255,180,80,0.15)', emberCount: 2 },
@@ -25,12 +25,8 @@ export default function CharacterDisplay() {
   const tier = getCharacterTier();
   const cfg = TIER_AURA[tier - 1];
 
-  const moodState = useMemo(() => {
-    const avg = (state.fed + state.energy + state.mood) / 3;
-    if (avg >= 60) return 'happy';
-    if (avg >= 30) return 'neutral';
-    return 'sad';
-  }, [state.fed, state.energy, state.mood]);
+  const gearMult = useMemo(() => calcGearMultiplier(state.equipment), [state.equipment]);
+  const moodState = gearMult >= 1.2 ? 'happy' : gearMult >= 1.06 ? 'neutral' : 'sad';
 
   const colors = EMBER_COLORS[tier - 1];
   const floatAnim = moodState === 'happy' ? 'float 3s ease-in-out infinite' : undefined;

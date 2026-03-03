@@ -42,6 +42,20 @@ const BuildingsIcon = () => (
   </svg>
 );
 
+const ExpeditionIcon = () => (
+  <svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    {/* Compass */}
+    <circle cx="13" cy="13" r="9" />
+    <polygon points="13,5 15.5,13 13,11 10.5,13" fill="currentColor" stroke="none" opacity="0.9" />
+    <polygon points="13,21 10.5,13 13,15 15.5,13" fill="currentColor" stroke="none" opacity="0.4" />
+    <circle cx="13" cy="13" r="1.2" fill="currentColor" stroke="none" />
+    <line x1="13" y1="2" x2="13" y2="4" />
+    <line x1="13" y1="22" x2="13" y2="24" />
+    <line x1="2" y1="13" x2="4" y2="13" />
+    <line x1="22" y1="13" x2="24" y2="13" />
+  </svg>
+);
+
 const LeaderboardIcon = () => (
   <svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     {/* Crown */}
@@ -63,10 +77,11 @@ const ProfileIcon = () => (
 
 export default function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
   const items: NavItem[] = [
-    { id: 'hero',        label: 'Hero',    icon: <HeroIcon /> },
-    { id: 'buildings',   label: 'Forge',   icon: <BuildingsIcon /> },
-    { id: 'leaderboard', label: 'Ranks',   icon: <LeaderboardIcon /> },
-    { id: 'profile',     label: 'Profile', icon: <ProfileIcon /> },
+    { id: 'hero',        label: 'Hero',       icon: <HeroIcon /> },
+    { id: 'buildings',   label: 'Forge',      icon: <BuildingsIcon /> },
+    { id: 'expedition',  label: 'Expedition', icon: <ExpeditionIcon /> },
+    { id: 'leaderboard', label: 'Ranks',      icon: <LeaderboardIcon /> },
+    { id: 'profile',     label: 'Profile',    icon: <ProfileIcon /> },
   ];
 
   return (

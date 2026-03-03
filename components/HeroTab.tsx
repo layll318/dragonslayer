@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { useGame, getCareCost, FEED_COST_BASE, REST_COST_BASE, TRAIN_COST_BASE } from '@/contexts/GameContext';
-import { formatNumber, formatPercent } from '@/utils/format';
+import { useGame } from '@/contexts/GameContext';
+import { formatNumber } from '@/utils/format';
 import CharacterDisplay from './CharacterDisplay';
 import QuestBanner from './QuestBanner';
 import DragonBoss from './DragonBoss';
@@ -33,7 +33,7 @@ function getComboLevel(count: number) {
 }
 
 export default function HeroTab() {
-  const { state, tap, feed, rest, train, goldPerTap, goldPerHour, careMultiplier, getCharacterTier } = useGame();
+  const { state, tap, goldPerTap, goldPerHour, gearMultiplier, getCharacterTier } = useGame();
   const { hapticFeedback, isTWA } = useTelegramWebApp();
 
   const [floats,     setFloats]     = useState<GoldFloat[]>([]);
@@ -41,7 +41,7 @@ export default function HeroTab() {
   const [flash,      setFlash]      = useState(false);
   const [levelUp,    setLevelUp]    = useState(false);
   const [comboCount, setComboCount] = useState(0);
-  const [tutStep,    setTutStep]    = useState(0); // 0=tap hint, 1=care hint, 2=building hint, 3=done
+  const [tutStep,    setTutStep]    = useState(0); // 0=tap hint, 1=gear hint, 2=building hint, 3=done
 
   const counter      = useRef(0);
   const prevLevelRef = useRef(state.level);
@@ -105,12 +105,8 @@ export default function HeroTab() {
     setTimeout(() => setFlash(false), isCrit ? 140 : 80);
   }, [tap, comboCount, isTWA, hapticFeedback]);
 
-  const feedCost  = getCareCost(FEED_COST_BASE,  state.level);
-  const restCost  = getCareCost(REST_COST_BASE,  state.level);
-  const trainCost = getCareCost(TRAIN_COST_BASE, state.level);
   const xpPercent = state.xpToNext > 0 ? (state.xp / state.xpToNext) * 100 : 0;
   const tier      = getCharacterTier();
-  const careWarning = Math.min(state.fed, state.energy, state.mood) < 25;
 
   return (
     <div className="flex flex-col flex-1 pb-2 relative z-10 page-fade">
@@ -237,9 +233,9 @@ export default function HeroTab() {
               <span className="coin-icon" style={{ width: 14, height: 14 }} />
               <span className="font-cinzel text-[#f0c040] font-bold text-sm tabular-nums">{formatNumber(goldPerHour)}</span>
               <span className="text-[#9a8a6a] text-xs">/hr</span>
-              {careMultiplier !== 1.0 && (
-                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${careMultiplier > 1 ? 'text-green-300 bg-green-900/40' : 'text-red-300 bg-red-900/40'}`}>
-                  {careMultiplier}×
+              {gearMultiplier > 1.0 && (
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full text-amber-300 bg-amber-900/40">
+                  {gearMultiplier.toFixed(2)}×
                 </span>
               )}
             </div>
@@ -257,8 +253,8 @@ export default function HeroTab() {
           {tutStep === 1 && (
             <div className="absolute bottom-14 left-1/2 -translate-x-1/2 z-20 text-center pointer-events-none">
               <div className="tut-callout">
-                <span className="text-base">❤️</span>
-                <span className="font-cinzel font-bold text-[#f0c040] text-[11px]">Keep stats high for bonus gold!</span>
+                <span className="text-base">⚔️</span>
+                <span className="font-cinzel font-bold text-[#f0c040] text-[11px]">Craft gear to boost your gold!</span>
               </div>
             </div>
           )}
@@ -275,13 +271,26 @@ export default function HeroTab() {
         {/* ══════════════ DAILY QUESTS ══════════════ */}
         <QuestBanner />
 
-        {/* ══════════════ CARE HUD ══════════════ */}
-        <div className={`dragon-panel px-3 py-2.5 ${careWarning ? 'care-warning' : ''}`}>
-          <CareRow icon="🍖" label="Fed"    value={state.fed}    barClass="stat-bar-fed"    btnLabel="FEED"  btnCost={feedCost}  canAfford={state.gold >= feedCost}  onClick={feed}  />
-          <div className="ornate-divider my-1.5" />
-          <CareRow icon="⚡"  label="Energy" value={state.energy} barClass="stat-bar-energy" btnLabel="REST"  btnCost={restCost}  canAfford={state.gold >= restCost}  onClick={rest}  />
-          <div className="ornate-divider my-1.5" />
-          <CareRow icon="😊" label="Mood"   value={state.mood}   barClass="stat-bar-mood"   btnLabel="TRAIN" btnCost={trainCost} canAfford={state.gold >= trainCost} onClick={train} />
+        {/* ══════════════ GEAR POWER BAR ══════════════ */}
+        <div className="dragon-panel px-3 py-2.5">
+          <div className="flex items-center gap-3">
+            <span className="text-sm">⚔️</span>
+            <span className="text-[#e8d8a8] text-[12px] font-bold tracking-wide flex-shrink-0">Gear Power</span>
+            <div className="flex-1 stat-bar-bg h-5 relative">
+              <div
+                className="h-full transition-all duration-700 ease-out"
+                style={{
+                  width: `${Math.min(100, ((gearMultiplier - 1) / 0.5) * 100)}%`,
+                  background: 'linear-gradient(90deg, #d4a017, #f0c040)',
+                  borderRadius: 'inherit',
+                }}
+              />
+              <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
+                {gearMultiplier.toFixed(2)}×
+              </span>
+            </div>
+            <span className="text-[10px] text-[#6b5a3a] flex-shrink-0">Equip gear →</span>
+          </div>
         </div>
 
         {/* ══════════════ GOLD PER TAP HINT ══════════════ */}
@@ -295,39 +304,3 @@ export default function HeroTab() {
   );
 }
 
-function CareRow({
-  icon, label, value, barClass, btnLabel, btnCost, canAfford, onClick,
-}: {
-  icon: string; label: string; value: number; barClass: string;
-  btnLabel: string; btnCost: number; canAfford: boolean; onClick: () => void;
-}) {
-  const isLow = value < 25;
-  return (
-    <div className="flex items-center gap-2">
-      <span className={`text-sm w-5 text-center flex-shrink-0 ${isLow ? 'animate-pulse' : ''}`}>{icon}</span>
-      <span className="text-[#e8d8a8] text-[12px] font-bold w-[48px] flex-shrink-0 tracking-wide">{label}</span>
-      <div className="flex-1 min-w-0 stat-bar-bg h-5 relative">
-        <div className={`${barClass} h-full transition-all duration-700 ease-out`} style={{ width: `${value}%` }} />
-        <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
-          {formatPercent(value)}
-        </span>
-      </div>
-      <div className="flex flex-col items-center gap-0.5 flex-shrink-0 w-[68px]">
-        <button
-          onClick={onClick}
-          disabled={!canAfford}
-          className="action-btn w-full text-[9px]"
-          style={{ letterSpacing: '1px', minHeight: 44, touchAction: 'manipulation' }}
-        >
-          {btnLabel}
-        </button>
-        <div className="flex items-center gap-0.5 justify-center">
-          <span className="coin-icon" style={{ width: 7, height: 7 }} />
-          <span className={`text-[10px] font-bold ${canAfford ? 'text-[#b09a60]' : 'text-red-400/80'}`}>
-            {formatNumber(btnCost)}
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}

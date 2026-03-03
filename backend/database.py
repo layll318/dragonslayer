@@ -74,6 +74,43 @@ async def create_tables():
                 enabled     BOOLEAN DEFAULT TRUE,
                 created_at  TIMESTAMPTZ DEFAULT NOW()
             );
+
+            ALTER TABLE players ADD COLUMN IF NOT EXISTS starter_nft_id TEXT;
+
+            CREATE TABLE IF NOT EXISTS player_materials (
+                id          SERIAL PRIMARY KEY,
+                player_id   INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+                material    TEXT NOT NULL,
+                quality     TEXT NOT NULL,
+                quantity    INTEGER NOT NULL DEFAULT 1,
+                UNIQUE (player_id, material, quality)
+            );
+
+            CREATE TABLE IF NOT EXISTS player_items (
+                id            SERIAL PRIMARY KEY,
+                player_id     INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+                item_type     TEXT NOT NULL,
+                name          TEXT NOT NULL,
+                rarity        TEXT NOT NULL,
+                power         INTEGER NOT NULL DEFAULT 1,
+                nft_token_id  TEXT,
+                equipped      BOOLEAN NOT NULL DEFAULT FALSE,
+                equipped_slot TEXT,
+                obtained_via  TEXT,
+                obtained_at   TIMESTAMPTZ DEFAULT NOW()
+            );
+
+            CREATE TABLE IF NOT EXISTS expeditions (
+                id             SERIAL PRIMARY KEY,
+                player_id      INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+                started_at     TIMESTAMPTZ NOT NULL,
+                duration_hours INTEGER NOT NULL,
+                ends_at        TIMESTAMPTZ NOT NULL,
+                status         TEXT NOT NULL DEFAULT 'active',
+                dragons_slain  INTEGER,
+                gold_earned    INTEGER,
+                result_json    JSONB
+            );
         """)
         logger.info("✅ Tables created / verified")
 
