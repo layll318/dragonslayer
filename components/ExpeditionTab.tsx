@@ -5,11 +5,13 @@ import {
   useGame,
   EquipmentSlots,
   InventoryItem,
+  CraftingRecipe,
   RARITY_COLORS,
   RARITY_SCORES,
   MATERIAL_LABELS,
   ITEM_UNLOCK_LEVELS,
   ItemType,
+  ItemRarity,
   MaterialType,
   MaterialQuality,
 } from '@/contexts/GameContext';
@@ -352,84 +354,203 @@ export default function ExpeditionTab() {
 
   // ── SECTION: CRAFT ───────────────────────────────────────────────────────
 
-  const renderCraft = () => (
-    <div className="flex flex-col gap-2">
-      <div className="dragon-panel px-3 py-2">
-        <p className="text-[9px] text-[#6b5a3a]">
-          Combine crafting materials + gold to forge equipment. Better quality materials produce higher rarity items.
-        </p>
-      </div>
-      {CRAFTING_RECIPES.map(recipe => {
-        const color = RARITY_COLORS[recipe.rarity];
-        const canAffordGold = state.gold >= recipe.goldCost;
-        const matsMet = recipe.materials.every(req => {
-          const held = state.materials.find(m => m.type === req.type && m.quality === req.quality);
-          return held && held.quantity >= req.quantity;
-        });
-        const canCraft = canAffordGold && matsMet;
+  /** Returns true if player owns an item of the given type+rarity (inventory OR equipped) */
+  function hasItem(itemType: ItemType, rarity: ItemRarity): boolean {
+    const inInv = state.inventory.some(i => i.itemType === itemType && i.rarity === rarity);
+    if (inInv) return true;
+    const eq = state.equipment[itemType as keyof EquipmentSlots];
+    return !!(eq && eq.rarity === rarity);
+  }
 
-        return (
-          <div
-            key={recipe.id}
-            className="dragon-panel p-3"
-            style={{ borderColor: `${color}30` }}
-          >
-            <div className="flex items-start justify-between gap-2 mb-2">
-              <div>
-                <div className="flex items-center gap-1.5">
-                  <span className="font-cinzel font-bold text-[12px]" style={{ color }}>
-                    {recipe.name}
-                  </span>
-                  <span className="text-[8px] font-bold uppercase px-1 py-0.5 rounded" style={{ background: `${color}20`, color }}>
-                    {recipe.rarity}
-                  </span>
-                </div>
-                <p className="text-[9px] text-[#9a8a6a] mt-0.5">⚡ {recipe.power} power · {SLOT_LABELS[recipe.itemType as keyof EquipmentSlots]?.split(' ')[1]}</p>
+  const renderCraft = () => {
+    // Group recipes by slot in display order
+    const bySlot: Record<string, CraftingRecipe[]> = {};
+    for (const slot of SLOT_ORDER) {
+      bySlot[slot] = CRAFTING_RECIPES.filter(r => r.itemType === slot);
+    }
+
+    return (
+      <div className="flex flex-col gap-3">
+        <div className="dragon-panel px-3 py-2">
+          <p className="text-[9px] text-[#6b5a3a]">
+            Each item upgrades into the next tier. Forge T1 from scratch, then upgrade with expedition drops.
+            <span className="text-[#d4a017]"> Upgrading consumes the previous item.</span>
+          </p>
+        </div>
+
+        {SLOT_ORDER.map(slot => {
+          const chain = bySlot[slot];
+          // Find highest tier already owned
+          const ownedTiers = chain.filter(r => hasItem(r.itemType as ItemType, r.rarity));
+          const highestOwned = ownedTiers[ownedTiers.length - 1] ?? null;
+          // Next recipe to craft/upgrade
+          const nextIdx = highestOwned
+            ? chain.findIndex(r => r.id === highestOwned.id) + 1
+            : 0;
+          const nextRecipe = chain[nextIdx] ?? null;
+
+          return (
+            <div key={slot} className="dragon-panel p-3">
+              {/* Slot header */}
+              <p className="font-cinzel font-bold text-[#e8d8a8] text-[11px] tracking-wider mb-3">
+                {SLOT_LABELS[slot]}
+              </p>
+
+              {/* Chain row */}
+              <div className="flex items-center gap-1 mb-3 overflow-x-auto pb-1">
+                {chain.map((recipe, idx) => {
+                  const owned = hasItem(recipe.itemType as ItemType, recipe.rarity);
+                  const isNext = idx === nextIdx;
+                  const color = RARITY_COLORS[recipe.rarity];
+                  return (
+                    <React.Fragment key={recipe.id}>
+                      <div
+                        className="flex flex-col items-center gap-0.5 flex-shrink-0"
+                        style={{ minWidth: 52 }}
+                      >
+                        <div
+                          className="w-10 h-10 rounded-lg flex items-center justify-center text-base border transition-all"
+                          style={{
+                            background: owned
+                              ? `${color}25`
+                              : isNext
+                              ? 'rgba(255,255,255,0.05)'
+                              : 'rgba(255,255,255,0.02)',
+                            borderColor: owned
+                              ? color
+                              : isNext
+                              ? `${color}50`
+                              : 'rgba(255,255,255,0.06)',
+                            opacity: !owned && !isNext ? 0.35 : 1,
+                          }}
+                        >
+                          {owned ? '✓' : isNext ? '🔨' : '🔒'}
+                        </div>
+                        <span
+                          className="text-[8px] font-bold text-center leading-tight"
+                          style={{ color: owned ? color : isNext ? '#9a8a6a' : '#3a2a1a' }}
+                        >
+                          {recipe.name.split(' ')[0]}
+                        </span>
+                        <span className="text-[7px]" style={{ color: owned ? color : '#3a2a1a' }}>
+                          ⚡{recipe.power}
+                        </span>
+                      </div>
+                      {idx < chain.length - 1 && (
+                        <span className="text-[#3a2a1a] text-xs flex-shrink-0">›</span>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
               </div>
-              <button
-                onClick={() => craftItem(recipe.id)}
-                disabled={!canCraft}
-                className="action-btn px-3 py-1.5 text-[9px] flex-shrink-0"
-                style={canCraft ? {} : { opacity: 0.4, cursor: 'not-allowed' }}
-              >
-                CRAFT
-              </button>
-            </div>
 
-            {/* Materials required */}
-            <div className="flex flex-wrap gap-1 mb-1.5">
-              {recipe.materials.map((req, i) => {
-                const held = state.materials.find(m => m.type === req.type && m.quality === req.quality);
-                const have = held?.quantity ?? 0;
-                const ok = have >= req.quantity;
-                return (
-                  <span
-                    key={i}
-                    className="text-[8px] px-1.5 py-0.5 rounded-full"
-                    style={{
-                      background: ok ? `${QUALITY_COLOR[req.quality]}20` : 'rgba(255,60,60,0.1)',
-                      color: ok ? QUALITY_COLOR[req.quality] : '#f87171',
-                    }}
-                  >
-                    {MATERIAL_LABELS[req.type as MaterialType]} ×{req.quantity}
-                    <span className="opacity-60"> ({have}/{req.quantity})</span>
-                  </span>
+              {/* Active recipe card */}
+              {nextRecipe ? (() => {
+                const color = RARITY_COLORS[nextRecipe.rarity];
+                const isUpgrade = !!nextRecipe.upgradesFrom;
+                const canAffordGold = state.gold >= nextRecipe.goldCost;
+                const matsMet = nextRecipe.materials.every(req => {
+                  const held = state.materials.find(m => m.type === req.type && m.quality === req.quality);
+                  return held && held.quantity >= req.quantity;
+                });
+                const hasBaseItem = !isUpgrade || hasItem(
+                  nextRecipe.upgradesFrom!.itemType,
+                  nextRecipe.upgradesFrom!.rarity,
                 );
-              })}
-            </div>
+                const canCraft = canAffordGold && matsMet && hasBaseItem;
 
-            {/* Gold cost */}
-            <div className="flex items-center gap-1">
-              <span className="coin-icon" style={{ width: 8, height: 8 }} />
-              <span className={`text-[9px] font-bold ${canAffordGold ? 'text-[#b09a60]' : 'text-red-400'}`}>
-                {formatNumber(recipe.goldCost)} gold
-              </span>
+                return (
+                  <div
+                    className="rounded-lg p-2.5 border"
+                    style={{ background: `${color}08`, borderColor: `${color}30` }}
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-cinzel font-bold text-[11px]" style={{ color }}>
+                            {nextRecipe.name}
+                          </span>
+                          <span
+                            className="text-[7px] font-bold uppercase px-1 py-0.5 rounded"
+                            style={{ background: `${color}20`, color }}
+                          >
+                            {nextRecipe.rarity}
+                          </span>
+                        </div>
+                        <p className="text-[9px] text-[#9a8a6a] mt-0.5">
+                          ⚡ {nextRecipe.power} power
+                          {isUpgrade && (
+                            <span className="text-[#d4a017]"> · consumes {nextRecipe.upgradesFrom!.rarity} {nextRecipe.upgradesFrom!.itemType}</span>
+                          )}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => craftItem(nextRecipe.id)}
+                        disabled={!canCraft}
+                        className="action-btn px-3 py-1.5 text-[9px] flex-shrink-0"
+                        style={canCraft ? {} : { opacity: 0.4, cursor: 'not-allowed' }}
+                      >
+                        {isUpgrade ? '⬆ UPGRADE' : '⚒ FORGE'}
+                      </button>
+                    </div>
+
+                    {/* Base item requirement */}
+                    {isUpgrade && (
+                      <div className="flex items-center gap-1 mb-1.5">
+                        <span
+                          className="text-[8px] px-1.5 py-0.5 rounded-full"
+                          style={{
+                            background: hasBaseItem ? 'rgba(74,222,128,0.1)' : 'rgba(255,60,60,0.1)',
+                            color: hasBaseItem ? '#4ade80' : '#f87171',
+                          }}
+                        >
+                          {hasBaseItem ? '✓' : '✗'} Requires {nextRecipe.upgradesFrom!.rarity} {nextRecipe.upgradesFrom!.itemType}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Material requirements */}
+                    <div className="flex flex-wrap gap-1 mb-1.5">
+                      {nextRecipe.materials.map((req, i) => {
+                        const held = state.materials.find(m => m.type === req.type && m.quality === req.quality);
+                        const have = held?.quantity ?? 0;
+                        const ok = have >= req.quantity;
+                        return (
+                          <span
+                            key={i}
+                            className="text-[8px] px-1.5 py-0.5 rounded-full"
+                            style={{
+                              background: ok ? `${QUALITY_COLOR[req.quality]}20` : 'rgba(255,60,60,0.1)',
+                              color: ok ? QUALITY_COLOR[req.quality] : '#f87171',
+                            }}
+                          >
+                            {MATERIAL_LABELS[req.type as MaterialType]} ×{req.quantity}
+                            <span className="opacity-60"> ({have}/{req.quantity})</span>
+                          </span>
+                        );
+                      })}
+                    </div>
+
+                    {/* Gold cost */}
+                    <div className="flex items-center gap-1">
+                      <span className="coin-icon" style={{ width: 8, height: 8 }} />
+                      <span className={`text-[9px] font-bold ${canAffordGold ? 'text-[#b09a60]' : 'text-red-400'}`}>
+                        {formatNumber(nextRecipe.goldCost)} gold
+                      </span>
+                    </div>
+                  </div>
+                );
+              })() : (
+                <div className="text-center py-2">
+                  <span className="text-[10px] text-[#4ade80] font-bold">✓ Fully upgraded!</span>
+                </div>
+              )}
             </div>
-          </div>
-        );
-      })}
-    </div>
-  );
+          );
+        })}
+      </div>
+    );
+  };
 
   // ── SECTION: MATERIALS ───────────────────────────────────────────────────
 
