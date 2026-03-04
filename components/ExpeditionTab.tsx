@@ -112,6 +112,7 @@ export default function ExpeditionTab() {
     unequipItem,
     craftItem,
     addMaterials,
+    speedUpExpedition,
     gearMultiplier,
     armyPower,
     CRAFTING_RECIPES,
@@ -125,6 +126,8 @@ export default function ExpeditionTab() {
   const [txStatus, setTxStatus] = React.useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [txMsg, setTxMsg] = React.useState('');
   const [walletCopied, setWalletCopied] = React.useState(false);
+  const [showAd, setShowAd] = React.useState(false);
+  const [adWatched, setAdWatched] = React.useState(false);
   const USED_TX_KEY = 'ds_used_tx_hashes';
   const TREASURY = 'rf84iAt8aRMJ7onNY9ZqmWVVFCAtSmTT7d';
 
@@ -321,6 +324,14 @@ export default function ExpeditionTab() {
                   }}
                 />
               </div>
+              {/* Watch ad to complete */}
+              <button
+                onClick={() => { setAdWatched(false); setShowAd(true); }}
+                className="mt-1 w-full py-2 rounded-xl text-[11px] font-bold tracking-wide transition-opacity"
+                style={{ background: 'linear-gradient(135deg,#7c3aed,#a855f7)', color: '#fff', boxShadow: '0 0 12px rgba(168,85,247,0.4)' }}
+              >
+                ⚡ Watch Ad → Complete Now
+              </button>
             </>
           )}
         </div>
@@ -965,6 +976,62 @@ export default function ExpeditionTab() {
 
   return (
     <div className="flex flex-col flex-1 pb-2 relative z-10 page-fade">
+
+      {/* ── Video Ad Modal ─────────────────────────────────────────────── */}
+      {showAd && (
+        <div
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center"
+          style={{ background: 'rgba(0,0,0,0.97)' }}
+        >
+          {/* Header */}
+          <div className="w-full flex items-center justify-between px-4 py-2"
+               style={{ background: 'rgba(0,0,0,0.6)' }}>
+            <p className="font-cinzel text-[#f0c040] text-[11px] font-bold tracking-widest">
+              ⚡ WATCH TO COMPLETE EXPEDITION
+            </p>
+            {adWatched && (
+              <button
+                onClick={() => setShowAd(false)}
+                className="text-[#6b5a3a] text-lg leading-none px-2"
+              >✕</button>
+            )}
+          </div>
+
+          {/* Video */}
+          <video
+            key="ad-video"
+            src="/images/testlynxadd.MOV"
+            autoPlay
+            playsInline
+            className="w-full max-h-[75vh] object-contain"
+            onEnded={() => {
+              setAdWatched(true);
+              speedUpExpedition();
+            }}
+            style={{ pointerEvents: 'none' }}
+          />
+
+          {/* Footer */}
+          <div className="w-full px-4 py-3 flex flex-col items-center gap-2"
+               style={{ background: 'rgba(0,0,0,0.6)' }}>
+            {!adWatched ? (
+              <p className="text-[#6b5a3a] text-[10px]">Watch the full video to unlock your reward…</p>
+            ) : (
+              <>
+                <p className="text-[#4ade80] font-bold text-[11px] tracking-wider">✅ Expedition complete! Claim your rewards.</p>
+                <button
+                  onClick={() => setShowAd(false)}
+                  className="action-btn px-8 py-2.5 text-sm"
+                  style={{ animation: 'goldShimmerBtn 1.5s ease-in-out infinite' }}
+                >
+                  ⚔️ Claim Now
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Inner tab bar */}
       <div className="sticky top-0 z-20 px-2 pt-2 pb-1" style={{ background: 'rgba(10,6,2,0.92)', backdropFilter: 'blur(8px)' }}>
         <div className="flex gap-1">

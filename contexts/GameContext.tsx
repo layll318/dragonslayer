@@ -128,6 +128,7 @@ interface GameContextType {
   buyBuilding: (id: string, qty?: number) => void;
   startExpedition: (hours: 4 | 8 | 12) => void;
   claimExpedition: () => void;
+  speedUpExpedition: () => void;
   equipItem: (itemId: string) => void;
   unequipItem: (slot: keyof EquipmentSlots) => void;
   craftItem: (recipeId: string) => void;
@@ -804,6 +805,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const speedUpExpedition = useCallback(() => {
+    setState((prev) => {
+      if (!prev.activeExpedition) return prev;
+      return {
+        ...prev,
+        activeExpedition: { ...prev.activeExpedition, endsAt: Date.now() - 1 },
+      };
+    });
+  }, []);
+
   const claimExpedition = useCallback(() => {
     setState((prev) => {
       if (!prev.activeExpedition) return prev;
@@ -1073,6 +1084,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         buyBuilding,
         startExpedition,
         claimExpedition,
+        speedUpExpedition,
         equipItem,
         unequipItem,
         craftItem,
