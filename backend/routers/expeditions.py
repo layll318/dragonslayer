@@ -51,12 +51,11 @@ def _calc_yield(level: int, gear_mult: float, hours: int):
         else random.randint(2, 5) if hours == 8
         else random.randint(3, 8)
     )
-    # Always at least 1 material type dropped
-    total_mats = max(1, total_mats)
-    chosen = random.sample(MATERIAL_TYPES, min(total_mats, len(MATERIAL_TYPES)))
+    # All 5 types always drop — quantity scales with duration
+    max_qty = 2 if hours == 4 else 4 if hours == 8 else 6
     materials = [
-        {"type": t, "quality": quality, "quantity": max(1, random.randint(1, 3))}
-        for t in chosen
+        {"type": t, "quality": quality, "quantity": random.randint(1, max_qty)}
+        for t in MATERIAL_TYPES
     ]
     return dragons_slain, gold_earned, materials
 

@@ -381,13 +381,10 @@ function calcExpeditionYield(
 
   const allTypes: MaterialType[] = ['dragon_scale', 'fire_crystal', 'iron_ore', 'bone_shard', 'ancient_rune'];
   const quality: MaterialQuality = hours >= 12 ? 'rare' : hours >= 8 ? 'uncommon' : 'common';
-  const totalMats = hours === 4 ? Math.floor(Math.random() * 3) + 1
-                  : hours === 8 ? Math.floor(Math.random() * 4) + 2
-                  :               Math.floor(Math.random() * 6) + 3;
-
-  const types = [...allTypes].sort(() => Math.random() - 0.5).slice(0, Math.min(totalMats, 4));
-  const materials: Material[] = types.map(type => ({
-    type, quality, quantity: Math.floor(Math.random() * 3) + 1,
+  // All 5 types always drop — quantity scales with duration
+  const maxQty = hours === 4 ? 2 : hours === 8 ? 4 : 6;
+  const materials: Material[] = allTypes.map(type => ({
+    type, quality, quantity: Math.floor(Math.random() * maxQty) + 1,
   }));
 
   return { dragonsSlain, goldEarned, materials };
