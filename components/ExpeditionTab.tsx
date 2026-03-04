@@ -120,6 +120,11 @@ export default function ExpeditionTab() {
 
   const [buyStatus, setBuyStatus] = React.useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [buyMsg, setBuyMsg] = React.useState('');
+  const [txHash, setTxHash] = React.useState('');
+  const [txType, setTxType] = React.useState<MaterialType | ''>('');
+  const [txStatus, setTxStatus] = React.useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+  const [txMsg, setTxMsg] = React.useState('');
+  const USED_TX_KEY = 'ds_used_tx_hashes';
 
   // ── Pending-purchase recovery ─────────────────────────────────────────────
   const PENDING_KEY = 'ds_pending_mat_purchase';
@@ -753,12 +758,12 @@ export default function ExpeditionTab() {
               🎒 All 5 Types ×3 — 3 XRP
             </button>
 
-            {/* Check pending payment manually */}
+            {/* Check pending Xaman payment manually */}
             {!buyMsg && localStorage.getItem(PENDING_KEY) && (
               <button
                 onClick={() => creditPendingPurchase(false)}
                 className="w-full mt-1.5 text-[9px] text-[#d4a017] underline text-center"
-              >I already paid — check my payment</button>
+              >I already paid — check my Xaman payment</button>
             )}
 
             {buyMsg && (
@@ -774,6 +779,50 @@ export default function ExpeditionTab() {
                 Cancel / I closed Xaman
               </button>
             )}
+
+            {/* ── TX Hash Claim ── */}
+            <div className="mt-3 pt-3" style={{ borderTop: '1px solid rgba(212,160,23,0.15)' }}>
+              <p className="font-cinzel text-[#e8d8a8] text-[10px] font-bold mb-1">Already sent XRP? Claim with TX hash</p>
+              <p className="text-[8px] text-[#6b5a3a] mb-2">Any wallet — paste the TX hash from xrpscan.com or your wallet.</p>
+              <input
+                type="text"
+                placeholder="e.g. A1B2C3D4E5F6..."
+                value={txHash}
+                onChange={e => setTxHash(e.target.value.trim())}
+                className="w-full px-2 py-1.5 rounded-lg text-[10px] text-[#f0e8d0] mb-2"
+                style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(212,160,23,0.25)', outline: 'none' }}
+              />
+              <p className="text-[8px] text-[#6b5a3a] mb-1">1 XRP = pick a type below · 3 XRP = all 5 types automatically</p>
+              <div className="grid grid-cols-5 gap-1 mb-2">
+                {(['dragon_scale','fire_crystal','iron_ore','bone_shard','ancient_rune'] as MaterialType[]).map(t => (
+                  <button
+                    key={t}
+                    onClick={() => setTxType(prev => prev === t ? '' : t)}
+                    className="flex flex-col items-center py-1 px-1 rounded-lg transition-all"
+                    style={{
+                      background: txType === t ? 'rgba(212,160,23,0.3)' : 'rgba(212,160,23,0.06)',
+                      border: `1px solid ${txType === t ? 'rgba(212,160,23,0.7)' : 'rgba(212,160,23,0.15)'}`,
+                    }}
+                  >
+                    <span className="text-sm leading-none">{MATERIAL_LABELS[t].split(' ')[0]}</span>
+                    <span className="text-[6px] text-[#6b5a3a] mt-0.5">{MATERIAL_LABELS[t].split(' ').slice(1).join(' ')}</span>
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={handleClaimByTxHash}
+                disabled={txStatus === 'loading' || txHash.length < 60}
+                className="action-btn w-full py-2 text-[10px]"
+                style={{ opacity: txHash.length < 60 ? 0.5 : 1 }}
+              >
+                {txStatus === 'loading' ? '⏳ Verifying…' : '✅ Claim Materials'}
+              </button>
+              {txMsg && (
+                <p className={`text-[9px] mt-1.5 text-center ${txStatus === 'error' ? 'text-red-400' : 'text-[#4ade80]'}`}>
+                  {txMsg}
+                </p>
+              )}
+            </div>
         </div>
       </div>
     );
@@ -814,6 +863,66 @@ export default function ExpeditionTab() {
       console.error('[XRP shop] create payload error:', e);
       setBuyMsg('Network error — try again.');
       setBuyStatus('error');
+    }
+  }
+
+  async function handleClaimByTxHash() {
+    const hash = txHash.trim().toUpperCase();
+    if (hash.length < 60) { setTxMsg('Paste a valid TX hash.'); setTxStatus('error'); return; }
+
+    // Client-side dedup
+    const usedRaw = localStorage.getItem(USED_TX_KEY);
+    const used: string[] = usedRaw ? JSON.parse(usedRaw) : [];
+    if (used.includes(hash)) {
+      setTxMsg('This TX hash has already been claimed on this device.');
+      setTxStatus('error');
+      return;
+    }
+
+    setTxStatus('loading');
+    setTxMsg('');
+    try {
+      const res = await fetch('/frontend-api/materials/verify-tx', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ txHash: hash, type: txType || undefined }),
+      });
+      const data = await res.json();
+      console.log('[verify-tx] response:', data);
+
+      if (!data.success) {
+        setTxMsg(data.error || 'Verification failed.');
+        setTxStatus('error');
+        return;
+      }
+
+      // Credit materials
+      addMaterials(data.credits);
+
+      // Mark hash as used on this device
+      used.push(hash);
+      localStorage.setItem(USED_TX_KEY, JSON.stringify(used));
+
+      // Best-effort backend persist
+      if (state.playerId) {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? '';
+        if (apiUrl) fetch(`${apiUrl}/api/items/buy-materials`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ player_id: state.playerId, xaman_payload_uuid: hash }),
+        }).catch(() => {});
+      }
+
+      const label = data.credits.length > 1
+        ? `${data.credits.length * data.credits[0].quantity} materials (3 of each type)`
+        : `3× ${(data.credits[0].type as string).replace('_', ' ')}`;
+      setTxMsg(`✅ Credited: ${label}`);
+      setTxStatus('done');
+      setTxHash('');
+      setTxType('');
+    } catch (e) {
+      console.error('[verify-tx] error:', e);
+      setTxMsg('Network error — try again.');
+      setTxStatus('error');
     }
   }
 
