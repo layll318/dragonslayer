@@ -336,14 +336,23 @@ export default function ExpeditionTab() {
                   }}
                 />
               </div>
-              {/* Watch ad to complete */}
-              <button
-                onClick={() => { setAdWatched(false); setShowAd(true); }}
-                className="mt-1 w-full py-2 rounded-xl text-[11px] font-bold tracking-wide transition-opacity"
-                style={{ background: 'linear-gradient(135deg,#7c3aed,#a855f7)', color: '#fff', boxShadow: '0 0 12px rgba(168,85,247,0.4)' }}
-              >
-                ⚡ Watch Ad {adDuration ? `(${adDuration})` : ''} → Complete Now
-              </button>
+              {/* Watch ad to speed up */}
+              {(() => {
+                const halfMs = exp.durationHours * 3600 * 1000 / 2;
+                const halfMins = Math.round(halfMs / 60000);
+                const saveLabel = halfMins >= 60
+                  ? `${(halfMins / 60).toFixed(1).replace('.0','')}h`
+                  : `${halfMins}m`;
+                return (
+                  <button
+                    onClick={() => { setAdWatched(false); setShowAd(true); }}
+                    className="mt-1 w-full py-2 rounded-xl text-[11px] font-bold tracking-wide"
+                    style={{ background: 'linear-gradient(135deg,#7c3aed,#a855f7)', color: '#fff', boxShadow: '0 0 12px rgba(168,85,247,0.4)' }}
+                  >
+                    ⚡ Watch Ad {adDuration ? `(${adDuration})` : ''} → Save {saveLabel}
+                  </button>
+                );
+              })()}
             </>
           )}
         </div>
