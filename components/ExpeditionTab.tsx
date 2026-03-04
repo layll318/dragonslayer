@@ -14,6 +14,8 @@ import {
   ItemRarity,
   MaterialType,
   MaterialQuality,
+  calcGearBonus,
+  calcArmyPower,
 } from '@/contexts/GameContext';
 import { formatNumber } from '@/utils/format';
 
@@ -110,9 +112,13 @@ export default function ExpeditionTab() {
     unequipItem,
     craftItem,
     gearMultiplier,
+    armyPower,
     CRAFTING_RECIPES,
     ITEM_UNLOCK_LEVELS: unlockLevels,
   } = useGame();
+
+  const [buyStatus, setBuyStatus] = React.useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+  const [buyMsg, setBuyMsg] = React.useState('');
 
   const [section, setSection] = useState<Section>('expedition');
   const [now, setNow] = useState(Date.now());
@@ -143,26 +149,36 @@ export default function ExpeditionTab() {
 
   // ── SECTION: EXPEDITION ──────────────────────────────────────────────────
 
-  const renderExpedition = () => (
+  const renderExpedition = () => {
+    const heroBonus = state.level * 0.5;
+    const gearBonus = calcGearBonus(state.equipment);
+    const totalPower = heroBonus + armyPower * 0.8 + gearBonus * 2;
+    const estLow  = (h: number) => Math.max(1, Math.floor(totalPower * (h / 4) * 0.85));
+    const estHigh = (h: number) => Math.max(1, Math.floor(totalPower * (h / 4) * 1.15));
+
+    return (
     <div className="flex flex-col gap-3">
-      {/* Gear power summary */}
-      <div className="dragon-panel px-3 py-2">
-        <div className="flex items-center justify-between">
-          <span className="text-[#e8d8a8] text-[11px] font-bold tracking-wide">⚔️ Gear Multiplier</span>
-          <span className="font-cinzel font-bold text-[#f0c040]">{gearMultiplier.toFixed(2)}×</span>
+      {/* Combat power breakdown */}
+      <div className="dragon-panel px-3 py-2.5">
+        <p className="font-cinzel font-bold text-[#e8d8a8] text-[11px] tracking-wider mb-2">⚔️ COMBAT POWER</p>
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[#9a8a6a] text-[10px]">🗡️ Hero (Lv {state.level})</span>
+            <span className="font-cinzel font-bold text-[#f0c040] text-[11px]">+{heroBonus.toFixed(1)}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-[#9a8a6a] text-[10px]">🪖 Army ({armyPower} pwr)</span>
+            <span className="font-cinzel font-bold text-[#ff8844] text-[11px]">+{(armyPower * 0.8).toFixed(1)}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-[#9a8a6a] text-[10px]">⚔️ Gear ({gearBonus} pts)</span>
+            <span className="font-cinzel font-bold text-[#60a5fa] text-[11px]">+{(gearBonus * 2).toFixed(1)}</span>
+          </div>
+          <div className="mt-1 pt-1 border-t border-[rgba(255,255,255,0.06)] flex items-center justify-between">
+            <span className="text-[#e8d8a8] text-[10px] font-bold">Total</span>
+            <span className="font-cinzel font-bold text-[#f0c040] text-sm">{totalPower.toFixed(1)}</span>
+          </div>
         </div>
-        <div className="mt-1.5 h-1.5 rounded-full bg-[rgba(255,255,255,0.06)] overflow-hidden">
-          <div
-            className="h-full rounded-full transition-all"
-            style={{
-              width: `${Math.min(100, ((gearMultiplier - 1) / 0.5) * 100)}%`,
-              background: 'linear-gradient(90deg, #d4a017, #f0c040)',
-            }}
-          />
-        </div>
-        <p className="text-[9px] text-[#6b5a3a] mt-1">
-          Equip better gear in the <span className="text-[#d4a017]">Gear</span> section to improve expedition yields.
-        </p>
       </div>
 
       {/* Active expedition / launch */}
@@ -215,14 +231,14 @@ export default function ExpeditionTab() {
               <button
                 key={h}
                 onClick={() => startExpedition(h)}
-                className="action-btn flex flex-col items-center py-3 gap-1"
+                className="action-btn flex flex-col items-center py-3 gap-0.5"
               >
                 <span className="font-cinzel font-bold text-base">{h}h</span>
-                <span className="text-[8px] opacity-70">
-                  {h === 4 ? '1–3 mats' : h === 8 ? '2–5 mats' : '3–8 mats'}
+                <span className="text-[8px] opacity-80">
+                  🐉 {estLow(h)}–{estHigh(h)}
                 </span>
-                <span className="text-[8px] opacity-70">
-                  {h === 4 ? 'Common' : h === 8 ? 'Uncommon' : 'Rare'}
+                <span className="text-[8px] opacity-60">
+                  {h === 4 ? 'Common' : h === 8 ? 'Uncommon' : 'Rare'} mats
                 </span>
               </button>
             ))}
@@ -285,6 +301,7 @@ export default function ExpeditionTab() {
       </div>
     </div>
   );
+  };
 
   // ── SECTION: GEAR ────────────────────────────────────────────────────────
 
@@ -600,9 +617,80 @@ export default function ExpeditionTab() {
             </p>
           </div>
         )}
+
+        {/* XRP Material Shop */}
+        {state.walletAddress && (
+          <div className="dragon-panel px-3 py-3">
+            <p className="font-cinzel font-bold text-[#e8d8a8] text-[11px] tracking-wider mb-1">
+              💎 XRP MATERIAL SHOP
+            </p>
+            <p className="text-[9px] text-[#6b5a3a] mb-2">Buy materials instantly with XRP.</p>
+
+            {/* Single type buttons */}
+            <div className="grid grid-cols-5 gap-1 mb-2">
+              {(['dragon_scale','fire_crystal','iron_ore','bone_shard','ancient_rune'] as MaterialType[]).map(t => (
+                <button
+                  key={t}
+                  onClick={() => handleBuyMaterial(t)}
+                  disabled={buyStatus === 'loading'}
+                  className="flex flex-col items-center py-1.5 px-1 rounded-lg transition-opacity"
+                  style={{
+                    background: 'rgba(212,160,23,0.08)',
+                    border: '1px solid rgba(212,160,23,0.2)',
+                    opacity: buyStatus === 'loading' ? 0.5 : 1,
+                  }}
+                >
+                  <span className="text-base leading-none">{MATERIAL_LABELS[t].split(' ')[0]}</span>
+                  <span className="text-[7px] text-[#f0c040] font-bold mt-0.5">1 XRP</span>
+                  <span className="text-[6px] text-[#6b5a3a]">×3</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Bundle */}
+            <button
+              onClick={() => handleBuyMaterial('bundle')}
+              disabled={buyStatus === 'loading'}
+              className="action-btn w-full py-2 text-[10px]"
+            >
+              🎒 All 5 Types ×3 — 3 XRP
+            </button>
+
+            {buyMsg && (
+              <p className={`text-[9px] mt-1.5 text-center ${buyStatus === 'error' ? 'text-red-400' : 'text-[#4ade80]'}`}>
+                {buyMsg}
+              </p>
+            )}
+          </div>
+        )}
       </div>
     );
   };
+
+  async function handleBuyMaterial(typeOrBundle: MaterialType | 'bundle') {
+    if (!state.walletAddress) return;
+    setBuyStatus('loading');
+    setBuyMsg('');
+    try {
+      const res = await fetch('/frontend-api/materials/buy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: typeOrBundle, wallet: state.walletAddress }),
+      });
+      const data = await res.json();
+      if (data.deeplink) {
+        window.open(data.deeplink, '_blank');
+        setBuyMsg('Complete payment in Xaman, then reopen the app.');
+        setBuyStatus('done');
+      } else {
+        setBuyMsg(data.error || 'Failed to create payment.');
+        setBuyStatus('error');
+      }
+    } catch {
+      setBuyMsg('Network error — try again.');
+      setBuyStatus('error');
+    }
+  }
 
   // ── TAB BAR + LAYOUT ─────────────────────────────────────────────────────
 

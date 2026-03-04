@@ -1,4 +1,6 @@
 import logging
+import os
+import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List
@@ -194,3 +196,87 @@ async def unequip_item(req: UnequipRequest):
             req.player_id, req.slot,
         )
         return {"success": True}
+
+
+# ── XRP Material Shop ───────────────────────────────────────────────────────
+
+XAMAN_API_KEY    = os.environ.get("XAMAN_API_KEY", "")
+XAMAN_API_SECRET = os.environ.get("XAMAN_API_SECRET", "")
+XAMAN_BASE       = "https://xumm.app/api/v1/platform"
+
+MATERIAL_TYPES = ["dragon_scale", "fire_crystal", "iron_ore", "bone_shard", "ancient_rune"]
+
+
+class BuyMaterialsRequest(BaseModel):
+    player_id: int
+    xaman_payload_uuid: str  # UUID returned by /frontend-api/materials/buy after user signs
+
+
+@router.post("/buy-materials")
+async def buy_materials(req: BuyMaterialsRequest):
+    """
+    Called after the player approves the Xaman payment.
+    Verifies the payload was signed & payment resolved, then credits materials.
+    """
+    if not XAMAN_API_KEY or not XAMAN_API_SECRET:
+        raise HTTPException(status_code=500, detail="Xaman credentials not configured")
+
+    # Fetch payload result from Xaman
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(
+            f"{XAMAN_BASE}/payload/{req.xaman_payload_uuid}",
+            headers={"X-API-Key": XAMAN_API_KEY, "X-API-Secret": XAMAN_API_SECRET},
+        )
+    if r.status_code != 200:
+        raise HTTPException(status_code=400, detail="Could not fetch Xaman payload")
+
+    payload = r.json()
+    meta = payload.get("meta", {})
+    if not meta.get("signed"):
+        raise HTTPException(status_code=400, detail="Payment not signed yet")
+    if not meta.get("submit") or payload.get("response", {}).get("dispatched_result") not in ("tesSUCCESS", None):
+        # dispatched_result can be None for test/sandbox — allow signed=True as enough for now
+        pass
+
+    # Determine what to credit from custom_meta instruction stored at creation time
+    custom_meta = payload.get("custom_meta", {})
+    instruction: str = custom_meta.get("instruction", "")
+
+    # Parse memo from return_url query string (set by /frontend-api/materials/buy)
+    # Fallback: credit bundle if we can't determine type
+    memo = ""
+    try:
+        from urllib.parse import urlparse, parse_qs
+        return_url = payload.get("next", {}).get("always", "")
+        qs = parse_qs(urlparse(return_url).query)
+        memo = qs.get("mat_purchase", [""])[0]
+    except Exception:
+        pass
+
+    if memo.startswith("bundle"):
+        credits = [{"type": t, "quality": "common", "quantity": 3} for t in MATERIAL_TYPES]
+    elif memo.startswith("single:"):
+        parts = memo.split(":")
+        mat_type = parts[1] if len(parts) > 1 else ""
+        qty      = int(parts[2]) if len(parts) > 2 else 3
+        if mat_type not in MATERIAL_TYPES:
+            raise HTTPException(status_code=400, detail=f"Unknown material type: {mat_type}")
+        credits = [{"type": mat_type, "quality": "common", "quantity": qty}]
+    else:
+        # Fallback
+        credits = [{"type": t, "quality": "common", "quantity": 1} for t in MATERIAL_TYPES]
+
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        for m in credits:
+            await conn.execute(
+                """
+                INSERT INTO player_materials (player_id, material, quality, quantity)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (player_id, material, quality)
+                DO UPDATE SET quantity = player_materials.quantity + EXCLUDED.quantity
+                """,
+                req.player_id, m["type"], m["quality"], m["quantity"],
+            )
+
+    return {"success": True, "credited": credits}

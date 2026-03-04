@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 // ============================================================
 // TYPES
@@ -70,6 +70,7 @@ export interface Building {
   costMultiplier: number;
   unlockLevel: number;
   owned: number;
+  armyPower: number;
 }
 
 export interface DailyQuest {
@@ -135,6 +136,7 @@ interface GameContextType {
   goldPerTap: number;
   goldPerHour: number;
   gearMultiplier: number;
+  armyPower: number;
   getBuildingCost: (building: Building) => number;
   canAfford: (cost: number) => boolean;
   getCharacterTier: () => number;
@@ -287,70 +289,76 @@ const EMPTY_EQUIPMENT: EquipmentSlots = { weapon: null, shield: null, helm: null
 
 const INITIAL_BUILDINGS: Building[] = [
   {
-    id: 'campfire',
-    name: 'Campfire',
-    description: 'A humble fire to warm your bones',
-    icon: '🔥',
+    id: 'barracks',
+    name: 'Barracks',
+    description: 'Train foot soldiers to join your expeditions',
+    icon: '🪖',
     baseCost: 100,
     baseIncome: 200,
     costMultiplier: 1.15,
     unlockLevel: 1,
     owned: 0,
+    armyPower: 1,
   },
   {
-    id: 'forge',
-    name: 'Forge',
-    description: 'Smelt ore into dragon-slaying weapons',
-    icon: '⚒️',
+    id: 'archery_range',
+    name: 'Archery Range',
+    description: 'Train archers — ranged firepower on expeditions',
+    icon: '🏹',
     baseCost: 500,
     baseIncome: 1000,
     costMultiplier: 1.15,
     unlockLevel: 3,
     owned: 0,
+    armyPower: 3,
   },
   {
-    id: 'tavern',
-    name: 'Tavern',
-    description: 'Recruit fellow adventurers',
-    icon: '🍺',
+    id: 'stables',
+    name: 'Stables',
+    description: 'Train cavalry — fast and deadly dragon hunters',
+    icon: '🐴',
     baseCost: 2000,
     baseIncome: 4000,
     costMultiplier: 1.15,
     unlockLevel: 5,
     owned: 0,
+    armyPower: 6,
   },
   {
-    id: 'training_ground',
-    name: 'Training Ground',
-    description: 'Hone your combat skills',
-    icon: '⚔️',
+    id: 'war_forge',
+    name: 'War Forge',
+    description: 'Equip your troops with dragonslaying weapons',
+    icon: '⚒️',
     baseCost: 10000,
     baseIncome: 20000,
     costMultiplier: 1.15,
     unlockLevel: 8,
     owned: 0,
+    armyPower: 12,
   },
   {
-    id: 'dragon_lair',
-    name: 'Dragon Lair',
-    description: 'Harvest dragon scales and bones',
-    icon: '🐉',
+    id: 'war_camp',
+    name: 'War Camp',
+    description: 'A full regiment — the backbone of your dragon war',
+    icon: '⛺',
     baseCost: 50000,
     baseIncome: 100000,
     costMultiplier: 1.15,
     unlockLevel: 12,
     owned: 0,
+    armyPower: 25,
   },
   {
     id: 'castle',
     name: 'Castle',
-    description: 'A fortress befitting a true Dragonslayer',
+    description: 'Elite knights — the finest dragonslayers in the realm',
     icon: '🏰',
     baseCost: 250000,
     baseIncome: 500000,
     costMultiplier: 1.15,
     unlockLevel: 18,
     owned: 0,
+    armyPower: 50,
   },
 ];
 
@@ -369,20 +377,32 @@ export function calcGearMultiplier(equipment: EquipmentSlots): number {
   return Math.max(1.0, 1.0 + total * 0.06);
 }
 
+export function calcArmyPower(buildings: Building[]): number {
+  return buildings.reduce((sum, b) => sum + b.armyPower * b.owned, 0);
+}
+
+export function calcGearBonus(equipment: EquipmentSlots): number {
+  const equipped = Object.values(equipment).filter(Boolean) as InventoryItem[];
+  return equipped.reduce((sum, item) => sum + RARITY_SCORES[item.rarity], 0);
+}
+
 function calcExpeditionYield(
   level: number,
-  gearMult: number,
+  armyPwr: number,
+  gearBonus: number,
   hours: 4 | 8 | 12,
 ): { dragonsSlain: number; goldEarned: number; materials: Material[] } {
   const rand = 0.85 + Math.random() * 0.30;
-  const gearPower = (gearMult - 1.0) / 0.06;
-  const dragonsSlain = Math.max(1, Math.floor((level * 2 + gearPower * 3) * hours * rand));
+  const heroBonus = level * 0.5;
+  const dragonsSlain = Math.max(1, Math.floor(
+    (heroBonus + armyPwr * 0.8 + gearBonus * 2) * (hours / 4) * rand
+  ));
   const goldEarned = dragonsSlain * (50 + level * 8);
 
   const allTypes: MaterialType[] = ['dragon_scale', 'fire_crystal', 'iron_ore', 'bone_shard', 'ancient_rune'];
   const quality: MaterialQuality = hours >= 12 ? 'rare' : hours >= 8 ? 'uncommon' : 'common';
-  // All 5 types always drop — quantity scales with duration
-  const maxQty = hours === 4 ? 2 : hours === 8 ? 4 : 6;
+  // All 5 types always drop — qty: 4h=1, 8h=1-2, 12h=1-3
+  const maxQty = hours === 4 ? 1 : hours === 8 ? 2 : 3;
   const materials: Material[] = allTypes.map(type => ({
     type, quality, quantity: Math.floor(Math.random() * maxQty) + 1,
   }));
@@ -511,10 +531,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       const now = Date.now();
       const elapsed = (now - saved.lastTick) / 1000;
 
-      // Migrate building income rates to current values
-      const migratedBuildings = saved.buildings.map((savedB) => {
-        const template = INITIAL_BUILDINGS.find((b) => b.id === savedB.id);
-        return template ? { ...savedB, baseIncome: template.baseIncome } : savedB;
+      // Always use INITIAL_BUILDINGS as template (resets removed IDs, preserves owned count)
+      const migratedBuildings = INITIAL_BUILDINGS.map((template) => {
+        const existing = (saved.buildings || []).find((b: Building) => b.id === template.id);
+        return { ...template, owned: existing?.owned ?? 0 };
       });
 
       // Calculate offline gold from buildings using gear multiplier
@@ -707,6 +727,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const gearMultiplier = calcGearMultiplier(state.equipment);
 
+  const armyPower = useMemo(() => calcArmyPower(state.buildings), [state.buildings]);
+
   const goldPerTap = Math.max(1, Math.floor((1 + state.level * 0.5) * gearMultiplier));
 
   const goldPerHour = Math.floor(
@@ -785,9 +807,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setState((prev) => {
       if (!prev.activeExpedition) return prev;
       if (Date.now() < prev.activeExpedition.endsAt) return prev;
-      const gearMult = calcGearMultiplier(prev.equipment);
+      const armyPwr = calcArmyPower(prev.buildings);
+      const gearBonus = calcGearBonus(prev.equipment);
       const { dragonsSlain, goldEarned, materials } = calcExpeditionYield(
-        prev.level, gearMult, prev.activeExpedition.durationHours,
+        prev.level, armyPwr, gearBonus, prev.activeExpedition.durationHours,
       );
       const newMaterials = [...prev.materials];
       for (const drop of materials) {
@@ -1040,6 +1063,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         goldPerTap,
         goldPerHour,
         gearMultiplier,
+        armyPower,
         getBuildingCost,
         canAfford,
         getCharacterTier,

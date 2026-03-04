@@ -5,7 +5,7 @@ import { useGame } from '@/contexts/GameContext';
 import { formatNumber } from '@/utils/format';
 
 export default function BuildingsTab() {
-  const { state, buyBuilding, getBuildingCost, canAfford, goldPerHour } = useGame();
+  const { state, buyBuilding, getBuildingCost, canAfford, goldPerHour, armyPower } = useGame();
   const totalBuildings = state.buildings.reduce((sum, b) => sum + b.owned, 0);
 
 
@@ -15,16 +15,19 @@ export default function BuildingsTab() {
       <div className="top-bar sticky top-0 z-30 px-4 py-3">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="gold-shimmer font-cinzel font-bold text-lg tracking-wide">Buildings</h2>
-            <p className="text-[#6b5a3a] text-[10px] mt-0.5 uppercase tracking-wider">Passive gold generators</p>
+            <h2 className="gold-shimmer font-cinzel font-bold text-lg tracking-wide">Army</h2>
+            <p className="text-[#6b5a3a] text-[10px] mt-0.5 uppercase tracking-wider">Train units · earn passive gold</p>
           </div>
           <div className="text-right">
             <div className="flex items-center gap-1 justify-end">
-              <span className="coin-icon" style={{ width: 14, height: 14 }} />
-              <span className="font-cinzel text-[#f0c040] font-bold text-sm tabular-nums">{formatNumber(goldPerHour)}</span>
-              <span className="text-[#6b5a3a] text-[10px]">/hr</span>
+              <span className="font-cinzel text-[#f0c040] font-bold text-sm tabular-nums">⚔️ {armyPower}</span>
+              <span className="text-[#6b5a3a] text-[10px]">army pwr</span>
             </div>
-            <span className="text-[#6b5a3a] text-[9px]">{totalBuildings} owned</span>
+            <div className="flex items-center gap-1 justify-end mt-0.5">
+              <span className="coin-icon" style={{ width: 11, height: 11 }} />
+              <span className="font-cinzel text-[#a89060] font-bold text-xs tabular-nums">{formatNumber(goldPerHour)}</span>
+              <span className="text-[#6b5a3a] text-[9px]">/hr</span>
+            </div>
           </div>
         </div>
       </div>
@@ -65,8 +68,9 @@ export default function BuildingsTab() {
                 <div className="flex-1 min-w-0">
                   <span className="font-cinzel text-[#f0c040] font-bold text-sm block">{building.name}</span>
                   <p className="text-[#6b5a3a] text-[10px] leading-tight mt-0.5">{building.description}</p>
-                  <div className="flex items-center gap-2 mt-1.5">
-                    <span className="text-[#8a7a5a] text-[10px]">+{formatNumber(building.baseIncome)}/hr</span>
+                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                    <span className="text-[#c84040] text-[10px] font-bold">⚔️ +{building.armyPower} pwr/unit</span>
+                    <span className="text-[#8a7a5a] text-[10px]">· +{formatNumber(building.baseIncome)}/hr</span>
                     {income > 0 && (
                       <span className="text-green-400/90 text-[10px] font-bold bg-green-900/20 px-1.5 py-0.5 rounded">
                         {formatNumber(income)}/hr total

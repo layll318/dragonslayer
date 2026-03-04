@@ -22,6 +22,8 @@ class ClaimExpeditionRequest(BaseModel):
     expedition_id: int
     level: int = 1
     gear_multiplier: float = 1.0
+    army_power: float = 0.0
+    gear_bonus: float = 0.0
 
 
 class ExpeditionResponse(BaseModel):
@@ -38,21 +40,17 @@ class ClaimResponse(BaseModel):
     message: str = ""
 
 
-def _calc_yield(level: int, gear_mult: float, hours: int):
+def _calc_yield(level: int, army_power: float, gear_bonus: float, hours: int):
     rand = 0.85 + random.random() * 0.30
-    gear_power = (gear_mult - 1.0) / 0.06
-    # Always at least 1 dragon slain
-    dragons_slain = max(1, int((level * 2 + gear_power * 3) * hours * rand))
+    hero_bonus = level * 0.5
+    dragons_slain = max(1, int(
+        (hero_bonus + army_power * 0.8 + gear_bonus * 2.0) * (hours / 4) * rand
+    ))
     gold_earned = dragons_slain * (50 + level * 8)
 
     quality = "rare" if hours >= 12 else "uncommon" if hours >= 8 else "common"
-    total_mats = (
-        random.randint(1, 3) if hours == 4
-        else random.randint(2, 5) if hours == 8
-        else random.randint(3, 8)
-    )
-    # All 5 types always drop — quantity scales with duration
-    max_qty = 2 if hours == 4 else 4 if hours == 8 else 6
+    # All 5 types always drop — qty: 4h=1, 8h=1-2, 12h=1-3
+    max_qty = 1 if hours == 4 else 2 if hours == 8 else 3
     materials = [
         {"type": t, "quality": quality, "quantity": random.randint(1, max_qty)}
         for t in MATERIAL_TYPES
@@ -125,7 +123,7 @@ async def claim_expedition(req: ClaimExpeditionRequest):
             return ClaimResponse(success=False, message="Expedition not finished yet")
 
         dragons_slain, gold_earned, materials = _calc_yield(
-            req.level, req.gear_multiplier, row["duration_hours"]
+            req.level, req.army_power, req.gear_bonus, row["duration_hours"]
         )
 
         import json
