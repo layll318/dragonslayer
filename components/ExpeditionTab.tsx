@@ -111,6 +111,7 @@ export default function ExpeditionTab() {
     equipItem,
     unequipItem,
     craftItem,
+    addMaterials,
     gearMultiplier,
     armyPower,
     CRAFTING_RECIPES,
@@ -657,9 +658,17 @@ export default function ExpeditionTab() {
             </button>
 
             {buyMsg && (
-              <p className={`text-[9px] mt-1.5 text-center ${buyStatus === 'error' ? 'text-red-400' : 'text-[#4ade80]'}`}>
+              <p className={`text-[9px] mt-1.5 text-center ${buyStatus === 'error' ? 'text-red-400' : buyStatus === 'done' ? 'text-[#4ade80]' : 'text-[#f0c040]'}`}>
                 {buyMsg}
               </p>
+            )}
+            {buyStatus === 'loading' && (
+              <button
+                onClick={() => { setBuyStatus('idle'); setBuyMsg(''); }}
+                className="w-full mt-1.5 text-[9px] text-[#6b5a3a] underline text-center"
+              >
+                Cancel / I closed Xaman
+              </button>
             )}
           </div>
         )}
@@ -670,22 +679,96 @@ export default function ExpeditionTab() {
   async function handleBuyMaterial(typeOrBundle: MaterialType | 'bundle') {
     if (!state.walletAddress) return;
     setBuyStatus('loading');
-    setBuyMsg('');
+    setBuyMsg('Opening Xaman…');
     try {
+      // 1. Create the Xaman payment payload
       const res = await fetch('/frontend-api/materials/buy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: typeOrBundle, wallet: state.walletAddress }),
       });
       const data = await res.json();
-      if (data.deeplink) {
-        window.open(data.deeplink, '_blank');
-        setBuyMsg('Complete payment in Xaman, then reopen the app.');
-        setBuyStatus('done');
-      } else {
+      if (!data.deeplink || !data.uuid) {
         setBuyMsg(data.error || 'Failed to create payment.');
         setBuyStatus('error');
+        return;
       }
+
+      // 2. Open Xaman deeplink
+      window.open(data.deeplink, '_blank');
+      setBuyMsg('⏳ Waiting for payment confirmation…');
+
+      // 3. Poll status every 4s for up to 3 minutes
+      const uuid: string = data.uuid;
+      const deadline = Date.now() + 3 * 60 * 1000;
+      let credited = false;
+
+      while (Date.now() < deadline && !credited) {
+        await new Promise(r => setTimeout(r, 4000));
+        let status;
+        try {
+          const sr = await fetch(`/frontend-api/materials/status/${uuid}`);
+          status = await sr.json();
+        } catch {
+          continue;
+        }
+
+        if (status.cancelled || status.expired) {
+          setBuyMsg('Payment cancelled or expired.');
+          setBuyStatus('error');
+          return;
+        }
+
+        if (status.signed) {
+          // 4. Parse memo and build credit list
+          const memo: string = status.memo || data.memo || '';
+          const allTypes: MaterialType[] = ['dragon_scale','fire_crystal','iron_ore','bone_shard','ancient_rune'];
+          let drops: { type: MaterialType; quality: MaterialQuality; quantity: number }[] = [];
+          if (memo.startsWith('bundle')) {
+            drops = allTypes.map(t => ({ type: t, quality: 'common' as MaterialQuality, quantity: 3 }));
+          } else if (memo.startsWith('single:')) {
+            const parts = memo.split(':');
+            const mt = parts[1] as MaterialType;
+            const qty = parseInt(parts[2] || '3', 10);
+            if (allTypes.includes(mt)) drops = [{ type: mt, quality: 'common', quantity: qty }];
+          }
+          if (drops.length === 0) {
+            // Fallback: credit what they selected
+            if (typeOrBundle === 'bundle') {
+              drops = allTypes.map(t => ({ type: t, quality: 'common' as MaterialQuality, quantity: 3 }));
+            } else {
+              drops = [{ type: typeOrBundle, quality: 'common', quantity: 3 }];
+            }
+          }
+
+          // 5. Credit local state immediately
+          addMaterials(drops);
+          credited = true;
+
+          // 6. Also notify backend to persist server-side (best effort)
+          if (state.playerId) {
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? '';
+            if (apiUrl) {
+              fetch(`${apiUrl}/api/items/buy-materials`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ player_id: state.playerId, xaman_payload_uuid: uuid }),
+              }).catch(() => {/* best effort */});
+            }
+          }
+
+          const label = typeOrBundle === 'bundle'
+            ? '15 materials (3 of each type)'
+            : `3× ${typeOrBundle.replace('_', ' ')}`;
+          setBuyMsg(`✅ Credited: ${label}`);
+          setBuyStatus('done');
+          return;
+        }
+      }
+
+      // Timed out
+      setBuyMsg('Payment not detected. If you paid, contact support with UUID: ' + uuid);
+      setBuyStatus('error');
     } catch {
       setBuyMsg('Network error — try again.');
       setBuyStatus('error');

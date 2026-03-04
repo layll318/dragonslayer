@@ -131,6 +131,7 @@ interface GameContextType {
   equipItem: (itemId: string) => void;
   unequipItem: (slot: keyof EquipmentSlots) => void;
   craftItem: (recipeId: string) => void;
+  addMaterials: (drops: { type: MaterialType; quality: MaterialQuality; quantity: number }[]) => void;
   connectWallet: (address: string) => Promise<void>;
   disconnectWallet: () => void;
   goldPerTap: number;
@@ -840,6 +841,23 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     });
   }, [addXp]);
 
+  const addMaterials = useCallback(
+    (drops: { type: MaterialType; quality: MaterialQuality; quantity: number }[]) => {
+      setState((prev) => {
+        const newMaterials = [...prev.materials];
+        for (const drop of drops) {
+          const existing = newMaterials.find(
+            m => m.type === drop.type && m.quality === drop.quality,
+          );
+          if (existing) existing.quantity += drop.quantity;
+          else newMaterials.push({ ...drop });
+        }
+        return { ...prev, materials: newMaterials };
+      });
+    },
+    [],
+  );
+
   const equipItem = useCallback((itemId: string) => {
     setState((prev) => {
       const item = prev.inventory.find(i => i.id === itemId);
@@ -1058,6 +1076,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         equipItem,
         unequipItem,
         craftItem,
+        addMaterials,
         connectWallet,
         disconnectWallet,
         goldPerTap,
