@@ -121,6 +121,97 @@ export default function ExpeditionTab() {
   const [buyStatus, setBuyStatus] = React.useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [buyMsg, setBuyMsg] = React.useState('');
 
+  // ── Pending-purchase recovery ─────────────────────────────────────────────
+  const PENDING_KEY = 'ds_pending_mat_purchase';
+
+  const creditPendingPurchase = React.useCallback(async (silent = false) => {
+    const raw = localStorage.getItem(PENDING_KEY);
+    if (!raw) return;
+    let pending: { uuid: string; memo: string; typeOrBundle: string; ts: number };
+    try { pending = JSON.parse(raw); } catch { localStorage.removeItem(PENDING_KEY); return; }
+
+    // Expire after 15 minutes
+    if (Date.now() - pending.ts > 15 * 60 * 1000) {
+      localStorage.removeItem(PENDING_KEY);
+      if (!silent) { setBuyMsg('Payment window expired. Please try again.'); setBuyStatus('error'); }
+      return;
+    }
+
+    if (!silent) setBuyMsg('⏳ Checking payment status…');
+    try {
+      const sr = await fetch(`/frontend-api/materials/status/${pending.uuid}`);
+      const status = await sr.json();
+      console.log('[XRP shop] status check:', status);
+
+      if (status.cancelled || status.expired) {
+        localStorage.removeItem(PENDING_KEY);
+        setBuyMsg('Payment cancelled or expired.'); setBuyStatus('error'); return;
+      }
+      if (!status.signed) {
+        if (!silent) setBuyMsg('⏳ Not paid yet — complete it in Xaman.');
+        return;
+      }
+
+      // Payment confirmed — build credit list
+      const memo: string = status.memo || pending.memo || '';
+      const allTypes: MaterialType[] = ['dragon_scale','fire_crystal','iron_ore','bone_shard','ancient_rune'];
+      let drops: { type: MaterialType; quality: MaterialQuality; quantity: number }[] = [];
+      if (memo.startsWith('bundle')) {
+        drops = allTypes.map(t => ({ type: t, quality: 'common' as MaterialQuality, quantity: 3 }));
+      } else if (memo.startsWith('single:')) {
+        const [, mt, q] = memo.split(':');
+        if (allTypes.includes(mt as MaterialType))
+          drops = [{ type: mt as MaterialType, quality: 'common', quantity: parseInt(q || '3', 10) }];
+      }
+      if (drops.length === 0) {
+        const t = pending.typeOrBundle as MaterialType | 'bundle';
+        drops = t === 'bundle'
+          ? allTypes.map(t2 => ({ type: t2, quality: 'common' as MaterialQuality, quantity: 3 }))
+          : [{ type: t as MaterialType, quality: 'common', quantity: 3 }];
+      }
+      console.log('[XRP shop] crediting:', drops);
+      addMaterials(drops);
+      localStorage.removeItem(PENDING_KEY);
+
+      // Best-effort backend persist
+      if (state.playerId) {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? '';
+        if (apiUrl) fetch(`${apiUrl}/api/items/buy-materials`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ player_id: state.playerId, xaman_payload_uuid: pending.uuid }),
+        }).catch(() => {});
+      }
+
+      const label = pending.typeOrBundle === 'bundle' ? '15 materials (3 of each)' : `3× ${pending.typeOrBundle.replace('_',' ')}`;
+      setBuyMsg(`✅ Credited: ${label}`);
+      setBuyStatus('done');
+    } catch (e) {
+      console.error('[XRP shop] status check failed:', e);
+      if (!silent) setBuyMsg('Network error checking payment. Try tapping check again.');
+    }
+  }, [addMaterials, state.playerId]);
+
+  // On mount: recover any pending purchase
+  useEffect(() => {
+    const raw = localStorage.getItem(PENDING_KEY);
+    if (raw) {
+      setBuyStatus('loading');
+      creditPendingPurchase(false);
+    }
+  }, [creditPendingPurchase]);
+
+  // On visibilitychange (user returns from Xaman): check again
+  useEffect(() => {
+    const handler = () => {
+      if (document.visibilityState === 'visible' && localStorage.getItem(PENDING_KEY)) {
+        setBuyStatus('loading');
+        creditPendingPurchase(false);
+      }
+    };
+    document.addEventListener('visibilitychange', handler);
+    return () => document.removeEventListener('visibilitychange', handler);
+  }, [creditPendingPurchase]);
+
   const [section, setSection] = useState<Section>('expedition');
   const [now, setNow] = useState(Date.now());
   const [claimed, setClaimed] = useState(false);
@@ -620,12 +711,16 @@ export default function ExpeditionTab() {
         )}
 
         {/* XRP Material Shop */}
-        {state.walletAddress && (
-          <div className="dragon-panel px-3 py-3">
+        <div className="dragon-panel px-3 py-3">
             <p className="font-cinzel font-bold text-[#e8d8a8] text-[11px] tracking-wider mb-1">
               💎 XRP MATERIAL SHOP
             </p>
-            <p className="text-[9px] text-[#6b5a3a] mb-2">Buy materials instantly with XRP.</p>
+            {!state.walletAddress && (
+              <p className="text-[9px] text-amber-400 mb-2">Connect your XRPL wallet on the Home tab first.</p>
+            )}
+            {state.walletAddress && (
+              <p className="text-[9px] text-[#6b5a3a] mb-2">Buy materials instantly with XRP.</p>
+            )}
 
             {/* Single type buttons */}
             <div className="grid grid-cols-5 gap-1 mb-2">
@@ -633,12 +728,12 @@ export default function ExpeditionTab() {
                 <button
                   key={t}
                   onClick={() => handleBuyMaterial(t)}
-                  disabled={buyStatus === 'loading'}
+                  disabled={buyStatus === 'loading' || !state.walletAddress}
                   className="flex flex-col items-center py-1.5 px-1 rounded-lg transition-opacity"
                   style={{
                     background: 'rgba(212,160,23,0.08)',
                     border: '1px solid rgba(212,160,23,0.2)',
-                    opacity: buyStatus === 'loading' ? 0.5 : 1,
+                    opacity: (buyStatus === 'loading' || !state.walletAddress) ? 0.4 : 1,
                   }}
                 >
                   <span className="text-base leading-none">{MATERIAL_LABELS[t].split(' ')[0]}</span>
@@ -651,11 +746,20 @@ export default function ExpeditionTab() {
             {/* Bundle */}
             <button
               onClick={() => handleBuyMaterial('bundle')}
-              disabled={buyStatus === 'loading'}
+              disabled={buyStatus === 'loading' || !state.walletAddress}
               className="action-btn w-full py-2 text-[10px]"
+              style={{ opacity: !state.walletAddress ? 0.4 : 1 }}
             >
               🎒 All 5 Types ×3 — 3 XRP
             </button>
+
+            {/* Check pending payment manually */}
+            {!buyMsg && localStorage.getItem(PENDING_KEY) && (
+              <button
+                onClick={() => creditPendingPurchase(false)}
+                className="w-full mt-1.5 text-[9px] text-[#d4a017] underline text-center"
+              >I already paid — check my payment</button>
+            )}
 
             {buyMsg && (
               <p className={`text-[9px] mt-1.5 text-center ${buyStatus === 'error' ? 'text-red-400' : buyStatus === 'done' ? 'text-[#4ade80]' : 'text-[#f0c040]'}`}>
@@ -670,8 +774,7 @@ export default function ExpeditionTab() {
                 Cancel / I closed Xaman
               </button>
             )}
-          </div>
-        )}
+        </div>
       </div>
     );
   };
@@ -681,95 +784,34 @@ export default function ExpeditionTab() {
     setBuyStatus('loading');
     setBuyMsg('Opening Xaman…');
     try {
-      // 1. Create the Xaman payment payload
       const res = await fetch('/frontend-api/materials/buy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ type: typeOrBundle, wallet: state.walletAddress }),
       });
       const data = await res.json();
+      console.log('[XRP shop] payload created:', data);
       if (!data.deeplink || !data.uuid) {
         setBuyMsg(data.error || 'Failed to create payment.');
         setBuyStatus('error');
         return;
       }
 
-      // 2. Open Xaman deeplink
+      // Save to localStorage BEFORE opening Xaman so it survives app switching
+      localStorage.setItem(PENDING_KEY, JSON.stringify({
+        uuid: data.uuid,
+        memo: data.memo ?? `single:${typeOrBundle}:3`,
+        typeOrBundle: String(typeOrBundle),
+        ts: Date.now(),
+      }));
+
       window.open(data.deeplink, '_blank');
-      setBuyMsg('⏳ Waiting for payment confirmation…');
+      setBuyMsg('⏳ Pay in Xaman, then return here. We\'ll detect it automatically.');
 
-      // 3. Poll status every 4s for up to 3 minutes
-      const uuid: string = data.uuid;
-      const deadline = Date.now() + 3 * 60 * 1000;
-      let credited = false;
-
-      while (Date.now() < deadline && !credited) {
-        await new Promise(r => setTimeout(r, 4000));
-        let status;
-        try {
-          const sr = await fetch(`/frontend-api/materials/status/${uuid}`);
-          status = await sr.json();
-        } catch {
-          continue;
-        }
-
-        if (status.cancelled || status.expired) {
-          setBuyMsg('Payment cancelled or expired.');
-          setBuyStatus('error');
-          return;
-        }
-
-        if (status.signed) {
-          // 4. Parse memo and build credit list
-          const memo: string = status.memo || data.memo || '';
-          const allTypes: MaterialType[] = ['dragon_scale','fire_crystal','iron_ore','bone_shard','ancient_rune'];
-          let drops: { type: MaterialType; quality: MaterialQuality; quantity: number }[] = [];
-          if (memo.startsWith('bundle')) {
-            drops = allTypes.map(t => ({ type: t, quality: 'common' as MaterialQuality, quantity: 3 }));
-          } else if (memo.startsWith('single:')) {
-            const parts = memo.split(':');
-            const mt = parts[1] as MaterialType;
-            const qty = parseInt(parts[2] || '3', 10);
-            if (allTypes.includes(mt)) drops = [{ type: mt, quality: 'common', quantity: qty }];
-          }
-          if (drops.length === 0) {
-            // Fallback: credit what they selected
-            if (typeOrBundle === 'bundle') {
-              drops = allTypes.map(t => ({ type: t, quality: 'common' as MaterialQuality, quantity: 3 }));
-            } else {
-              drops = [{ type: typeOrBundle, quality: 'common', quantity: 3 }];
-            }
-          }
-
-          // 5. Credit local state immediately
-          addMaterials(drops);
-          credited = true;
-
-          // 6. Also notify backend to persist server-side (best effort)
-          if (state.playerId) {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? '';
-            if (apiUrl) {
-              fetch(`${apiUrl}/api/items/buy-materials`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ player_id: state.playerId, xaman_payload_uuid: uuid }),
-              }).catch(() => {/* best effort */});
-            }
-          }
-
-          const label = typeOrBundle === 'bundle'
-            ? '15 materials (3 of each type)'
-            : `3× ${typeOrBundle.replace('_', ' ')}`;
-          setBuyMsg(`✅ Credited: ${label}`);
-          setBuyStatus('done');
-          return;
-        }
-      }
-
-      // Timed out
-      setBuyMsg('Payment not detected. If you paid, contact support with UUID: ' + uuid);
-      setBuyStatus('error');
-    } catch {
+      // Also try an immediate check after a short delay (desktop case)
+      setTimeout(() => creditPendingPurchase(true), 6000);
+    } catch (e) {
+      console.error('[XRP shop] create payload error:', e);
       setBuyMsg('Network error — try again.');
       setBuyStatus('error');
     }

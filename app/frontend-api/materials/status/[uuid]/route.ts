@@ -31,6 +31,7 @@ export async function GET(
   const data = await res.json();
   const meta     = data.meta     ?? {};
   const response = data.response ?? {};
+  console.log(`[materials/status] uuid=${uuid} signed=${meta.signed} cancelled=${meta.cancelled} expired=${meta.expired} dispatched=${response.dispatched_result}`);
 
   // Extract the memo we embedded in the return_url at creation time
   let memo = '';
