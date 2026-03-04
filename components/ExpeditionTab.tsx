@@ -128,6 +128,18 @@ export default function ExpeditionTab() {
   const [walletCopied, setWalletCopied] = React.useState(false);
   const [showAd, setShowAd] = React.useState(false);
   const [adWatched, setAdWatched] = React.useState(false);
+  const [adDuration, setAdDuration] = React.useState('');
+
+  // Load video metadata once to get duration for the button label
+  useEffect(() => {
+    const v = document.createElement('video');
+    v.preload = 'metadata';
+    v.src = '/images/testlynxadd.MOV';
+    v.onloadedmetadata = () => {
+      const s = Math.round(v.duration);
+      setAdDuration(`${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`);
+    };
+  }, []);
   const USED_TX_KEY = 'ds_used_tx_hashes';
   const TREASURY = 'rf84iAt8aRMJ7onNY9ZqmWVVFCAtSmTT7d';
 
@@ -330,7 +342,7 @@ export default function ExpeditionTab() {
                 className="mt-1 w-full py-2 rounded-xl text-[11px] font-bold tracking-wide transition-opacity"
                 style={{ background: 'linear-gradient(135deg,#7c3aed,#a855f7)', color: '#fff', boxShadow: '0 0 12px rgba(168,85,247,0.4)' }}
               >
-                ⚡ Watch Ad → Complete Now
+                ⚡ Watch Ad {adDuration ? `(${adDuration})` : ''} → Complete Now
               </button>
             </>
           )}

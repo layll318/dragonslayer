@@ -808,9 +808,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const speedUpExpedition = useCallback(() => {
     setState((prev) => {
       if (!prev.activeExpedition) return prev;
+      const remaining = prev.activeExpedition.endsAt - Date.now();
+      const newEndsAt = remaining > 0
+        ? Date.now() + Math.floor(remaining / 2)
+        : prev.activeExpedition.endsAt;
       return {
         ...prev,
-        activeExpedition: { ...prev.activeExpedition, endsAt: Date.now() - 1 },
+        activeExpedition: { ...prev.activeExpedition, endsAt: newEndsAt },
       };
     });
   }, []);
