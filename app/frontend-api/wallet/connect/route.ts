@@ -20,11 +20,12 @@ export async function POST(request: NextRequest) {
       ? body.returnTo
       : '/';
 
-    const origin =
+    const appUrl = (
+      process.env.NEXT_PUBLIC_APP_URL ||
       request.headers.get('origin') ||
-      'https://dragonslayer-production.up.railway.app';
-    const cleanOrigin = origin.replace(/\/$/, '').split('/').slice(0, 3).join('/');
-    const returnUrl = `${cleanOrigin}/wallet-connected?returnTo=${encodeURIComponent(returnTo)}`;
+      'https://dragonslayer-production.up.railway.app'
+    ).replace(/\/$/, '');
+    const returnUrl = `${appUrl}/wallet-connected?returnTo=${encodeURIComponent(returnTo)}`;
 
     const res = await fetch(`${XAMAN_BASE}/payload`, {
       method: 'POST',

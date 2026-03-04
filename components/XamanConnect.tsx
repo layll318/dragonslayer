@@ -17,24 +17,26 @@ type Phase = 'idle' | 'loading' | 'waiting' | 'success' | 'error';
 
 function isMobileDevice() {
   if (typeof navigator === 'undefined') return false;
-  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) return true;
+  if (typeof window !== 'undefined' && window.innerWidth < 768 && 'ontouchstart' in window) return true;
+  return false;
 }
 
-function openXaman(url: string) {
-  const tg = (window as any).Telegram?.WebApp;
-  if (tg?.openLink) {
-    tg.openLink(url);
-  } else {
-    const win = window.open(url, '_blank');
-    if (!win) window.location.href = url;
-  }
+function isTelegramWebApp() {
+  return typeof window !== 'undefined' && !!(window as any).Telegram?.WebApp?.initData;
+}
+
+function nativeDeeplink(uuid: string) {
+  return `xumm://sign/${uuid}`;
 }
 
 export default function XamanConnect({ onConnected }: XamanConnectProps) {
   const [phase, setPhase] = useState<Phase>('idle');
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [deeplink, setDeeplink] = useState<string | null>(null);
+  const [uuid, setUuid] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [showQr, setShowQr] = useState(false);
 
   // Refs so interval callbacks always have fresh values without recreating
   const pollRef      = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -145,20 +147,18 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
       const data = await res.json();
       if (!res.ok || !data.uuid) throw new Error(data.error || 'Failed to create sign-in request');
 
-      const { uuid, qr_png, deeplink: dl } = data;
-      uuidRef.current = uuid;
-      localStorage.setItem(PENDING_KEY, uuid);
+      const { uuid: newUuid, qr_png, deeplink: dl } = data;
+      uuidRef.current = newUuid;
+      localStorage.setItem(PENDING_KEY, newUuid);
       if (qr_png) localStorage.setItem(PENDING_QR_KEY, qr_png);
       if (dl)     localStorage.setItem(PENDING_DL_KEY, dl);
 
+      setUuid(newUuid);
       setQrUrl(qr_png);
       setDeeplink(dl);
+      setShowQr(!isMobileDevice()); // auto-show QR on desktop, hidden on mobile
       setPhase('waiting');
-      startPolling(uuid);
-
-      if (isMobileDevice()) {
-        setTimeout(() => openXaman(dl), 300);
-      }
+      startPolling(newUuid);
     } catch (err: any) {
       setPhase('error');
       setErrorMsg(err.message || 'Connection failed');
@@ -172,6 +172,8 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
     setPhase('idle');
     setQrUrl(null);
     setDeeplink(null);
+    setUuid(null);
+    setShowQr(false);
     setErrorMsg(null);
   }, [clearTimers]);
 
@@ -221,8 +223,10 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
     );
   }
 
-  // ── 'waiting' phase: show QR for desktop, or spinner for mobile (Xaman opened) ──
+  // ── 'waiting' phase ──
   const mobile = isMobileDevice();
+  const inTelegram = isTelegramWebApp();
+  const nativeLink = uuid ? nativeDeeplink(uuid) : null;
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -233,6 +237,7 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
           border: '1px solid rgba(212,160,23,0.25)',
         }}
       >
+        {/* Header */}
         <div className="text-center mb-4">
           <div className="flex items-center justify-center gap-2 mb-1">
             <img
@@ -243,57 +248,75 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
             />
             <h2 className="text-xl font-bold text-[#f0c040] font-cinzel">Connect Xaman</h2>
           </div>
-          <p className="text-[#6b5a3a] text-sm">
-            {mobile ? 'Approve the sign-in request in your Xaman app' : 'Scan the QR code with Xaman'}
-          </p>
+          <div className="flex items-center justify-center gap-1.5 mt-1">
+            <Loader2 className="w-3 h-3 animate-spin text-[#6b5a3a]" />
+            <p className="text-[#6b5a3a] text-xs">Waiting for approval…</p>
+          </div>
         </div>
 
-        {/* Desktop: QR code */}
-        {!mobile && (
-          <div className="bg-white rounded-xl p-3 mb-4 flex items-center justify-center min-h-[210px]">
-            {qrUrl ? (
-              <img src={qrUrl} alt="Xaman QR Code" className="w-full max-w-[190px] h-auto mx-auto" />
-            ) : (
-              <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
-            )}
-          </div>
+        {/* ── Primary action buttons (always shown) ── */}
+        <div className="flex flex-col gap-2 mb-4">
+
+          {/* 1. Open native app — works on iOS, Android, desktop Xaman */}
+          {nativeLink && (
+            <a
+              href={nativeLink}
+              className="flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl font-bold text-white text-sm
+                bg-gradient-to-r from-orange-500 to-orange-600 active:scale-95 transition-all shadow-lg"
+            >
+              <img
+                src="https://xumm.app/assets/icons/favicon-196x196.png"
+                alt=""
+                className="w-4 h-4 rounded"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              />
+              Open Xaman App
+            </a>
+          )}
+
+          {/* 2. Open web fallback — works if app not installed or on Telegram */}
+          {deeplink && (
+            <a
+              href={deeplink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-xl font-bold text-[#d4a017] text-sm
+                border border-[rgba(212,160,23,0.3)] bg-[rgba(212,160,23,0.06)] active:scale-95 transition-all"
+            >
+              Open in Browser
+            </a>
+          )}
+        </div>
+
+        {/* ── QR code (desktop: shown by default; mobile: toggle) ── */}
+        <div className="mb-3">
+          {mobile && (
+            <button
+              onClick={() => setShowQr(v => !v)}
+              className="w-full text-xs text-[#6b5a3a] underline text-center mb-2"
+            >
+              {showQr ? 'Hide QR code' : 'Or scan QR from another device'}
+            </button>
+          )}
+          {showQr && (
+            <div className="bg-white rounded-xl p-3 flex items-center justify-center min-h-[190px]">
+              {qrUrl ? (
+                <img src={qrUrl} alt="Xaman QR Code" className="w-full max-w-[180px] h-auto mx-auto" />
+              ) : (
+                <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Telegram note */}
+        {inTelegram && (
+          <p className="text-[9px] text-[#4a3a2a] text-center mb-2">
+            Tap "Open Xaman App", approve in Xaman, then return here.
+          </p>
         )}
 
-        {/* Mobile: spinner + re-open button */}
-        {mobile && (
-          <div className="flex flex-col items-center gap-3 py-6">
-            <Loader2 className="w-12 h-12 animate-spin text-orange-400" />
-            <p className="text-[#6b5a3a] text-sm">Waiting for Xaman approval…</p>
-            {deeplink && (
-              <a
-                href={deeplink}
-                className="mt-2 px-5 py-2.5 rounded-xl font-bold text-white text-sm
-                  bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700
-                  transition-all shadow-lg"
-              >
-                Re-open Xaman App
-              </a>
-            )}
-          </div>
-        )}
-
-        {/* Desktop: open in app button */}
-        {!mobile && deeplink && (
-          <a
-            href={deeplink}
-            className="block w-full py-3 px-4 mb-3 text-center font-bold text-white rounded-xl text-sm
-              bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700
-              transition-all shadow-lg"
-          >
-            Open in Xaman App
-          </a>
-        )}
-
-        <div className="flex items-center justify-between mt-2">
-          <div className="flex items-center gap-2">
-            <Loader2 className="w-3 h-3 animate-spin text-[#6b5a3a]" />
-            <p className="text-xs text-[#6b5a3a]">Waiting for approval…</p>
-          </div>
+        <div className="flex justify-end">
           <button
             onClick={cancel}
             className="text-xs text-[#4a3a2a] hover:text-[#6b5a3a] transition-colors underline"
