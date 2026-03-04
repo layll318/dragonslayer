@@ -124,7 +124,16 @@ export default function ExpeditionTab() {
   const [txType, setTxType] = React.useState<MaterialType | ''>('');
   const [txStatus, setTxStatus] = React.useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [txMsg, setTxMsg] = React.useState('');
+  const [walletCopied, setWalletCopied] = React.useState(false);
   const USED_TX_KEY = 'ds_used_tx_hashes';
+  const TREASURY = 'rf84iAt8aRMJ7onNY9ZqmWVVFCAtSmTT7d';
+
+  function copyTreasury() {
+    navigator.clipboard.writeText(TREASURY).then(() => {
+      setWalletCopied(true);
+      setTimeout(() => setWalletCopied(false), 2000);
+    });
+  }
 
   // ── Pending-purchase recovery ─────────────────────────────────────────────
   const PENDING_KEY = 'ds_pending_mat_purchase';
@@ -717,14 +726,33 @@ export default function ExpeditionTab() {
 
         {/* XRP Material Shop */}
         <div className="dragon-panel px-3 py-3">
-            <p className="font-cinzel font-bold text-[#e8d8a8] text-[11px] tracking-wider mb-1">
-              💎 XRP MATERIAL SHOP
+            <p className="font-cinzel font-bold text-[#e8d8a8] text-[11px] tracking-wider mb-2">
+              � XRP MATERIAL SHOP
             </p>
-            {!state.walletAddress && (
-              <p className="text-[9px] text-amber-400 mb-2">Connect your XRPL wallet on the Home tab first.</p>
-            )}
+
+            {/* Treasury wallet — send XRP here */}
+            <div className="rounded-lg px-2 py-2 mb-3" style={{ background: 'rgba(0,0,0,0.35)', border: '1px solid rgba(212,160,23,0.25)' }}>
+              <p className="text-[8px] text-[#6b5a3a] mb-1">Send XRP to this wallet:</p>
+              <div className="flex items-center gap-1.5">
+                <p className="font-mono text-[9px] text-[#f0c040] flex-1 break-all leading-snug">{TREASURY}</p>
+                <button
+                  onClick={copyTreasury}
+                  className="shrink-0 px-2 py-1 rounded text-[9px] font-bold transition-colors"
+                  style={{
+                    background: walletCopied ? 'rgba(74,222,128,0.2)' : 'rgba(212,160,23,0.15)',
+                    border: `1px solid ${walletCopied ? 'rgba(74,222,128,0.5)' : 'rgba(212,160,23,0.3)'}`,
+                    color: walletCopied ? '#4ade80' : '#f0c040',
+                  }}
+                >
+                  {walletCopied ? '✓ Copied' : '📋 Copy'}
+                </button>
+              </div>
+              <p className="text-[7px] text-[#4a3a2a] mt-1">1 XRP = 3× one type · 3 XRP = 3× all 5 types · then claim below with TX hash</p>
+            </div>
+
+            {/* Single type Xaman-pay buttons */}
             {state.walletAddress && (
-              <p className="text-[9px] text-[#6b5a3a] mb-2">Buy materials instantly with XRP.</p>
+              <p className="text-[8px] text-[#6b5a3a] mb-1">Or pay via Xaman (wallet connected):</p>
             )}
 
             {/* Single type buttons */}
