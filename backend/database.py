@@ -112,6 +112,19 @@ async def create_tables():
                 result_json    JSONB
             );
         """)
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS arena_battles (
+                id              SERIAL PRIMARY KEY,
+                attacker_id     INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+                defender_id     INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+                attacker_power  INTEGER NOT NULL DEFAULT 0,
+                defender_power  INTEGER NOT NULL DEFAULT 0,
+                formation       TEXT NOT NULL DEFAULT 'balanced',
+                result          TEXT NOT NULL DEFAULT 'loss',
+                gold_stolen     INTEGER NOT NULL DEFAULT 0,
+                created_at      TIMESTAMPTZ DEFAULT NOW()
+            );
+        """)
         logger.info("✅ Tables created / verified")
 
 

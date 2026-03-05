@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
 from database import init_db, close_db
-from routers import auth, saves, embed, admin, leaderboard, expeditions, items, nft
+from routers import auth, saves, embed, admin, leaderboard, expeditions, items, nft, arena
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -62,6 +62,7 @@ app.include_router(leaderboard.router)
 app.include_router(expeditions.router)
 app.include_router(items.router)
 app.include_router(nft.router)
+app.include_router(arena.router)
 
 
 @app.get("/health")

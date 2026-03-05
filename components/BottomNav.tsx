@@ -56,6 +56,18 @@ const ExpeditionIcon = () => (
   </svg>
 );
 
+const ArenaIcon = () => (
+  <svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    {/* Crossed sword + shield */}
+    <path d="M5 5 L15 15" />
+    <path d="M5 8 L5 5 L8 5" />
+    <path d="M15 12 L21 18" />
+    <path d="M13 21 L8 16" strokeWidth="1.2" />
+    <path d="M17 5 C17 5 22 7 22 13 C22 18 17 21 17 21 C17 21 12 18 12 13 C12 7 17 5 17 5Z" />
+    <path d="M17 9 L18.5 12 L17 15 L15.5 12 Z" fill="currentColor" stroke="none" opacity="0.6" />
+  </svg>
+);
+
 const LeaderboardIcon = () => (
   <svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     {/* Crown */}
@@ -80,6 +92,7 @@ export default function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
     { id: 'hero',        label: 'Hero',       icon: <HeroIcon /> },
     { id: 'buildings',   label: 'Forge',      icon: <BuildingsIcon /> },
     { id: 'expedition',  label: 'Expedition', icon: <ExpeditionIcon /> },
+    { id: 'arena',       label: 'Arena',      icon: <ArenaIcon /> },
     { id: 'leaderboard', label: 'Ranks',      icon: <LeaderboardIcon /> },
     { id: 'profile',     label: 'Profile',    icon: <ProfileIcon /> },
   ];

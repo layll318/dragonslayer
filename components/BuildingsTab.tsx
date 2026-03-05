@@ -69,7 +69,8 @@ export default function BuildingsTab() {
                   <span className="font-cinzel text-[#f0c040] font-bold text-sm block">{building.name}</span>
                   <p className="text-[#6b5a3a] text-[10px] leading-tight mt-0.5">{building.description}</p>
                   <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                    <span className="text-[#c84040] text-[10px] font-bold">⚔️ +{building.armyPower} pwr/unit</span>
+                    <span className="text-[#c84040] text-[10px] font-bold">⚔️ +{building.armyPower} atk</span>
+                    <span className="text-[#60a5fa] text-[10px] font-bold">🛡️ +{building.defensePower} def</span>
                     <span className="text-[#8a7a5a] text-[10px]">· +{formatNumber(building.baseIncome)}/hr</span>
                     {income > 0 && (
                       <span className="text-green-400/90 text-[10px] font-bold bg-green-900/20 px-1.5 py-0.5 rounded">

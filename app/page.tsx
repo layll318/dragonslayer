@@ -7,6 +7,7 @@ import BuildingsTab from '@/components/BuildingsTab';
 import LeaderboardTab from '@/components/LeaderboardTab';
 import ProfileTab from '@/components/ProfileTab';
 import ExpeditionTab from '@/components/ExpeditionTab';
+import ArenaTab from '@/components/ArenaTab';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState('hero');
@@ -17,6 +18,7 @@ export default function Home() {
         {activeTab === 'hero' && <HeroTab />}
         {activeTab === 'buildings' && <BuildingsTab />}
         {activeTab === 'expedition' && <ExpeditionTab />}
+        {activeTab === 'arena' && <ArenaTab />}
         {activeTab === 'leaderboard' && <LeaderboardTab />}
         {activeTab === 'profile' && <ProfileTab />}
       </main>

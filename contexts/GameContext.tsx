@@ -71,6 +71,7 @@ export interface Building {
   unlockLevel: number;
   owned: number;
   armyPower: number;
+  defensePower: number;
 }
 
 export interface DailyQuest {
@@ -114,6 +115,10 @@ export interface GameState {
   // Last tap result
   lastTapEarned: number;
   lastTapCrit: boolean;
+  // Arena PvP
+  arenaAttacksToday: number;
+  arenaPoints: number;
+  arenaLastReset: string;
   // Identity / server sync
   playerId: number | null;
   walletAddress: string | null;
@@ -290,78 +295,12 @@ const MAX_INVENTORY = 20;
 const EMPTY_EQUIPMENT: EquipmentSlots = { weapon: null, shield: null, helm: null, armor: null, ring: null };
 
 const INITIAL_BUILDINGS: Building[] = [
-  {
-    id: 'barracks',
-    name: 'Barracks',
-    description: 'Train foot soldiers to join your expeditions',
-    icon: '🪖',
-    baseCost: 100,
-    baseIncome: 200,
-    costMultiplier: 1.15,
-    unlockLevel: 1,
-    owned: 0,
-    armyPower: 1,
-  },
-  {
-    id: 'archery_range',
-    name: 'Archery Range',
-    description: 'Train archers — ranged firepower on expeditions',
-    icon: '🏹',
-    baseCost: 500,
-    baseIncome: 1000,
-    costMultiplier: 1.15,
-    unlockLevel: 3,
-    owned: 0,
-    armyPower: 3,
-  },
-  {
-    id: 'stables',
-    name: 'Stables',
-    description: 'Train cavalry — fast and deadly dragon hunters',
-    icon: '🐴',
-    baseCost: 2000,
-    baseIncome: 4000,
-    costMultiplier: 1.15,
-    unlockLevel: 5,
-    owned: 0,
-    armyPower: 6,
-  },
-  {
-    id: 'war_forge',
-    name: 'War Forge',
-    description: 'Equip your troops with dragonslaying weapons',
-    icon: '⚒️',
-    baseCost: 10000,
-    baseIncome: 20000,
-    costMultiplier: 1.15,
-    unlockLevel: 8,
-    owned: 0,
-    armyPower: 12,
-  },
-  {
-    id: 'war_camp',
-    name: 'War Camp',
-    description: 'A full regiment — the backbone of your dragon war',
-    icon: '⛺',
-    baseCost: 50000,
-    baseIncome: 100000,
-    costMultiplier: 1.15,
-    unlockLevel: 12,
-    owned: 0,
-    armyPower: 25,
-  },
-  {
-    id: 'castle',
-    name: 'Castle',
-    description: 'Elite knights — the finest dragonslayers in the realm',
-    icon: '🏰',
-    baseCost: 250000,
-    baseIncome: 500000,
-    costMultiplier: 1.15,
-    unlockLevel: 18,
-    owned: 0,
-    armyPower: 50,
-  },
+  { id: 'barracks',      name: 'Barracks',       description: 'Train foot soldiers to join your expeditions',       icon: '🪖', baseCost: 100,    baseIncome: 200,    costMultiplier: 1.15, unlockLevel: 1,  owned: 0, armyPower: 1,  defensePower: 2  },
+  { id: 'archery_range', name: 'Archery Range',  description: 'Train archers — ranged firepower on expeditions',    icon: '🏹', baseCost: 500,    baseIncome: 1000,   costMultiplier: 1.15, unlockLevel: 3,  owned: 0, armyPower: 3,  defensePower: 2  },
+  { id: 'stables',       name: 'Stables',        description: 'Train cavalry — fast and deadly dragon hunters',       icon: '🐴', baseCost: 2000,   baseIncome: 4000,   costMultiplier: 1.15, unlockLevel: 5,  owned: 0, armyPower: 6,  defensePower: 3  },
+  { id: 'war_forge',     name: 'War Forge',      description: 'Equip your troops with dragonslaying weapons',         icon: '⚒️', baseCost: 10000,  baseIncome: 20000,  costMultiplier: 1.15, unlockLevel: 8,  owned: 0, armyPower: 12, defensePower: 10 },
+  { id: 'war_camp',      name: 'War Camp',       description: 'A full regiment — the backbone of your dragon war',    icon: '⛺', baseCost: 50000,  baseIncome: 100000, costMultiplier: 1.15, unlockLevel: 12, owned: 0, armyPower: 25, defensePower: 20 },
+  { id: 'castle',        name: 'Castle',         description: 'Elite knights — the finest dragonslayers in the realm', icon: '🏰', baseCost: 250000, baseIncome: 500000, costMultiplier: 1.15, unlockLevel: 18, owned: 0, armyPower: 50, defensePower: 80 },
 ];
 
 const XP_PER_TAP = 2;
@@ -381,6 +320,10 @@ export function calcGearMultiplier(equipment: EquipmentSlots): number {
 
 export function calcArmyPower(buildings: Building[]): number {
   return buildings.reduce((sum, b) => sum + b.armyPower * b.owned, 0);
+}
+
+export function calcDefensePower(buildings: Building[]): number {
+  return buildings.reduce((sum, b) => sum + b.defensePower * b.owned, 0);
 }
 
 export function calcGearBonus(equipment: EquipmentSlots): number {
@@ -511,6 +454,9 @@ function createInitialState(): GameState {
     expeditionsToday: 0,
     lastTapEarned: 0,
     lastTapCrit: false,
+    arenaAttacksToday: 0,
+    arenaPoints: 0,
+    arenaLastReset: '',
     playerId: null,
     walletAddress: null,
     isSynced: false,
@@ -585,6 +531,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         buildingsBoughtToday: isNewDay ? 0 : (saved.buildingsBoughtToday || 0),
         lastTapEarned: saved.lastTapEarned || 0,
         lastTapCrit: saved.lastTapCrit || false,
+        arenaAttacksToday: saved.arenaAttacksToday || 0,
+        arenaPoints: saved.arenaPoints || 0,
+        arenaLastReset: saved.arenaLastReset || '',
         playerId: saved.playerId ?? null,
         walletAddress: saved.walletAddress ?? null,
         isSynced: saved.isSynced ?? false,
