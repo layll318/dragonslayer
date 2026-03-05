@@ -74,10 +74,10 @@ function WalletConnectedContent() {
                 setStatus('success');
                 await connectWallet(d.account);
                 setTimeout(() => router.push(returnTo), 2000);
-              } else if (d.cancelled || d.expired || attempts > 15) {
+              } else if (d.cancelled || d.expired || attempts > 30) {
                 clearInterval(poll);
                 setStatus('error');
-                setErrorMsg(d.cancelled ? 'Cancelled.' : 'Timed out. Please try again.');
+                setErrorMsg(d.cancelled ? 'Cancelled.' : 'Timed out — please try again.');
               }
             } catch { /* keep polling */ }
           }, 2000);

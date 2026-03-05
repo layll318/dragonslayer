@@ -25,7 +25,8 @@ export async function POST(request: NextRequest) {
       request.headers.get('origin') ||
       'https://dragonslayer-production.up.railway.app'
     ).replace(/\/$/, '');
-    const returnUrl = `${appUrl}/wallet-connected?returnTo=${encodeURIComponent(returnTo)}`;
+    // {id} is replaced by Xaman with the payload UUID on redirect
+    const returnUrl = `${appUrl}/wallet-connected?returnTo=${encodeURIComponent(returnTo)}&id={id}`;
 
     const res = await fetch(`${XAMAN_BASE}/payload`, {
       method: 'POST',

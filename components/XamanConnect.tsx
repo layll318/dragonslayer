@@ -224,14 +224,6 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
   const mobile = isMobileDevice();
   const inTelegram = isTelegramWebApp();
 
-  // Always open in a new tab — keeps polling alive on the current page.
-  // On Android/iOS the OS will intercept the https://xumm.app URL and open
-  // the Xaman app directly. Polling auto-detects approval.
-  const handleOpenXaman = () => {
-    if (!deeplink) return;
-    window.open(deeplink, '_blank', 'noopener,noreferrer');
-  };
-
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div
@@ -258,59 +250,91 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
           </div>
         </div>
 
-        {/* ── Primary CTA ── */}
-        <div className="flex flex-col gap-2 mb-4">
-          {deeplink && (
-            <button
-              onClick={handleOpenXaman}
-              className="flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl font-bold text-white text-sm
-                bg-gradient-to-r from-orange-500 to-orange-600 active:scale-95 transition-all shadow-lg"
-            >
-              <img
-                src="https://xumm.app/assets/icons/favicon-196x196.png"
-                alt=""
-                className="w-4 h-4 rounded"
-                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-              />
-              <span className="flex flex-col items-start leading-tight">
-                <span>Open Xaman App</span>
-                <span className="text-[10px] font-normal opacity-80">iOS &amp; Android</span>
-              </span>
-            </button>
-          )}
+        {mobile ? (
+          /* ── MOBILE: <a href> anchor — never blocked, triggers iOS Universal Link / Android App Link ── */
+          <div className="flex flex-col gap-2 mb-4">
+            {deeplink && (
+              <a
+                href={deeplink}
+                className="flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl font-bold text-white text-sm
+                  bg-gradient-to-r from-orange-500 to-orange-600 active:scale-95 transition-all shadow-lg no-underline"
+                style={{ textDecoration: 'none' }}
+              >
+                <img
+                  src="https://xumm.app/assets/icons/favicon-196x196.png"
+                  alt=""
+                  className="w-4 h-4 rounded"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
+                <span className="flex flex-col items-start leading-tight">
+                  <span>Open Xaman App</span>
+                  <span className="text-[10px] font-normal opacity-80">iOS &amp; Android</span>
+                </span>
+              </a>
+            )}
 
-          {/* Manual check — safety net for users who already approved */}
-          {uuid && (
-            <button
-              onClick={() => uuid && doPoll(uuid)}
-              className="w-full py-2 rounded-xl text-xs font-bold border active:scale-95 transition-all"
-              style={{ border: '1px solid rgba(212,160,23,0.3)', color: '#d4a017', background: 'rgba(212,160,23,0.06)' }}
-            >
-              Already approved in Xaman? Tap to check
-            </button>
-          )}
-        </div>
+            {/* Already approved — manual poll trigger */}
+            {uuid && (
+              <button
+                onClick={() => doPoll(uuid)}
+                className="w-full py-2 rounded-xl text-xs font-bold active:scale-95 transition-all"
+                style={{ border: '1px solid rgba(212,160,23,0.3)', color: '#d4a017', background: 'rgba(212,160,23,0.06)' }}
+              >
+                Already approved? Tap to check
+              </button>
+            )}
 
-        {/* ── QR code (desktop: shown by default; mobile: toggle) ── */}
-        <div className="mb-3">
-          {mobile && (
+            {/* QR fallback toggle */}
             <button
               onClick={() => setShowQr(v => !v)}
-              className="w-full text-xs text-[#6b5a3a] underline text-center mb-2"
+              className="w-full text-xs text-[#6b5a3a] underline text-center"
             >
-              {showQr ? 'Hide QR code' : 'Scan QR from another device'}
+              {showQr ? 'Hide QR' : 'Scan QR from another device instead'}
             </button>
-          )}
-          {showQr && (
+            {showQr && (
+              <div className="bg-white rounded-xl p-3 flex items-center justify-center min-h-[180px]">
+                {qrUrl
+                  ? <img src={qrUrl} alt="Xaman QR Code" className="w-full max-w-[170px] h-auto mx-auto" />
+                  : <Loader2 className="w-8 h-8 animate-spin text-gray-400" />}
+              </div>
+            )}
+          </div>
+        ) : (
+          /* ── DESKTOP: QR code front-and-centre, polling auto-detects approval ── */
+          <div className="flex flex-col gap-2 mb-4">
+            <p className="text-[10px] text-center text-[#6b5a3a] mb-1">
+              Scan this QR code with Xaman on your phone
+            </p>
             <div className="bg-white rounded-xl p-3 flex items-center justify-center min-h-[190px]">
-              {qrUrl ? (
-                <img src={qrUrl} alt="Xaman QR Code" className="w-full max-w-[180px] h-auto mx-auto" />
-              ) : (
-                <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
-              )}
+              {qrUrl
+                ? <img src={qrUrl} alt="Xaman QR Code" className="w-full max-w-[180px] h-auto mx-auto" />
+                : <Loader2 className="w-8 h-8 animate-spin text-gray-400" />}
             </div>
-          )}
-        </div>
+
+            {/* Desktop Xaman app or browser fallback */}
+            {deeplink && (
+              <a
+                href={deeplink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full py-2 rounded-xl text-xs font-bold text-center active:scale-95 transition-all"
+                style={{ border: '1px solid rgba(212,160,23,0.3)', color: '#d4a017', background: 'rgba(212,160,23,0.06)', textDecoration: 'none', display: 'block' }}
+              >
+                Or open sign request in browser
+              </a>
+            )}
+
+            {uuid && (
+              <button
+                onClick={() => doPoll(uuid)}
+                className="w-full py-2 rounded-xl text-xs font-bold active:scale-95 transition-all"
+                style={{ border: '1px solid rgba(74,222,128,0.3)', color: '#4ade80', background: 'rgba(74,222,128,0.05)' }}
+              >
+                Already approved? Check now
+              </button>
+            )}
+          </div>
+        )}
 
         {inTelegram && (
           <p className="text-[9px] text-[#4a3a2a] text-center mb-2">
