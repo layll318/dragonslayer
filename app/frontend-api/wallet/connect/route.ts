@@ -25,8 +25,10 @@ export async function POST(request: NextRequest) {
       request.headers.get('origin') ||
       'https://dragonslayer-production.up.railway.app'
     ).replace(/\/$/, '');
-    // {id} is replaced by Xaman with the payload UUID on redirect
-    const returnUrl = `${appUrl}/wallet-connected?returnTo=${encodeURIComponent(returnTo)}&id={id}`;
+    // {id} is substituted by Xaman with the real payload UUID.
+    // Route directly back to the game — GameContext handles verification inline,
+    // no separate /wallet-connected page needed.
+    const returnUrl = `${appUrl}/?xaman_return={id}`;
 
     const res = await fetch(`${XAMAN_BASE}/payload`, {
       method: 'POST',

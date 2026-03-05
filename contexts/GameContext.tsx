@@ -711,6 +711,55 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             .catch(() => {/* ignore */});
         }
       }
+
+      // Handle Xaman mobile return: /?xaman_return={uuid}
+      // Xaman redirects here after the user approves — verify the payload
+      // and link the wallet, all within the game page (no /wallet-connected page).
+      const xamanUuid = params.get('xaman_return');
+      if (xamanUuid && xamanUuid !== '{id}' && xamanUuid.length > 10) {
+        window.history.replaceState({}, '', window.location.pathname);
+        const apiUrl2 = process.env.NEXT_PUBLIC_API_URL ?? '';
+        let attempt = 0;
+        const MAX   = 40; // 80 s
+
+        const verifyXaman = () => {
+          fetch(`/frontend-api/wallet/payload?uuid=${xamanUuid}`)
+            .then(r => r.json())
+            .then(d => {
+              if (d.signed && d.account && typeof d.account === 'string' && d.account.startsWith('r') && d.account.length >= 25) {
+                localStorage.removeItem('xaman_pending_uuid');
+                setState(prev => ({ ...prev, walletAddress: d.account }));
+                if (apiUrl2) {
+                  fetch(`${apiUrl2}/api/auth/wallet`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ wallet_address: d.account }),
+                  })
+                    .then(r2 => r2.json())
+                    .then(data2 => {
+                      if (data2.success) {
+                        setState(prev => ({
+                          ...prev,
+                          walletAddress: d.account,
+                          playerId: data2.player_id,
+                          isSynced: true,
+                        }));
+                      }
+                    })
+                    .catch(() => {/* ignore */});
+                }
+              } else if (!d.cancelled && !d.expired) {
+                attempt++;
+                if (attempt < MAX) setTimeout(verifyXaman, 2000);
+              }
+            })
+            .catch(() => {
+              attempt++;
+              if (attempt < MAX) setTimeout(verifyXaman, 2000);
+            });
+        };
+        verifyXaman();
+      }
     }
 
     // TWA auth — if running inside Telegram, register the user
