@@ -8,6 +8,30 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 
 export type MaterialType = 'dragon_scale' | 'fire_crystal' | 'iron_ore' | 'bone_shard' | 'ancient_rune';
 export type MaterialQuality = 'common' | 'uncommon' | 'rare';
+export type EggRarity = 'common' | 'uncommon' | 'rare' | 'legendary';
+export type DragonBonusType = 'tap_gold_pct' | 'army_power_flat' | 'material_drop_pct' | 'expedition_time_pct';
+
+export interface DragonEgg {
+  id: string;
+  rarity: EggRarity;
+  hatchHours: number;
+  bonusType: DragonBonusType;
+  bonusValue: number;
+}
+
+export interface IncubatorSlot {
+  egg: DragonEgg | null;
+  startedAt: number | null;
+  endsAt: number | null;
+}
+
+export interface HatchedDragon {
+  id: string;
+  rarity: EggRarity;
+  bonusType: DragonBonusType;
+  bonusValue: number;
+  hatchedAt: number;
+}
 export type ItemType = 'weapon' | 'shield' | 'helm' | 'armor' | 'ring';
 export type ItemRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 
@@ -46,6 +70,7 @@ export interface ExpeditionResult {
   dragonsSlain: number;
   goldEarned: number;
   materials: Material[];
+  droppedEgg?: DragonEgg;
 }
 
 export interface CraftingRecipe {
@@ -115,6 +140,10 @@ export interface GameState {
   // Last tap result
   lastTapEarned: number;
   lastTapCrit: boolean;
+  // Dragon Eggs
+  eggInventory: DragonEgg[];
+  incubator: IncubatorSlot[];
+  hatchedDragons: HatchedDragon[];
   // Arena PvP
   arenaAttacksToday: number;
   arenaPoints: number;
@@ -134,6 +163,9 @@ interface GameContextType {
   startExpedition: (hours: 4 | 8 | 12) => void;
   claimExpedition: () => void;
   speedUpExpedition: () => void;
+  placeEggInIncubator: (eggId: string, slotIndex: number) => void;
+  claimHatchedEgg: (slotIndex: number) => void;
+  dragonBonuses: { tapGoldPct: number; armyPowerFlat: number; materialDropPct: number; expeditionTimePct: number };
   equipItem: (itemId: string) => void;
   unequipItem: (slot: keyof EquipmentSlots) => void;
   craftItem: (recipeId: string) => void;
@@ -355,6 +387,36 @@ function calcExpeditionYield(
   return { dragonsSlain, goldEarned, materials };
 }
 
+const EGG_CONFIG: Record<EggRarity, { hatchHours: number; bonusType: DragonBonusType; bonusValue: number; label: string }> = {
+  common:    { hatchHours: 1, bonusType: 'tap_gold_pct',       bonusValue: 5,   label: '+5% gold/tap' },
+  uncommon:  { hatchHours: 2, bonusType: 'army_power_flat',    bonusValue: 10,  label: '+10 army power' },
+  rare:      { hatchHours: 4, bonusType: 'material_drop_pct',  bonusValue: 15,  label: '+15% material drops' },
+  legendary: { hatchHours: 6, bonusType: 'expedition_time_pct', bonusValue: 10, label: '-10% expedition time' },
+};
+export { EGG_CONFIG };
+
+function generateEgg(hours: 4 | 8 | 12): DragonEgg | null {
+  const roll = Math.random();
+  let rarity: EggRarity | null = null;
+  if (hours === 12) {
+    if (roll < 0.02) rarity = 'legendary';
+    else if (roll < 0.07) rarity = 'rare';
+    else if (roll < 0.20) rarity = 'uncommon';
+    else if (roll < 0.45) rarity = 'common';
+  } else if (hours === 8) {
+    if (roll < 0.01) rarity = 'legendary';
+    else if (roll < 0.04) rarity = 'rare';
+    else if (roll < 0.12) rarity = 'uncommon';
+    else if (roll < 0.30) rarity = 'common';
+  } else {
+    if (roll < 0.08) rarity = 'uncommon';
+    else if (roll < 0.18) rarity = 'common';
+  }
+  if (!rarity) return null;
+  const cfg = EGG_CONFIG[rarity];
+  return { id: `egg-${Date.now()}-${Math.random().toString(36).slice(2)}`, rarity, ...cfg };
+}
+
 function getToday(): string {
   return new Date().toISOString().split('T')[0];
 }
@@ -454,6 +516,9 @@ function createInitialState(): GameState {
     expeditionsToday: 0,
     lastTapEarned: 0,
     lastTapCrit: false,
+    eggInventory: [],
+    incubator: [{ egg: null, startedAt: null, endsAt: null }],
+    hatchedDragons: [],
     arenaAttacksToday: 0,
     arenaPoints: 0,
     arenaLastReset: '',
@@ -531,6 +596,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         buildingsBoughtToday: isNewDay ? 0 : (saved.buildingsBoughtToday || 0),
         lastTapEarned: saved.lastTapEarned || 0,
         lastTapCrit: saved.lastTapCrit || false,
+        eggInventory: saved.eggInventory || [],
+        incubator: saved.incubator || [{ egg: null, startedAt: null, endsAt: null }],
+        hatchedDragons: saved.hatchedDragons || [],
         arenaAttacksToday: saved.arenaAttacksToday || 0,
         arenaPoints: saved.arenaPoints || 0,
         arenaLastReset: saved.arenaLastReset || '',
@@ -790,6 +858,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           : q
       );
       const xpUpdate = addXp(dragonsSlain * 3, prev);
+      const droppedEgg = generateEgg(prev.activeExpedition.durationHours);
+      const newEggInventory = droppedEgg
+        ? [...prev.eggInventory, droppedEgg]
+        : prev.eggInventory;
       return {
         ...prev,
         ...xpUpdate,
@@ -799,8 +871,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         totalExpeditions: prev.totalExpeditions + 1,
         expeditionsToday: prev.expeditionsToday + 1,
         materials: newMaterials,
+        eggInventory: newEggInventory,
         activeExpedition: null,
-        lastExpeditionResult: { dragonsSlain, goldEarned, materials },
+        lastExpeditionResult: { dragonsSlain, goldEarned, materials, droppedEgg: droppedEgg ?? undefined },
         dailyQuests,
       };
     });
@@ -822,6 +895,44 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     },
     [],
   );
+
+  const placeEggInIncubator = useCallback((eggId: string, slotIndex: number) => {
+    setState((prev) => {
+      const egg = prev.eggInventory.find(e => e.id === eggId);
+      if (!egg) return prev;
+      const slot = prev.incubator[slotIndex];
+      if (!slot || slot.egg !== null) return prev; // slot occupied
+      const now = Date.now();
+      const newIncubator = [...prev.incubator];
+      newIncubator[slotIndex] = { egg, startedAt: now, endsAt: now + egg.hatchHours * 3600 * 1000 };
+      return {
+        ...prev,
+        eggInventory: prev.eggInventory.filter(e => e.id !== eggId),
+        incubator: newIncubator,
+      };
+    });
+  }, []);
+
+  const claimHatchedEgg = useCallback((slotIndex: number) => {
+    setState((prev) => {
+      const slot = prev.incubator[slotIndex];
+      if (!slot?.egg || !slot.endsAt || Date.now() < slot.endsAt) return prev;
+      const dragon: HatchedDragon = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        rarity: slot.egg.rarity,
+        bonusType: slot.egg.bonusType,
+        bonusValue: slot.egg.bonusValue,
+        hatchedAt: Date.now(),
+      };
+      const newIncubator = [...prev.incubator];
+      newIncubator[slotIndex] = { egg: null, startedAt: null, endsAt: null };
+      return {
+        ...prev,
+        incubator: newIncubator,
+        hatchedDragons: [...prev.hatchedDragons, dragon],
+      };
+    });
+  }, []);
 
   const equipItem = useCallback((itemId: string) => {
     setState((prev) => {
@@ -1039,6 +1150,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         startExpedition,
         claimExpedition,
         speedUpExpedition,
+        placeEggInIncubator,
+        claimHatchedEgg,
+        dragonBonuses: {
+          tapGoldPct: state.hatchedDragons.filter(d => d.bonusType === 'tap_gold_pct').reduce((s, d) => s + d.bonusValue, 0),
+          armyPowerFlat: state.hatchedDragons.filter(d => d.bonusType === 'army_power_flat').reduce((s, d) => s + d.bonusValue, 0),
+          materialDropPct: state.hatchedDragons.filter(d => d.bonusType === 'material_drop_pct').reduce((s, d) => s + d.bonusValue, 0),
+          expeditionTimePct: state.hatchedDragons.filter(d => d.bonusType === 'expedition_time_pct').reduce((s, d) => s + d.bonusValue, 0),
+        },
         equipItem,
         unequipItem,
         craftItem,

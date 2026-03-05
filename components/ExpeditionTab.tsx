@@ -16,6 +16,9 @@ import {
   MaterialQuality,
   calcGearBonus,
   calcArmyPower,
+  EGG_CONFIG,
+  DragonEgg,
+  EggRarity,
 } from '@/contexts/GameContext';
 import { formatNumber } from '@/utils/format';
 
@@ -101,7 +104,14 @@ function ItemCard({ item, onEquip, onUnequip, isEquipped }: {
 
 // ─── main component ─────────────────────────────────────────────────────────
 
-type Section = 'expedition' | 'gear' | 'craft' | 'materials';
+type Section = 'expedition' | 'gear' | 'craft' | 'materials' | 'eggs';
+
+const EGG_RARITY_COLOR: Record<EggRarity, string> = {
+  common: '#9a9a9a', uncommon: '#4ade80', rare: '#60a5fa', legendary: '#f0c040',
+};
+const EGG_EMOJI: Record<EggRarity, string> = {
+  common: '🥚', uncommon: '🟢', rare: '💎', legendary: '✨',
+};
 
 export default function ExpeditionTab() {
   const {
@@ -113,6 +123,8 @@ export default function ExpeditionTab() {
     craftItem,
     addMaterials,
     speedUpExpedition,
+    placeEggInIncubator,
+    claimHatchedEgg,
     gearMultiplier,
     armyPower,
     CRAFTING_RECIPES,
@@ -129,6 +141,13 @@ export default function ExpeditionTab() {
   const [showAd, setShowAd] = React.useState(false);
   const [adWatched, setAdWatched] = React.useState(false);
   const [adDuration, setAdDuration] = React.useState('');
+  const [eggNowMs, setEggNowMs] = React.useState(Date.now());
+
+  // Egg incubator countdown ticker
+  useEffect(() => {
+    const id = setInterval(() => setEggNowMs(Date.now()), 5000);
+    return () => clearInterval(id);
+  }, []);
 
   // Load video metadata once to get duration for the button label
   useEffect(() => {
@@ -380,6 +399,25 @@ export default function ExpeditionTab() {
                 </span>
               </button>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Egg drop notification */}
+      {claimed && result?.droppedEgg && (
+        <div
+          className="dragon-panel px-3 py-2.5 flex items-center gap-2"
+          style={{ border: `1px solid ${EGG_RARITY_COLOR[result.droppedEgg.rarity]}40` }}
+        >
+          <span className="text-2xl">{EGG_EMOJI[result.droppedEgg.rarity]}</span>
+          <div>
+            <p className="font-cinzel font-bold text-[11px] tracking-wide"
+              style={{ color: EGG_RARITY_COLOR[result.droppedEgg.rarity] }}>
+              {result.droppedEgg.rarity.toUpperCase()} DRAGON EGG FOUND!
+            </p>
+            <p className="text-[#6b5a3a] text-[9px]">
+              {EGG_CONFIG[result.droppedEgg.rarity].label} · Check Eggs tab to incubate
+            </p>
           </div>
         </div>
       )}
@@ -986,6 +1024,122 @@ export default function ExpeditionTab() {
     }
   }
 
+  // ── SECTION: EGGS ──────────────────────────────────────────────────────────
+
+  const renderEggs = () => {
+    const eggs = state.eggInventory ?? [];
+    const incubator = state.incubator ?? [];
+    const hatched = state.hatchedDragons ?? [];
+    const nowMs = eggNowMs;
+    function fmtLeft(ms: number) {
+      const s = Math.max(0, Math.ceil(ms / 1000));
+      const h = Math.floor(s / 3600); const m = Math.floor((s % 3600) / 60);
+      return h > 0 ? `${h}h ${m}m` : `${m}m`;
+    }
+    return (
+      <div className="flex flex-col gap-3">
+        {/* Incubator */}
+        <div className="dragon-panel px-3 py-3">
+          <p className="font-cinzel font-bold text-[#e8d8a8] text-[10px] tracking-wider mb-2">🔥 INCUBATOR</p>
+          {incubator.map((slot, i) => (
+            <div key={i} className="mb-2 p-2 rounded-xl"
+              style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              {slot.egg ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl">{EGG_EMOJI[slot.egg.rarity]}</span>
+                  <div className="flex-1">
+                    <p className="font-bold text-[10px]" style={{ color: EGG_RARITY_COLOR[slot.egg.rarity] }}>
+                      {slot.egg.rarity.toUpperCase()} EGG
+                    </p>
+                    <p className="text-[#6b5a3a] text-[9px]">{EGG_CONFIG[slot.egg.rarity].label}</p>
+                  </div>
+                  {slot.endsAt && nowMs >= slot.endsAt ? (
+                    <button
+                      onClick={() => claimHatchedEgg(i)}
+                      className="action-btn px-3 py-1.5 text-[10px]"
+                      style={{ animation: 'goldShimmerBtn 1.5s ease-in-out infinite' }}
+                    >🐉 Claim!</button>
+                  ) : (
+                    <p className="text-[#f0c040] font-bold text-[10px]">
+                      {slot.endsAt ? fmtLeft(slot.endsAt - eggNowMs) : '…'}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <p className="text-[#4a3a2a] text-[9px] mb-1.5">Empty slot — place an egg to incubate</p>
+                  <div className="flex flex-wrap gap-1">
+                    {eggs.map(egg => (
+                      <button
+                        key={egg.id}
+                        onClick={() => placeEggInIncubator(egg.id, i)}
+                        className="flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-bold transition-all active:scale-95"
+                        style={{ background: 'rgba(212,160,23,0.08)', border: `1px solid ${EGG_RARITY_COLOR[egg.rarity]}40`, color: EGG_RARITY_COLOR[egg.rarity] }}
+                      >
+                        {EGG_EMOJI[egg.rarity]} {egg.rarity}
+                      </button>
+                    ))}
+                    {eggs.length === 0 && (
+                      <p className="text-[#4a3a2a] text-[8px]">No eggs — complete expeditions to find them</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Egg inventory */}
+        {eggs.length > 0 && (
+          <div className="dragon-panel px-3 py-3">
+            <p className="font-cinzel font-bold text-[#e8d8a8] text-[10px] tracking-wider mb-2">🥚 EGG INVENTORY</p>
+            <div className="flex flex-wrap gap-1.5">
+              {eggs.map(egg => (
+                <div key={egg.id} className="flex items-center gap-1.5 px-2 py-1.5 rounded-xl"
+                  style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${EGG_RARITY_COLOR[egg.rarity]}30` }}>
+                  <span>{EGG_EMOJI[egg.rarity]}</span>
+                  <div>
+                    <p className="text-[9px] font-bold" style={{ color: EGG_RARITY_COLOR[egg.rarity] }}>{egg.rarity}</p>
+                    <p className="text-[8px] text-[#6b5a3a]">{EGG_CONFIG[egg.rarity].label}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Hatched dragons */}
+        {hatched.length > 0 && (
+          <div className="dragon-panel px-3 py-3">
+            <p className="font-cinzel font-bold text-[#e8d8a8] text-[10px] tracking-wider mb-2">🐉 ACTIVE DRAGON BONUSES</p>
+            <div className="flex flex-col gap-1.5">
+              {hatched.map(d => (
+                <div key={d.id} className="flex items-center gap-2 px-2 py-1.5 rounded-xl"
+                  style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${EGG_RARITY_COLOR[d.rarity]}30` }}>
+                  <span className="text-lg">🐉</span>
+                  <div>
+                    <p className="text-[9px] font-bold" style={{ color: EGG_RARITY_COLOR[d.rarity] }}>
+                      {d.rarity.toUpperCase()} DRAGON
+                    </p>
+                    <p className="text-[#4ade80] text-[9px] font-bold">{EGG_CONFIG[d.rarity].label}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {eggs.length === 0 && hatched.length === 0 && incubator.every(s => !s.egg) && (
+          <div className="dragon-panel px-3 py-6 text-center">
+            <p className="text-3xl mb-2">🥚</p>
+            <p className="font-cinzel font-bold text-[#6b5a3a] text-sm">No eggs yet</p>
+            <p className="text-[#4a3a2a] text-[9px] mt-1">Dragon eggs drop rarely from expeditions — longer expeditions have higher odds</p>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // ── TAB BAR + LAYOUT ─────────────────────────────────────────────────────
 
   const tabs: { id: Section; label: string; badge?: number }[] = [
@@ -993,6 +1147,7 @@ export default function ExpeditionTab() {
     { id: 'gear',       label: '⚔️ Gear',  badge: state.inventory.length },
     { id: 'craft',      label: '🔨 Craft' },
     { id: 'materials',  label: '🎒 Mats',  badge: state.materials.reduce((n, m) => n + m.quantity, 0) },
+    { id: 'eggs',       label: '🥚 Eggs',  badge: state.eggInventory?.length || 0 },
   ];
 
   return (
@@ -1084,6 +1239,7 @@ export default function ExpeditionTab() {
         {section === 'gear'       && renderGear()}
         {section === 'craft'      && renderCraft()}
         {section === 'materials'  && renderMaterials()}
+        {section === 'eggs'        && renderEggs()}
       </div>
     </div>
   );
