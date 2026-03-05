@@ -1,96 +1,91 @@
 'use client';
 
 import { useEffect, useState, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { useGame } from '@/contexts/GameContext';
+import { useSearchParams } from 'next/navigation';
 import { Loader2, CheckCircle, XCircle } from 'lucide-react';
 
+// ─────────────────────────────────────────────────────────────────
+// This page is intentionally dependency-free (no useGame, no
+// useRouter).  It must work inside a webview, a fresh browser tab,
+// and any mobile browser.  On success it does a hard
+// window.location.href redirect so GameContext picks up the address
+// via the ?wallet_linked= param and xaman_linked_address in
+// localStorage — both paths are already handled in GameContext.tsx.
+// ─────────────────────────────────────────────────────────────────
+
 function WalletConnectedContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const { connectWallet } = useGame();
-  const [status, setStatus] = useState<'processing' | 'success' | 'error'>('processing');
+  const [status, setStatus]   = useState<'processing' | 'success' | 'error'>('processing');
   const [address, setAddress] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
 
-  // Read returnTo at component level so JSX can access it too
-  const returnTo = searchParams.get('returnTo') || '/';
-
   useEffect(() => {
-    // Xaman appends ?payloadId= or ?id= to the return URL
+    const returnTo = searchParams.get('returnTo') || '/';
+
+    // Xaman substitutes {id} → the real UUID in the return_url.
+    // Guard against the literal string "{id}" in case substitution failed.
     const payloadId =
       searchParams.get('payloadId') ||
       searchParams.get('id') ||
-      // Also check localStorage in case Xaman stripped params
       (typeof window !== 'undefined' ? localStorage.getItem('xaman_pending_uuid') : null);
 
-    if (!payloadId) {
+    if (!payloadId || payloadId === '{id}') {
       setStatus('error');
-      setErrorMsg('No payload ID found. Please try connecting again.');
+      setErrorMsg('No payload ID — please go back and try again.');
       return;
     }
 
-    const verify = async () => {
+    let cancelled = false;
+    let attempt   = 0;
+    const MAX     = 40; // 40 × 2 s = 80 seconds max
+
+    const check = async () => {
+      if (cancelled) return;
       try {
-        const res = await fetch(`/frontend-api/wallet/payload?uuid=${payloadId}`);
-        if (!res.ok) throw new Error('Payload not found');
-        const data = await res.json();
+        const r = await fetch(`/frontend-api/wallet/payload?uuid=${payloadId}`);
+        const d = await r.json();
 
-        const isValid =
-          data.signed === true &&
-          !data.cancelled &&
-          !data.expired &&
-          data.account &&
-          typeof data.account === 'string' &&
-          data.account.startsWith('r') &&
-          data.account.length >= 25;
-
-        if (isValid) {
+        if (d.signed && d.account && typeof d.account === 'string' && d.account.startsWith('r') && d.account.length >= 25) {
+          if (cancelled) return;
           localStorage.removeItem('xaman_pending_uuid');
-          // Store in localStorage so game picks it up on any fresh load
-          localStorage.setItem('xaman_linked_address', data.account);
-          setAddress(data.account);
+          localStorage.setItem('xaman_linked_address', d.account);
+          setAddress(d.account);
           setStatus('success');
-          await connectWallet(data.account);
-          setTimeout(() => router.push(`${returnTo}?wallet_linked=${encodeURIComponent(data.account)}`), 2000);
-        } else if (data.cancelled) {
-          setStatus('error');
-          setErrorMsg('Sign-in was cancelled.');
-        } else if (data.expired) {
-          setStatus('error');
-          setErrorMsg('Sign-in request expired. Please try again.');
-        } else {
-          // Not resolved yet — keep polling (user may have just been redirected back)
-          let attempts = 0;
-          const poll = setInterval(async () => {
-            attempts++;
-            try {
-              const r = await fetch(`/frontend-api/wallet/payload?uuid=${payloadId}`);
-              const d = await r.json();
-              if (d.signed && d.account?.startsWith('r')) {
-                clearInterval(poll);
-                localStorage.removeItem('xaman_pending_uuid');
-                setAddress(d.account);
-                setStatus('success');
-                await connectWallet(d.account);
-                setTimeout(() => router.push(returnTo), 2000);
-              } else if (d.cancelled || d.expired || attempts > 30) {
-                clearInterval(poll);
-                setStatus('error');
-                setErrorMsg(d.cancelled ? 'Cancelled.' : 'Timed out — please try again.');
-              }
-            } catch { /* keep polling */ }
-          }, 2000);
-          return () => clearInterval(poll);
+          // Hard redirect — works in any browser / webview
+          setTimeout(() => {
+            const dest = returnTo.startsWith('/') ? returnTo : '/';
+            window.location.href = `${dest}?wallet_linked=${encodeURIComponent(d.account)}`;
+          }, 1500);
+          return;
         }
-      } catch (err: any) {
-        setStatus('error');
-        setErrorMsg(err.message || 'Verification failed. Please try again.');
+
+        if (d.cancelled) { setStatus('error'); setErrorMsg('Sign-in was cancelled in Xaman.'); return; }
+        if (d.expired)   { setStatus('error'); setErrorMsg('Request expired — please try again.'); return; }
+
+        // Not yet signed — keep retrying
+        attempt++;
+        if (attempt < MAX) {
+          setTimeout(check, 2000);
+        } else {
+          setStatus('error');
+          setErrorMsg('Timed out waiting for approval. Please try again.');
+        }
+      } catch {
+        attempt++;
+        if (attempt < MAX) {
+          setTimeout(check, 2000);
+        } else {
+          setStatus('error');
+          setErrorMsg('Network error. Please try again.');
+        }
       }
     };
 
-    verify();
+    check();
+    return () => { cancelled = true; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const goBack = () => { window.location.href = '/'; };
 
   return (
     <div
@@ -108,7 +103,10 @@ function WalletConnectedContent() {
           <>
             <Loader2 className="w-14 h-14 text-orange-400 animate-spin mx-auto mb-4" />
             <h1 className="text-xl font-bold text-[#f0c040] font-cinzel mb-2">Verifying…</h1>
-            <p className="text-[#6b5a3a] text-sm">Confirming your Xaman sign-in</p>
+            <p className="text-[#6b5a3a] text-sm mb-6">Confirming your Xaman sign-in</p>
+            <button onClick={goBack} className="text-xs text-[#4a3a2a] underline">
+              Already connected? Back to Game
+            </button>
           </>
         )}
 
@@ -130,10 +128,9 @@ function WalletConnectedContent() {
             <h1 className="text-xl font-bold text-[#f0c040] font-cinzel mb-2">Connection Failed</h1>
             <p className="text-[#6b5a3a] text-sm mb-4">{errorMsg}</p>
             <button
-              onClick={() => router.push(returnTo)}
+              onClick={goBack}
               className="px-6 py-2 rounded-xl font-bold text-white text-sm
-                bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700
-                transition-all"
+                bg-gradient-to-r from-orange-500 to-orange-600 active:scale-95 transition-all"
             >
               Back to Game
             </button>
@@ -148,10 +145,7 @@ export default function WalletConnectedPage() {
   return (
     <Suspense
       fallback={
-        <div
-          className="min-h-screen flex items-center justify-center"
-          style={{ background: '#0c0804' }}
-        >
+        <div className="min-h-screen flex items-center justify-center" style={{ background: '#0c0804' }}>
           <Loader2 className="w-10 h-10 text-orange-400 animate-spin" />
         </div>
       }
