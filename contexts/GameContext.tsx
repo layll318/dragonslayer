@@ -25,6 +25,23 @@ export interface IncubatorSlot {
   endsAt: number | null;
 }
 
+export type MerchantDealType = 'materials' | 'egg' | 'gold_boost' | 'speedup';
+
+export interface MerchantDeal {
+  id: string;
+  icon: string;
+  title: string;
+  desc: string;
+  goldCost: number;
+  purchased: boolean;
+  type: MerchantDealType;
+  payload: {
+    materials?: { type: MaterialType; quality: MaterialQuality; quantity: number }[];
+    egg?: EggRarity;
+    goldPct?: number;  // bonus gold tap % for rest of day
+  };
+}
+
 export interface HatchedDragon {
   id: string;
   rarity: EggRarity;
@@ -144,6 +161,10 @@ export interface GameState {
   eggInventory: DragonEgg[];
   incubator: IncubatorSlot[];
   hatchedDragons: HatchedDragon[];
+  // Travelling Merchant
+  merchantDeals: MerchantDeal[];
+  merchantExpiresAt: number | null;
+  merchantLastDate: string;
   // Arena PvP
   arenaAttacksToday: number;
   arenaPoints: number;
@@ -165,6 +186,8 @@ interface GameContextType {
   speedUpExpedition: () => void;
   placeEggInIncubator: (eggId: string, slotIndex: number) => void;
   claimHatchedEgg: (slotIndex: number) => void;
+  buyFromMerchant: (dealId: string) => void;
+  addEggs: (eggs: Omit<DragonEgg, 'id'>[]) => void;
   dragonBonuses: { tapGoldPct: number; armyPowerFlat: number; materialDropPct: number; expeditionTimePct: number };
   equipItem: (itemId: string) => void;
   unequipItem: (slot: keyof EquipmentSlots) => void;
@@ -421,6 +444,45 @@ function getToday(): string {
   return new Date().toISOString().split('T')[0];
 }
 
+function generateMerchantDeals(level: number, dateStr: string): MerchantDeal[] {
+  // Seeded pseudo-random from date string so deals are consistent within a day
+  let seed = dateStr.split('').reduce((s, c) => s + c.charCodeAt(0), 0) + level;
+  const rng = () => { seed = (seed * 1664525 + 1013904223) & 0xffffffff; return Math.abs(seed) / 0x7fffffff; };
+  const allMats: MaterialType[] = ['dragon_scale','fire_crystal','iron_ore','bone_shard','ancient_rune'];
+  const pickMat = () => allMats[Math.floor(rng() * allMats.length)];
+  const quals: MaterialQuality[] = ['common', 'uncommon', 'rare'];
+  const goldBase = Math.max(500, level * 200);
+  return [
+    {
+      id: 'deal_bulk_mats', icon: '🎒', title: 'Bulk Material Sack',
+      desc: '6× common materials of two types',
+      goldCost: Math.floor(goldBase * 0.8), purchased: false, type: 'materials',
+      payload: { materials: [
+        { type: pickMat(), quality: 'common', quantity: 6 },
+        { type: pickMat(), quality: 'common', quantity: 6 },
+      ]},
+    },
+    {
+      id: 'deal_rare_mat', icon: '💎', title: 'Rare Material Cache',
+      desc: `3× rare quality ${pickMat().replace('_',' ')}`,
+      goldCost: Math.floor(goldBase * 1.5), purchased: false, type: 'materials',
+      payload: { materials: [{ type: pickMat(), quality: 'rare', quantity: 3 }] },
+    },
+    {
+      id: 'deal_uncommon_egg', icon: '🟢', title: 'Dragon Egg (Uncommon)',
+      desc: 'Hatches in 2h — grants +10 army power forever',
+      goldCost: Math.floor(goldBase * 2.0), purchased: false, type: 'egg',
+      payload: { egg: 'uncommon' as EggRarity },
+    },
+    {
+      id: 'deal_mixed_bundle', icon: '🛍️', title: 'Merchant Bundle',
+      desc: '2× each of all 5 material types (uncommon quality)',
+      goldCost: Math.floor(goldBase * 2.5), purchased: false, type: 'materials',
+      payload: { materials: allMats.map(t => ({ type: t, quality: 'uncommon' as MaterialQuality, quantity: 2 })) },
+    },
+  ];
+}
+
 function generateDailyQuests(level: number): DailyQuest[] {
   const goldTarget = Math.max(300, level * 150);
   const buildTarget = Math.max(1, Math.min(3, Math.floor(level / 3) + 1));
@@ -519,6 +581,9 @@ function createInitialState(): GameState {
     eggInventory: [],
     incubator: [{ egg: null, startedAt: null, endsAt: null }],
     hatchedDragons: [],
+    merchantDeals: [],
+    merchantExpiresAt: null,
+    merchantLastDate: '',
     arenaAttacksToday: 0,
     arenaPoints: 0,
     arenaLastReset: '',
@@ -599,6 +664,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         eggInventory: saved.eggInventory || [],
         incubator: saved.incubator || [{ egg: null, startedAt: null, endsAt: null }],
         hatchedDragons: saved.hatchedDragons || [],
+        merchantDeals: saved.merchantDeals || [],
+        merchantExpiresAt: saved.merchantExpiresAt ?? null,
+        merchantLastDate: saved.merchantLastDate || '',
         arenaAttacksToday: saved.arenaAttacksToday || 0,
         arenaPoints: saved.arenaPoints || 0,
         arenaLastReset: saved.arenaLastReset || '',
@@ -683,6 +751,17 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         .catch(() => {/* ignore network errors */});
     }
   }, []);
+
+  // Daily merchant refresh — generate new deals once per day
+  useEffect(() => {
+    const today = getToday();
+    setState((prev) => {
+      if (prev.merchantLastDate === today && prev.merchantDeals.length > 0) return prev;
+      const deals = generateMerchantDeals(prev.level, today);
+      const expiresAt = new Date(today + 'T23:59:59').getTime();
+      return { ...prev, merchantDeals: deals, merchantExpiresAt: expiresAt, merchantLastDate: today };
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Game tick every 1s — passive income only
   useEffect(() => {
@@ -934,6 +1013,37 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const addEggs = useCallback((eggs: Omit<DragonEgg, 'id'>[]) => {
+    setState((prev) => {
+      const newEggs = eggs.map(e => ({ ...e, id: `egg-${Date.now()}-${Math.random().toString(36).slice(2)}` }));
+      return { ...prev, eggInventory: [...prev.eggInventory, ...newEggs] };
+    });
+  }, []);
+
+  const buyFromMerchant = useCallback((dealId: string) => {
+    setState((prev) => {
+      const deal = prev.merchantDeals.find(d => d.id === dealId);
+      if (!deal || deal.purchased || prev.gold < deal.goldCost) return prev;
+      let newState = { ...prev, gold: prev.gold - deal.goldCost };
+      if (deal.type === 'materials' && deal.payload.materials) {
+        const newMats = [...newState.materials];
+        for (const drop of deal.payload.materials) {
+          const ex = newMats.find(m => m.type === drop.type && m.quality === drop.quality);
+          if (ex) ex.quantity += drop.quantity;
+          else newMats.push({ ...drop });
+        }
+        newState = { ...newState, materials: newMats };
+      } else if (deal.type === 'egg' && deal.payload.egg) {
+        const rarity = deal.payload.egg;
+        const cfg = EGG_CONFIG[rarity];
+        const egg: DragonEgg = { id: `egg-${Date.now()}`, rarity, ...cfg };
+        newState = { ...newState, eggInventory: [...newState.eggInventory, egg] };
+      }
+      const updatedDeals = prev.merchantDeals.map(d => d.id === dealId ? { ...d, purchased: true } : d);
+      return { ...newState, merchantDeals: updatedDeals };
+    });
+  }, []);
+
   const equipItem = useCallback((itemId: string) => {
     setState((prev) => {
       const item = prev.inventory.find(i => i.id === itemId);
@@ -1152,6 +1262,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         speedUpExpedition,
         placeEggInIncubator,
         claimHatchedEgg,
+        buyFromMerchant,
+        addEggs,
         dragonBonuses: {
           tapGoldPct: state.hatchedDragons.filter(d => d.bonusType === 'tap_gold_pct').reduce((s, d) => s + d.bonusValue, 0),
           armyPowerFlat: state.hatchedDragons.filter(d => d.bonusType === 'army_power_flat').reduce((s, d) => s + d.bonusValue, 0),

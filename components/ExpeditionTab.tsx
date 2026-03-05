@@ -125,6 +125,7 @@ export default function ExpeditionTab() {
     speedUpExpedition,
     placeEggInIncubator,
     claimHatchedEgg,
+    addEggs,
     gearMultiplier,
     armyPower,
     CRAFTING_RECIPES,
@@ -142,6 +143,11 @@ export default function ExpeditionTab() {
   const [adWatched, setAdWatched] = React.useState(false);
   const [adDuration, setAdDuration] = React.useState('');
   const [eggNowMs, setEggNowMs] = React.useState(Date.now());
+  const [premiumHash, setPremiumHash] = React.useState('');
+  const [premiumType, setPremiumType] = React.useState<string>('');
+  const [premiumStatus, setPremiumStatus] = React.useState<'idle'|'loading'|'done'|'error'>('idle');
+  const [premiumMsg, setPremiumMsg] = React.useState('');
+  const USED_PREMIUM_KEY = 'ds_used_premium_tx';
 
   // Egg incubator countdown ticker
   useEffect(() => {
@@ -922,6 +928,79 @@ export default function ExpeditionTab() {
               )}
             </div>
         </div>
+
+        {/* ── Premium XRP Store ── */}
+        <div className="dragon-panel px-3 py-3"
+          style={{ border: '1px solid rgba(139,92,246,0.25)', background: 'linear-gradient(180deg, rgba(139,92,246,0.05) 0%, rgba(10,6,20,0) 100%)' }}>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-base">⭐</span>
+            <p className="font-cinzel font-bold text-[11px] tracking-wider" style={{ color: '#a78bfa' }}>PREMIUM XRP STORE</p>
+          </div>
+          <p className="text-[#4a3a6a] text-[8px] mb-3">Exclusive items unavailable elsewhere. Send XRP to treasury, then claim with TX hash.</p>
+          {[
+            { id: 'rare_egg',      icon: '💎', label: 'Rare Dragon Egg',          xrp: 2, desc: 'Hatches in 4h · +15% material drops forever' },
+            { id: 'legendary_egg', icon: '✨', label: 'Legendary Dragon Egg',      xrp: 5, desc: 'Hatches in 6h · −10% expedition time forever' },
+            { id: 'rare_bundle',   icon: '🎁', label: 'Rare Material Mega Bundle', xrp: 5, desc: '3× RARE quality of all 5 material types' },
+          ].map(item => (
+            <div key={item.id}
+              className="flex items-center gap-2.5 p-2 rounded-xl mb-1.5"
+              style={{
+                background: premiumType === item.id ? 'rgba(139,92,246,0.12)' : 'rgba(139,92,246,0.04)',
+                border: `1px solid ${premiumType === item.id ? 'rgba(139,92,246,0.5)' : 'rgba(139,92,246,0.15)'}`,
+              }}
+            >
+              <span className="text-xl flex-shrink-0">{item.icon}</span>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-[10px]" style={{ color: '#e8d8f8' }}>{item.label}</p>
+                <p className="text-[#6b5a8a] text-[8px]">{item.desc}</p>
+              </div>
+              <div className="flex flex-col items-end gap-0.5">
+                <span className="font-cinzel font-bold text-[10px]" style={{ color: '#a78bfa' }}>{item.xrp} XRP</span>
+                <button
+                  onClick={() => setPremiumType(prev => prev === item.id ? '' : item.id)}
+                  className="px-2 py-0.5 rounded text-[9px] font-bold transition-all"
+                  style={{
+                    background: premiumType === item.id ? 'rgba(139,92,246,0.4)' : 'rgba(139,92,246,0.12)',
+                    border: '1px solid rgba(139,92,246,0.3)',
+                    color: '#a78bfa',
+                  }}
+                >
+                  {premiumType === item.id ? '✓ Selected' : 'Select'}
+                </button>
+              </div>
+            </div>
+          ))}
+          <div className="rounded-lg px-2 py-1.5 mt-1 mb-2" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(139,92,246,0.15)' }}>
+            <p className="text-[7px] text-[#4a3a6a] mb-0.5">Send XRP to:</p>
+            <p className="font-mono text-[8px] break-all" style={{ color: '#a78bfa' }}>{TREASURY}</p>
+          </div>
+          <input
+            type="text"
+            placeholder="Paste TX hash after payment…"
+            value={premiumHash}
+            onChange={e => setPremiumHash(e.target.value.trim())}
+            className="w-full px-2 py-1.5 rounded-lg text-[10px] text-[#f0e8d0] mb-1.5"
+            style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(139,92,246,0.25)', outline: 'none' }}
+          />
+          <button
+            onClick={handleClaimPremiumByTxHash}
+            disabled={premiumStatus === 'loading' || premiumHash.length < 60 || !premiumType}
+            className="w-full py-2 rounded-xl font-cinzel font-bold text-[10px] tracking-wider transition-all"
+            style={{
+              background: (premiumHash.length >= 60 && premiumType) ? 'linear-gradient(180deg, #8b5cf6 0%, #6d28d9 100%)' : 'rgba(100,80,40,0.15)',
+              color: (premiumHash.length >= 60 && premiumType) ? '#fff' : '#4a3a4a',
+              border: '1px solid rgba(139,92,246,0.3)',
+              opacity: (premiumStatus === 'loading' || premiumHash.length < 60 || !premiumType) ? 0.5 : 1,
+            }}
+          >
+            {premiumStatus === 'loading' ? '⏳ Verifying…' : '⭐ Claim Premium Item'}
+          </button>
+          {premiumMsg && (
+            <p className={`text-[9px] mt-1.5 text-center ${premiumStatus === 'error' ? 'text-red-400' : 'text-[#4ade80]'}`}>
+              {premiumMsg}
+            </p>
+          )}
+        </div>
       </div>
     );
   };
@@ -1021,6 +1100,48 @@ export default function ExpeditionTab() {
       console.error('[verify-tx] error:', e);
       setTxMsg('Network error — try again.');
       setTxStatus('error');
+    }
+  }
+
+  async function handleClaimPremiumByTxHash() {
+    const hash = premiumHash.trim().toUpperCase();
+    if (hash.length < 60) { setPremiumMsg('Paste a valid TX hash.'); setPremiumStatus('error'); return; }
+    if (!premiumType) { setPremiumMsg('Select a premium item first.'); setPremiumStatus('error'); return; }
+
+    const usedRaw = localStorage.getItem(USED_PREMIUM_KEY);
+    const used: string[] = usedRaw ? JSON.parse(usedRaw) : [];
+    if (used.includes(hash)) { setPremiumMsg('This TX hash was already claimed on this device.'); setPremiumStatus('error'); return; }
+
+    setPremiumStatus('loading');
+    setPremiumMsg('');
+    try {
+      const res = await fetch('/frontend-api/materials/verify-premium-tx', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ txHash: hash, premiumType }),
+      });
+      const data = await res.json();
+      if (!data.success) { setPremiumMsg(data.error || 'Verification failed.'); setPremiumStatus('error'); return; }
+
+      // Credit the premium reward
+      if (data.eggRarity) {
+        const cfg = EGG_CONFIG[data.eggRarity as import('@/contexts/GameContext').EggRarity];
+        addEggs([{ rarity: data.eggRarity, hatchHours: cfg.hatchHours, bonusType: cfg.bonusType, bonusValue: cfg.bonusValue }]);
+      }
+      if (data.materialCredits) {
+        addMaterials(data.materialCredits);
+      }
+
+      used.push(hash);
+      localStorage.setItem(USED_PREMIUM_KEY, JSON.stringify(used));
+      setPremiumMsg(`✅ Claimed: ${data.label}! Check your ${data.eggRarity ? 'Eggs tab' : 'Materials'}.`);
+      setPremiumStatus('done');
+      setPremiumHash('');
+      setPremiumType('');
+    } catch (e) {
+      console.error('[verify-premium-tx] error:', e);
+      setPremiumMsg('Network error — try again.');
+      setPremiumStatus('error');
     }
   }
 

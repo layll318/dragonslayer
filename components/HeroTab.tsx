@@ -6,6 +6,7 @@ import { formatNumber } from '@/utils/format';
 import CharacterDisplay from './CharacterDisplay';
 import QuestBanner from './QuestBanner';
 import LoginBonusModal from './LoginBonusModal';
+import MerchantModal from './MerchantModal';
 import { useTelegramWebApp } from '@/hooks/useTelegramWebApp';
 
 interface GoldFloat { id: number; x: number; crit: boolean; amount: number; }
@@ -305,6 +306,9 @@ export default function HeroTab() {
 
         {/* ══════════════ DAILY QUESTS ══════════════ */}
         <QuestBanner />
+
+        {/* ══════════════ TRAVELLING MERCHANT ══════════════ */}
+        <MerchantModal />
 
         {/* ══════════════ NEXT GOAL BANNER ══════════════ */}
         {(() => {
