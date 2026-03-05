@@ -224,16 +224,12 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
   const mobile = isMobileDevice();
   const inTelegram = isTelegramWebApp();
 
-  // On mobile: full-page redirect to the https:// web URL so the OS can open Xaman
-  // via App Link (Android) or Universal Link (iOS), and the return_url fires in the
-  // same browser session. On desktop: open in new tab.
+  // Always open in a new tab — keeps polling alive on the current page.
+  // On Android/iOS the OS will intercept the https://xumm.app URL and open
+  // the Xaman app directly. Polling auto-detects approval.
   const handleOpenXaman = () => {
     if (!deeplink) return;
-    if (mobile) {
-      window.location.href = deeplink;
-    } else {
-      window.open(deeplink, '_blank', 'noopener,noreferrer');
-    }
+    window.open(deeplink, '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -276,7 +272,10 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
                 className="w-4 h-4 rounded"
                 onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
               />
-              Open Xaman App
+              <span className="flex flex-col items-start leading-tight">
+                <span>Open Xaman App</span>
+                <span className="text-[10px] font-normal opacity-80">iOS &amp; Android</span>
+              </span>
             </button>
           )}
 
