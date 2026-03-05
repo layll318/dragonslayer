@@ -64,18 +64,18 @@ export async function POST(request: NextRequest) {
     const ALL_TYPES = ['dragon_scale', 'fire_crystal', 'iron_ore', 'bone_shard', 'ancient_rune'] as const;
     type MatType = typeof ALL_TYPES[number];
 
-    let credits: { type: MatType; quality: 'common'; quantity: number }[];
+    let credits: { type: MatType; quantity: number }[];
 
     if (drops >= 3_000_000) {
       // 3+ XRP → bundle: 3 of every type
-      credits = ALL_TYPES.map(t => ({ type: t, quality: 'common', quantity: 3 }));
+      credits = ALL_TYPES.map(t => ({ type: t, quantity: 3 }));
     } else {
       // 1–2 XRP → 3 of a single type (user must specify)
       const mat = type as MatType;
       if (!ALL_TYPES.includes(mat)) {
         return NextResponse.json({ error: 'Specify which material type to claim (1 XRP = 3× one type).' }, { status: 400 });
       }
-      credits = [{ type: mat, quality: 'common', quantity: 3 }];
+      credits = [{ type: mat, quantity: 3 }];
     }
 
     return NextResponse.json({

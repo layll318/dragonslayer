@@ -128,7 +128,7 @@ export default function ArenaTab() {
   };
 
   // ── No wallet ───────────────────────────────────────────────────────────────
-  if (!state.playerId) {
+  if (!state.walletAddress) {
     return (
       <div className="flex flex-col flex-1 pb-4 overflow-y-auto relative z-10 page-fade">
         <ArenaHeader attacksLeft={attacksLeft} arenaPoints={state.arenaPoints ?? 0} />

@@ -68,17 +68,6 @@ const ArenaIcon = () => (
   </svg>
 );
 
-const LeaderboardIcon = () => (
-  <svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    {/* Crown */}
-    <path d="M4 18 L4 10 L9 14 L13 6 L17 14 L22 10 L22 18 Z" />
-    <line x1="4" y1="21" x2="22" y2="21" />
-    <circle cx="13" cy="6" r="1.2" fill="currentColor" stroke="none" />
-    <circle cx="4" cy="10" r="1" fill="currentColor" stroke="none" />
-    <circle cx="22" cy="10" r="1" fill="currentColor" stroke="none" />
-  </svg>
-);
-
 const ProfileIcon = () => (
   <svg width="26" height="26" viewBox="0 0 26 26" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     {/* Shield */}
@@ -93,7 +82,6 @@ export default function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
     { id: 'buildings',   label: 'Forge',      icon: <BuildingsIcon /> },
     { id: 'expedition',  label: 'Expedition', icon: <ExpeditionIcon /> },
     { id: 'arena',       label: 'Arena',      icon: <ArenaIcon /> },
-    { id: 'leaderboard', label: 'Ranks',      icon: <LeaderboardIcon /> },
     { id: 'profile',     label: 'Profile',    icon: <ProfileIcon /> },
   ];
 

@@ -13,7 +13,6 @@ import {
   ItemType,
   ItemRarity,
   MaterialType,
-  MaterialQuality,
   calcGearBonus,
   calcArmyPower,
   EGG_CONFIG,
@@ -43,17 +42,6 @@ const SLOT_LABELS: Record<keyof EquipmentSlots, string> = {
 
 const SLOT_ORDER: (keyof EquipmentSlots)[] = ['weapon', 'shield', 'helm', 'armor', 'ring'];
 
-const QUALITY_LABEL: Record<MaterialQuality, string> = {
-  common:   'Common',
-  uncommon: 'Uncommon',
-  rare:     'Rare',
-};
-
-const QUALITY_COLOR: Record<MaterialQuality, string> = {
-  common:   '#9a9a9a',
-  uncommon: '#4ade80',
-  rare:     '#60a5fa',
-};
 
 // ─── sub-components ─────────────────────────────────────────────────────────
 
@@ -104,7 +92,7 @@ function ItemCard({ item, onEquip, onUnequip, isEquipped }: {
 
 // ─── main component ─────────────────────────────────────────────────────────
 
-type Section = 'expedition' | 'gear' | 'craft' | 'materials' | 'eggs';
+type Section = 'expedition' | 'gear' | 'stash';
 
 const EGG_RARITY_COLOR: Record<EggRarity, string> = {
   common: '#9a9a9a', uncommon: '#4ade80', rare: '#60a5fa', legendary: '#f0c040',
@@ -209,19 +197,19 @@ export default function ExpeditionTab() {
       // Payment confirmed — build credit list
       const memo: string = status.memo || pending.memo || '';
       const allTypes: MaterialType[] = ['dragon_scale','fire_crystal','iron_ore','bone_shard','ancient_rune'];
-      let drops: { type: MaterialType; quality: MaterialQuality; quantity: number }[] = [];
+      let drops: { type: MaterialType; quantity: number }[] = [];
       if (memo.startsWith('bundle')) {
-        drops = allTypes.map(t => ({ type: t, quality: 'common' as MaterialQuality, quantity: 3 }));
+        drops = allTypes.map(t => ({ type: t, quantity: 3 }));
       } else if (memo.startsWith('single:')) {
         const [, mt, q] = memo.split(':');
         if (allTypes.includes(mt as MaterialType))
-          drops = [{ type: mt as MaterialType, quality: 'common', quantity: parseInt(q || '3', 10) }];
+          drops = [{ type: mt as MaterialType, quantity: parseInt(q || '3', 10) }];
       }
       if (drops.length === 0) {
         const t = pending.typeOrBundle as MaterialType | 'bundle';
         drops = t === 'bundle'
-          ? allTypes.map(t2 => ({ type: t2, quality: 'common' as MaterialQuality, quantity: 3 }))
-          : [{ type: t as MaterialType, quality: 'common', quantity: 3 }];
+          ? allTypes.map(t2 => ({ type: t2, quantity: 3 }))
+          : [{ type: t as MaterialType, quantity: 3 }];
       }
       console.log('[XRP shop] crediting:', drops);
       addMaterials(drops);
@@ -454,7 +442,7 @@ export default function ExpeditionTab() {
                 <span
                   key={i}
                   className="text-[9px] px-1.5 py-0.5 rounded-full"
-                  style={{ background: `${QUALITY_COLOR[m.quality]}20`, color: QUALITY_COLOR[m.quality] }}
+                  style={{ background: 'rgba(212,160,23,0.15)', color: '#f0c040' }}
                 >
                   {MATERIAL_LABELS[m.type as MaterialType]} ×{m.quantity}
                 </span>
@@ -649,7 +637,7 @@ export default function ExpeditionTab() {
                 const isUpgrade = !!nextRecipe.upgradesFrom;
                 const canAffordGold = state.gold >= nextRecipe.goldCost;
                 const matsMet = nextRecipe.materials.every(req => {
-                  const held = state.materials.find(m => m.type === req.type && m.quality === req.quality);
+                  const held = state.materials.find(m => m.type === req.type);
                   return held && held.quantity >= req.quantity;
                 });
                 const hasBaseItem = !isUpgrade || hasItem(
@@ -711,7 +699,7 @@ export default function ExpeditionTab() {
                     {/* Material requirements */}
                     <div className="flex flex-wrap gap-1 mb-1.5">
                       {nextRecipe.materials.map((req, i) => {
-                        const held = state.materials.find(m => m.type === req.type && m.quality === req.quality);
+                        const held = state.materials.find(m => m.type === req.type);
                         const have = held?.quantity ?? 0;
                         const ok = have >= req.quantity;
                         return (
@@ -719,8 +707,8 @@ export default function ExpeditionTab() {
                             key={i}
                             className="text-[8px] px-1.5 py-0.5 rounded-full"
                             style={{
-                              background: ok ? `${QUALITY_COLOR[req.quality]}20` : 'rgba(255,60,60,0.1)',
-                              color: ok ? QUALITY_COLOR[req.quality] : '#f87171',
+                              background: ok ? 'rgba(74,222,128,0.12)' : 'rgba(255,60,60,0.1)',
+                              color: ok ? '#4ade80' : '#f87171',
                             }}
                           >
                             {MATERIAL_LABELS[req.type as MaterialType]} ×{req.quantity}
@@ -754,11 +742,6 @@ export default function ExpeditionTab() {
   // ── SECTION: MATERIALS ───────────────────────────────────────────────────
 
   const renderMaterials = () => {
-    const byType: Record<string, { type: MaterialType; quality: MaterialQuality; quantity: number }[]> = {};
-    for (const m of state.materials) {
-      if (!byType[m.type]) byType[m.type] = [];
-      byType[m.type].push(m);
-    }
 
     return (
       <div className="flex flex-col gap-2">
@@ -769,27 +752,20 @@ export default function ExpeditionTab() {
             <p className="text-[9px] text-[#4a3a2a] mt-1">Send your fighter on expeditions to collect crafting materials.</p>
           </div>
         ) : (
-          Object.entries(byType).map(([type, entries]) => (
-            <div key={type} className="dragon-panel px-3 py-2.5">
-              <p className="font-bold text-[11px] text-[#e8d8a8] mb-2">
-                {MATERIAL_LABELS[type as MaterialType]}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {entries.map((m, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center gap-1.5 px-2 py-1 rounded-lg"
-                    style={{ background: `${QUALITY_COLOR[m.quality]}15` }}
-                  >
-                    <span className="text-[9px] font-bold" style={{ color: QUALITY_COLOR[m.quality] }}>
-                      {QUALITY_LABEL[m.quality]}
-                    </span>
-                    <span className="font-cinzel font-bold text-[#f0c040] text-sm">×{m.quantity}</span>
-                  </div>
-                ))}
-              </div>
+          <div className="dragon-panel px-3 py-2.5">
+            <div className="flex flex-wrap gap-2">
+              {state.materials.map((m, i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg"
+                  style={{ background: 'rgba(212,160,23,0.08)', border: '1px solid rgba(212,160,23,0.2)' }}
+                >
+                  <span className="text-[10px]">{MATERIAL_LABELS[m.type]}</span>
+                  <span className="font-cinzel font-bold text-[#f0c040] text-sm">×{m.quantity}</span>
+                </div>
+              ))}
             </div>
-          ))
+          </div>
         )}
 
         {state.materials.length > 0 && (
@@ -1263,12 +1239,11 @@ export default function ExpeditionTab() {
 
   // ── TAB BAR + LAYOUT ─────────────────────────────────────────────────────
 
+  const stashBadge = state.materials.reduce((n, m) => n + m.quantity, 0) + (state.eggInventory?.length || 0);
   const tabs: { id: Section; label: string; badge?: number }[] = [
     { id: 'expedition', label: '🗺️ Quest' },
-    { id: 'gear',       label: '⚔️ Gear',  badge: state.inventory.length },
-    { id: 'craft',      label: '🔨 Craft' },
-    { id: 'materials',  label: '🎒 Mats',  badge: state.materials.reduce((n, m) => n + m.quantity, 0) },
-    { id: 'eggs',       label: '🥚 Eggs',  badge: state.eggInventory?.length || 0 },
+    { id: 'gear',       label: '⚔️ Gear',   badge: state.inventory.length },
+    { id: 'stash',      label: '🎒 Stash',  badge: stashBadge },
   ];
 
   return (
@@ -1357,10 +1332,24 @@ export default function ExpeditionTab() {
       {/* Section content */}
       <div className="flex flex-col gap-2 px-2 pt-2">
         {section === 'expedition' && renderExpedition()}
-        {section === 'gear'       && renderGear()}
-        {section === 'craft'      && renderCraft()}
-        {section === 'materials'  && renderMaterials()}
-        {section === 'eggs'        && renderEggs()}
+        {section === 'gear' && (
+          <>
+            {renderGear()}
+            <div className="mt-1 px-1">
+              <p className="font-cinzel font-bold text-[#e8d8a8] text-[10px] tracking-wider mb-2">🔨 FORGE EQUIPMENT</p>
+            </div>
+            {renderCraft()}
+          </>
+        )}
+        {section === 'stash' && (
+          <>
+            {renderMaterials()}
+            <div className="mt-1 px-1">
+              <p className="font-cinzel font-bold text-[#e8d8a8] text-[10px] tracking-wider mb-2">🥚 DRAGON EGGS</p>
+            </div>
+            {renderEggs()}
+          </>
+        )}
       </div>
     </div>
   );

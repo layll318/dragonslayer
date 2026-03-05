@@ -7,7 +7,6 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 // ============================================================
 
 export type MaterialType = 'dragon_scale' | 'fire_crystal' | 'iron_ore' | 'bone_shard' | 'ancient_rune';
-export type MaterialQuality = 'common' | 'uncommon' | 'rare';
 export type EggRarity = 'common' | 'uncommon' | 'rare' | 'legendary';
 export type DragonBonusType = 'tap_gold_pct' | 'army_power_flat' | 'material_drop_pct' | 'expedition_time_pct';
 
@@ -36,7 +35,7 @@ export interface MerchantDeal {
   purchased: boolean;
   type: MerchantDealType;
   payload: {
-    materials?: { type: MaterialType; quality: MaterialQuality; quantity: number }[];
+    materials?: { type: MaterialType; quantity: number }[];
     egg?: EggRarity;
     goldPct?: number;  // bonus gold tap % for rest of day
   };
@@ -54,7 +53,6 @@ export type ItemRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 
 export interface Material {
   type: MaterialType;
-  quality: MaterialQuality;
   quantity: number;
 }
 
@@ -97,7 +95,7 @@ export interface CraftingRecipe {
   rarity: ItemRarity;
   power: number;
   goldCost: number;
-  materials: { type: MaterialType; quality: MaterialQuality; quantity: number }[];
+  materials: { type: MaterialType; quantity: number }[];
   /** If set, the craft consumes an owned item of this type+rarity (the "old" item) */
   upgradesFrom?: { itemType: ItemType; rarity: ItemRarity };
 }
@@ -192,7 +190,7 @@ interface GameContextType {
   equipItem: (itemId: string) => void;
   unequipItem: (slot: keyof EquipmentSlots) => void;
   craftItem: (recipeId: string) => void;
-  addMaterials: (drops: { type: MaterialType; quality: MaterialQuality; quantity: number }[]) => void;
+  addMaterials: (drops: { type: MaterialType; quantity: number }[]) => void;
   connectWallet: (address: string) => Promise<void>;
   disconnectWallet: () => void;
   goldPerTap: number;
@@ -242,106 +240,106 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
   // ── WEAPON ──────────────────────────────────────────────────────────────────
   {
     id: 'iron_sword', itemType: 'weapon', name: 'Iron Sword', rarity: 'common', power: 5, goldCost: 300,
-    materials: [{ type: 'iron_ore', quality: 'common', quantity: 3 }, { type: 'bone_shard', quality: 'common', quantity: 2 }],
+    materials: [{ type: 'iron_ore', quantity: 3 }, { type: 'bone_shard', quantity: 2 }],
   },
   {
     id: 'steel_sword', itemType: 'weapon', name: 'Steel Sword', rarity: 'uncommon', power: 10, goldCost: 800,
     upgradesFrom: { itemType: 'weapon', rarity: 'common' },
-    materials: [{ type: 'iron_ore', quality: 'common', quantity: 4 }, { type: 'dragon_scale', quality: 'common', quantity: 3 }],
+    materials: [{ type: 'iron_ore', quantity: 4 }, { type: 'dragon_scale', quantity: 3 }],
   },
   {
     id: 'flame_blade', itemType: 'weapon', name: 'Flame Blade', rarity: 'rare', power: 18, goldCost: 2000,
     upgradesFrom: { itemType: 'weapon', rarity: 'uncommon' },
-    materials: [{ type: 'fire_crystal', quality: 'uncommon', quantity: 3 }, { type: 'dragon_scale', quality: 'uncommon', quantity: 3 }],
+    materials: [{ type: 'fire_crystal', quantity: 4 }, { type: 'dragon_scale', quantity: 4 }],
   },
   {
     id: 'dragon_fang', itemType: 'weapon', name: 'Dragon Fang', rarity: 'epic', power: 30, goldCost: 6000,
     upgradesFrom: { itemType: 'weapon', rarity: 'rare' },
-    materials: [{ type: 'dragon_scale', quality: 'rare', quantity: 4 }, { type: 'ancient_rune', quality: 'rare', quantity: 2 }],
+    materials: [{ type: 'dragon_scale', quantity: 5 }, { type: 'ancient_rune', quantity: 3 }],
   },
 
   // ── SHIELD ──────────────────────────────────────────────────────────────────
   {
     id: 'oak_shield', itemType: 'shield', name: 'Oak Shield', rarity: 'common', power: 4, goldCost: 250,
-    materials: [{ type: 'iron_ore', quality: 'common', quantity: 3 }, { type: 'bone_shard', quality: 'common', quantity: 2 }],
+    materials: [{ type: 'iron_ore', quantity: 3 }, { type: 'bone_shard', quantity: 2 }],
   },
   {
     id: 'iron_shield', itemType: 'shield', name: 'Iron Shield', rarity: 'uncommon', power: 9, goldCost: 700,
     upgradesFrom: { itemType: 'shield', rarity: 'common' },
-    materials: [{ type: 'iron_ore', quality: 'common', quantity: 4 }, { type: 'dragon_scale', quality: 'common', quantity: 2 }],
+    materials: [{ type: 'iron_ore', quantity: 4 }, { type: 'dragon_scale', quantity: 2 }],
   },
   {
     id: 'dragon_shield', itemType: 'shield', name: 'Dragon Shield', rarity: 'rare', power: 16, goldCost: 1800,
     upgradesFrom: { itemType: 'shield', rarity: 'uncommon' },
-    materials: [{ type: 'dragon_scale', quality: 'uncommon', quantity: 3 }, { type: 'fire_crystal', quality: 'uncommon', quantity: 2 }],
+    materials: [{ type: 'dragon_scale', quantity: 4 }, { type: 'fire_crystal', quantity: 3 }],
   },
   {
     id: 'aegis', itemType: 'shield', name: 'Aegis', rarity: 'epic', power: 26, goldCost: 5500,
     upgradesFrom: { itemType: 'shield', rarity: 'rare' },
-    materials: [{ type: 'dragon_scale', quality: 'rare', quantity: 3 }, { type: 'ancient_rune', quality: 'rare', quantity: 3 }],
+    materials: [{ type: 'dragon_scale', quantity: 5 }, { type: 'ancient_rune', quantity: 4 }],
   },
 
   // ── HELM ────────────────────────────────────────────────────────────────────
   {
     id: 'iron_helm', itemType: 'helm', name: 'Iron Helm', rarity: 'common', power: 3, goldCost: 200,
-    materials: [{ type: 'bone_shard', quality: 'common', quantity: 2 }, { type: 'iron_ore', quality: 'common', quantity: 2 }],
+    materials: [{ type: 'bone_shard', quantity: 2 }, { type: 'iron_ore', quantity: 2 }],
   },
   {
     id: 'scale_helm', itemType: 'helm', name: 'Scale Helm', rarity: 'uncommon', power: 8, goldCost: 600,
     upgradesFrom: { itemType: 'helm', rarity: 'common' },
-    materials: [{ type: 'dragon_scale', quality: 'common', quantity: 3 }, { type: 'ancient_rune', quality: 'common', quantity: 2 }],
+    materials: [{ type: 'dragon_scale', quantity: 3 }, { type: 'ancient_rune', quantity: 2 }],
   },
   {
     id: 'infernal_crown', itemType: 'helm', name: 'Infernal Crown', rarity: 'rare', power: 14, goldCost: 1600,
     upgradesFrom: { itemType: 'helm', rarity: 'uncommon' },
-    materials: [{ type: 'fire_crystal', quality: 'uncommon', quantity: 3 }, { type: 'ancient_rune', quality: 'uncommon', quantity: 2 }],
+    materials: [{ type: 'fire_crystal', quantity: 4 }, { type: 'ancient_rune', quantity: 3 }],
   },
   {
     id: 'demon_helm', itemType: 'helm', name: 'Demon Helm', rarity: 'epic', power: 24, goldCost: 5000,
     upgradesFrom: { itemType: 'helm', rarity: 'rare' },
-    materials: [{ type: 'ancient_rune', quality: 'rare', quantity: 4 }, { type: 'fire_crystal', quality: 'rare', quantity: 2 }],
+    materials: [{ type: 'ancient_rune', quantity: 5 }, { type: 'fire_crystal', quantity: 3 }],
   },
 
   // ── ARMOR ───────────────────────────────────────────────────────────────────
   {
     id: 'leather_armor', itemType: 'armor', name: 'Leather Armor', rarity: 'common', power: 4, goldCost: 300,
-    materials: [{ type: 'bone_shard', quality: 'common', quantity: 3 }, { type: 'iron_ore', quality: 'common', quantity: 2 }],
+    materials: [{ type: 'bone_shard', quantity: 3 }, { type: 'iron_ore', quantity: 2 }],
   },
   {
     id: 'chain_armor', itemType: 'armor', name: 'Chain Armor', rarity: 'uncommon', power: 10, goldCost: 900,
     upgradesFrom: { itemType: 'armor', rarity: 'common' },
-    materials: [{ type: 'iron_ore', quality: 'common', quantity: 4 }, { type: 'bone_shard', quality: 'common', quantity: 3 }],
+    materials: [{ type: 'iron_ore', quantity: 4 }, { type: 'bone_shard', quantity: 3 }],
   },
   {
     id: 'dragonscale_armor', itemType: 'armor', name: 'Dragonscale Armor', rarity: 'rare', power: 20, goldCost: 2500,
     upgradesFrom: { itemType: 'armor', rarity: 'uncommon' },
-    materials: [{ type: 'dragon_scale', quality: 'uncommon', quantity: 4 }, { type: 'iron_ore', quality: 'uncommon', quantity: 2 }],
+    materials: [{ type: 'dragon_scale', quantity: 5 }, { type: 'iron_ore', quantity: 3 }],
   },
   {
     id: 'infernal_plate', itemType: 'armor', name: 'Infernal Plate', rarity: 'epic', power: 34, goldCost: 7000,
     upgradesFrom: { itemType: 'armor', rarity: 'rare' },
-    materials: [{ type: 'dragon_scale', quality: 'rare', quantity: 4 }, { type: 'fire_crystal', quality: 'rare', quantity: 3 }],
+    materials: [{ type: 'dragon_scale', quantity: 5 }, { type: 'fire_crystal', quantity: 4 }],
   },
 
   // ── RING ────────────────────────────────────────────────────────────────────
   {
     id: 'iron_ring', itemType: 'ring', name: 'Iron Ring', rarity: 'common', power: 2, goldCost: 150,
-    materials: [{ type: 'iron_ore', quality: 'common', quantity: 2 }, { type: 'ancient_rune', quality: 'common', quantity: 1 }],
+    materials: [{ type: 'iron_ore', quantity: 2 }, { type: 'ancient_rune', quantity: 1 }],
   },
   {
     id: 'flame_ring', itemType: 'ring', name: 'Flame Ring', rarity: 'uncommon', power: 7, goldCost: 500,
     upgradesFrom: { itemType: 'ring', rarity: 'common' },
-    materials: [{ type: 'fire_crystal', quality: 'common', quantity: 3 }, { type: 'ancient_rune', quality: 'common', quantity: 1 }],
+    materials: [{ type: 'fire_crystal', quantity: 3 }, { type: 'ancient_rune', quantity: 1 }],
   },
   {
     id: 'dragons_seal', itemType: 'ring', name: "Dragon's Seal", rarity: 'rare', power: 13, goldCost: 1400,
     upgradesFrom: { itemType: 'ring', rarity: 'uncommon' },
-    materials: [{ type: 'fire_crystal', quality: 'uncommon', quantity: 3 }, { type: 'ancient_rune', quality: 'uncommon', quantity: 2 }],
+    materials: [{ type: 'fire_crystal', quantity: 4 }, { type: 'ancient_rune', quantity: 3 }],
   },
   {
     id: 'ancient_sigil', itemType: 'ring', name: 'Ancient Sigil', rarity: 'epic', power: 22, goldCost: 4500,
     upgradesFrom: { itemType: 'ring', rarity: 'rare' },
-    materials: [{ type: 'ancient_rune', quality: 'rare', quantity: 3 }, { type: 'fire_crystal', quality: 'rare', quantity: 2 }],
+    materials: [{ type: 'ancient_rune', quantity: 4 }, { type: 'fire_crystal', quantity: 3 }],
   },
 ];
 
@@ -400,11 +398,10 @@ function calcExpeditionYield(
   const goldEarned = dragonsSlain * (50 + level * 8);
 
   const allTypes: MaterialType[] = ['dragon_scale', 'fire_crystal', 'iron_ore', 'bone_shard', 'ancient_rune'];
-  const quality: MaterialQuality = hours >= 12 ? 'rare' : hours >= 8 ? 'uncommon' : 'common';
-  // All 5 types always drop — qty: 4h=1, 8h=1-2, 12h=1-3
-  const maxQty = hours === 4 ? 1 : hours === 8 ? 2 : 3;
+  // All 5 types always drop — qty: 4h=1-2, 8h=1-3, 12h=2-4
+  const maxQty = hours === 4 ? 2 : hours === 8 ? 3 : 4;
   const materials: Material[] = allTypes.map(type => ({
-    type, quality, quantity: Math.floor(Math.random() * maxQty) + 1,
+    type, quantity: Math.floor(Math.random() * maxQty) + 1,
   }));
 
   return { dragonsSlain, goldEarned, materials };
@@ -450,23 +447,22 @@ function generateMerchantDeals(level: number, dateStr: string): MerchantDeal[] {
   const rng = () => { seed = (seed * 1664525 + 1013904223) & 0xffffffff; return Math.abs(seed) / 0x7fffffff; };
   const allMats: MaterialType[] = ['dragon_scale','fire_crystal','iron_ore','bone_shard','ancient_rune'];
   const pickMat = () => allMats[Math.floor(rng() * allMats.length)];
-  const quals: MaterialQuality[] = ['common', 'uncommon', 'rare'];
   const goldBase = Math.max(500, level * 200);
   return [
     {
       id: 'deal_bulk_mats', icon: '🎒', title: 'Bulk Material Sack',
-      desc: '6× common materials of two types',
+      desc: '8× of two random material types',
       goldCost: Math.floor(goldBase * 0.8), purchased: false, type: 'materials',
       payload: { materials: [
-        { type: pickMat(), quality: 'common', quantity: 6 },
-        { type: pickMat(), quality: 'common', quantity: 6 },
+        { type: pickMat(), quantity: 8 },
+        { type: pickMat(), quantity: 8 },
       ]},
     },
     {
-      id: 'deal_rare_mat', icon: '💎', title: 'Rare Material Cache',
-      desc: `3× rare quality ${pickMat().replace('_',' ')}`,
+      id: 'deal_rare_mat', icon: '💎', title: 'Material Cache',
+      desc: `5× ${pickMat().replace(/_/g,' ')}`,
       goldCost: Math.floor(goldBase * 1.5), purchased: false, type: 'materials',
-      payload: { materials: [{ type: pickMat(), quality: 'rare', quantity: 3 }] },
+      payload: { materials: [{ type: pickMat(), quantity: 5 }] },
     },
     {
       id: 'deal_uncommon_egg', icon: '🟢', title: 'Dragon Egg (Uncommon)',
@@ -476,9 +472,9 @@ function generateMerchantDeals(level: number, dateStr: string): MerchantDeal[] {
     },
     {
       id: 'deal_mixed_bundle', icon: '🛍️', title: 'Merchant Bundle',
-      desc: '2× each of all 5 material types (uncommon quality)',
+      desc: '3× each of all 5 material types',
       goldCost: Math.floor(goldBase * 2.5), purchased: false, type: 'materials',
-      payload: { materials: allMats.map(t => ({ type: t, quality: 'uncommon' as MaterialQuality, quantity: 2 })) },
+      payload: { materials: allMats.map(t => ({ type: t, quantity: 3 })) },
     },
   ];
 }
@@ -927,7 +923,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       );
       const newMaterials = [...prev.materials];
       for (const drop of materials) {
-        const existing = newMaterials.find(m => m.type === drop.type && m.quality === drop.quality);
+        const existing = newMaterials.find(m => m.type === drop.type);
         if (existing) existing.quantity += drop.quantity;
         else newMaterials.push({ ...drop });
       }
@@ -959,13 +955,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   }, [addXp]);
 
   const addMaterials = useCallback(
-    (drops: { type: MaterialType; quality: MaterialQuality; quantity: number }[]) => {
+    (drops: { type: MaterialType; quantity: number }[]) => {
       setState((prev) => {
         const newMaterials = [...prev.materials];
         for (const drop of drops) {
-          const existing = newMaterials.find(
-            m => m.type === drop.type && m.quality === drop.quality,
-          );
+          const existing = newMaterials.find(m => m.type === drop.type);
           if (existing) existing.quantity += drop.quantity;
           else newMaterials.push({ ...drop });
         }
@@ -1028,7 +1022,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       if (deal.type === 'materials' && deal.payload.materials) {
         const newMats = [...newState.materials];
         for (const drop of deal.payload.materials) {
-          const ex = newMats.find(m => m.type === drop.type && m.quality === drop.quality);
+          const ex = newMats.find(m => m.type === drop.type);
           if (ex) ex.quantity += drop.quantity;
           else newMats.push({ ...drop });
         }
@@ -1082,7 +1076,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
       // Check materials
       for (const req of recipe.materials) {
-        const held = prev.materials.find(m => m.type === req.type && m.quality === req.quality);
+        const held = prev.materials.find(m => m.type === req.type);
         if (!held || held.quantity < req.quantity) return prev;
       }
 
@@ -1110,7 +1104,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       // Deduct materials
       const newMaterials = prev.materials
         .map(m => {
-          const req = recipe.materials.find(r => r.type === m.type && r.quality === m.quality);
+          const req = recipe.materials.find(r => r.type === m.type);
           return req ? { ...m, quantity: m.quantity - req.quantity } : m;
         })
         .filter(m => m.quantity > 0);

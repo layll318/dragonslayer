@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
       eggRarity: premiumType === 'rare_egg' ? 'rare' : premiumType === 'legendary_egg' ? 'legendary' : null,
       // For rare_bundle: material credits
       materialCredits: premiumType === 'rare_bundle'
-        ? ALL_TYPES.map(t => ({ type: t, quality: 'rare', quantity: 3 }))
+        ? ALL_TYPES.map(t => ({ type: t, quantity: 5 }))
         : null,
     });
   } catch (err: unknown) {

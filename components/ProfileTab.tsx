@@ -1,10 +1,34 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useGame } from '@/contexts/GameContext';
 import { formatNumber } from '@/utils/format';
 import { useTelegramWebApp } from '@/hooks/useTelegramWebApp';
 import XamanConnect from '@/components/XamanConnect';
+import { RefreshCw } from 'lucide-react';
+
+interface LeaderboardEntry {
+  player_id: number;
+  name: string;
+  level: number;
+  total_taps: number;
+  total_gold: number;
+  rank: number;
+}
+
+function getRankStyle(rank: number) {
+  if (rank === 1) return { color: '#f0c040', bg: 'rgba(240,192,64,0.06)', border: 'rgba(240,192,64,0.2)', glow: '0 0 12px rgba(240,192,64,0.08)' };
+  if (rank === 2) return { color: '#c0c0c0', bg: 'rgba(192,192,192,0.04)', border: 'rgba(192,192,192,0.15)', glow: '0 0 8px rgba(192,192,192,0.06)' };
+  if (rank === 3) return { color: '#cd7f32', bg: 'rgba(205,127,50,0.04)', border: 'rgba(205,127,50,0.15)', glow: '0 0 8px rgba(205,127,50,0.06)' };
+  return { color: '#5a4a3a', bg: 'transparent', border: 'rgba(100,80,40,0.12)', glow: 'none' };
+}
+
+function getRankIcon(rank: number) {
+  if (rank === 1) return '🥇';
+  if (rank === 2) return '🥈';
+  if (rank === 3) return '🥉';
+  return `#${rank}`;
+}
 
 const TIER_NAMES = ['Peasant', 'Squire', 'Knight', 'Dragon Knight', 'Dragonslayer'];
 const TIER_ICONS = ['🧑‍🌾', '🛡️', '⚔️', '🐲', '👑'];
@@ -13,6 +37,27 @@ const TIER_LEVELS = [1, 10, 25, 50, 80];
 export default function ProfileTab() {
   const { state, goldPerHour, goldPerTap, getCharacterTier, connectWallet, disconnectWallet } = useGame();
   const { user, isTWA } = useTelegramWebApp();
+
+  const [lbEntries, setLbEntries] = useState<LeaderboardEntry[]>([]);
+  const [lbOwnRank, setLbOwnRank] = useState<number | null>(null);
+  const [lbLoading, setLbLoading] = useState(true);
+  const [lbError, setLbError] = useState<string | null>(null);
+  const [lbLastRefresh, setLbLastRefresh] = useState(0);
+
+  const loadLeaderboard = useCallback(async () => {
+    setLbLoading(true); setLbError(null);
+    try {
+      const params = new URLSearchParams({ limit: '20' });
+      if (state.playerId) params.set('player_id', String(state.playerId));
+      const res = await fetch(`/frontend-api/leaderboard?${params}`);
+      const data = await res.json();
+      if (data.success) { setLbEntries(data.entries ?? []); setLbOwnRank(data.own_rank ?? null); }
+      else setLbError(data.error || 'Failed to load');
+    } catch { setLbError('Could not reach server'); }
+    finally { setLbLoading(false); setLbLastRefresh(Date.now()); }
+  }, [state.playerId]);
+
+  useEffect(() => { loadLeaderboard(); }, [loadLeaderboard]);
   const tier = getCharacterTier();
   const timePlayed = Math.floor((Date.now() - state.createdAt) / 1000);
   const hours = Math.floor(timePlayed / 3600);
@@ -177,6 +222,73 @@ export default function ProfileTab() {
             })}
           </div>
         </div>
+        {/* ═══ LEADERBOARD ═══ */}
+        <div className="dragon-panel p-3">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-cinzel text-[#f0c040] font-bold text-xs uppercase tracking-widest">Top Dragonslayers</h3>
+            <div className="flex items-center gap-2">
+              {lbOwnRank !== null && (
+                <span className="text-[9px] font-bold text-[#d4a017]">Your rank: #{lbOwnRank}</span>
+              )}
+              <button
+                onClick={Date.now() - lbLastRefresh > 15000 ? loadLeaderboard : undefined}
+                className="p-1 rounded-lg border border-[rgba(212,160,23,0.15)] transition-opacity"
+                style={{ opacity: Date.now() - lbLastRefresh > 15000 ? 1 : 0.4 }}
+              >
+                <RefreshCw className="w-3 h-3 text-[#6b5a3a]" />
+              </button>
+            </div>
+          </div>
+
+          {lbLoading && (
+            <div className="space-y-2">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="h-10 rounded-lg animate-pulse" style={{ background: 'rgba(255,255,255,0.03)', opacity: 1 - i * 0.15 }} />
+              ))}
+            </div>
+          )}
+          {!lbLoading && lbError && (
+            <div className="py-6 text-center">
+              <p className="text-[#6b5a3a] text-sm">{lbError}</p>
+              <button onClick={loadLeaderboard} className="mt-2 text-xs text-[#f0c040] underline">Try again</button>
+            </div>
+          )}
+          {!lbLoading && !lbError && lbEntries.length === 0 && (
+            <div className="py-6 text-center">
+              <p className="text-4xl mb-2">🐉</p>
+              <p className="font-cinzel text-[#f0c040] font-bold text-sm">No heroes yet</p>
+            </div>
+          )}
+          {!lbLoading && !lbError && lbEntries.map((player) => {
+            const rs = getRankStyle(player.rank);
+            const isMe = state.playerId !== null && player.player_id === state.playerId;
+            return (
+              <div
+                key={player.player_id}
+                className="flex items-center gap-2 px-2.5 py-2 rounded-lg mb-1 overflow-hidden"
+                style={{
+                  background: isMe ? 'linear-gradient(90deg, rgba(212,160,23,0.1) 0%, transparent 100%)' : `linear-gradient(90deg, ${rs.bg} 0%, transparent 100%)`,
+                  border: isMe ? '1px solid rgba(212,160,23,0.35)' : `1px solid ${rs.border}`,
+                }}
+              >
+                <div className="w-7 text-center font-bold text-xs flex-shrink-0" style={{ color: isMe ? '#f0c040' : rs.color }}>
+                  {getRankIcon(player.rank)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className="font-bold text-xs block truncate" style={{ color: isMe ? '#f0c040' : player.rank <= 3 ? rs.color : '#d8c8a8' }}>
+                    {player.name}{isMe && <span className="ml-1 text-[8px] opacity-70">(you)</span>}
+                  </span>
+                </div>
+                <span className="text-[8px] text-[#5a4a3a] font-bold flex-shrink-0">Lv.{player.level}</span>
+                <div className="flex items-center gap-0.5 flex-shrink-0">
+                  <span className="coin-icon" style={{ width: 10, height: 10 }} />
+                  <span className="font-cinzel text-[#f0c040] font-bold text-[10px] tabular-nums">{formatNumber(player.total_gold)}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
       </div>
     </div>
   );
