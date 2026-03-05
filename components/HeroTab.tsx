@@ -40,6 +40,31 @@ function fmtMs(ms: number) {
   return `${m.toString().padStart(2, '0')}m ${sec.toString().padStart(2, '0')}s`;
 }
 
+interface NextGoal { icon: string; text: string; sub: string; }
+
+function getNextGoal(state: ReturnType<typeof useGame>['state'], goldPerHour: number): NextGoal | null {
+  const hasBuildings = state.buildings.some(b => b.owned > 0);
+  const hasExpedition = state.totalExpeditions > 0 || !!state.activeExpedition;
+  const hasMaterials = state.materials.length > 0;
+  const hasGear = Object.values(state.equipment).some(Boolean);
+  const hasFullGear = Object.values(state.equipment).filter(Boolean).length >= 5;
+  const canCraftMore = !hasFullGear && hasMaterials;
+
+  if (!hasBuildings)
+    return { icon: '🏰', text: 'Buy your first building', sub: 'Forge tab → Barracks gives +200 gold/hr passive income' };
+  if (!hasExpedition)
+    return { icon: '🗺️', text: 'Send your first Expedition', sub: 'Expedition tab → earns crafting materials every few hours' };
+  if (hasMaterials && !hasGear)
+    return { icon: '⚔️', text: 'Craft your first gear piece', sub: 'Expedition tab → Craft → forge Iron items to boost your tapping' };
+  if (canCraftMore)
+    return { icon: '🔨', text: 'Upgrade your gear', sub: 'You have materials ready — Expedition → Craft to forge a new piece' };
+  if (!state.activeExpedition && hasGear)
+    return { icon: '🗺️', text: 'Send a new Expedition', sub: `Farm more materials to upgrade gear beyond current tier` };
+  if (state.activeExpedition)
+    return null; // expedition running — no nagging
+  return null;
+}
+
 export default function HeroTab() {
   const { state, tap, goldPerTap, goldPerHour, gearMultiplier, getCharacterTier } = useGame();
   const { hapticFeedback, isTWA } = useTelegramWebApp();
@@ -280,6 +305,31 @@ export default function HeroTab() {
 
         {/* ══════════════ DAILY QUESTS ══════════════ */}
         <QuestBanner />
+
+        {/* ══════════════ NEXT GOAL BANNER ══════════════ */}
+        {(() => {
+          const goal = getNextGoal(state, goldPerHour);
+          if (!goal) return null;
+          return (
+            <div
+              className="flex items-start gap-3 px-3 py-2.5 rounded-xl"
+              style={{
+                background: 'linear-gradient(135deg, rgba(212,160,23,0.08) 0%, rgba(255,180,30,0.04) 100%)',
+                border: '1px solid rgba(212,160,23,0.25)',
+                boxShadow: '0 0 12px rgba(212,160,23,0.06)',
+              }}
+            >
+              <span className="text-xl flex-shrink-0 mt-0.5">{goal.icon}</span>
+              <div className="flex-1 min-w-0">
+                <p className="font-cinzel font-bold text-[#f0c040] text-[11px] tracking-wide">
+                  NEXT: {goal.text}
+                </p>
+                <p className="text-[#6b5a3a] text-[9px] mt-0.5 leading-snug">{goal.sub}</p>
+              </div>
+              <span className="text-[#d4a017] text-sm flex-shrink-0 mt-1">›</span>
+            </div>
+          );
+        })()}
 
         {/* ══════════════ GEAR POWER BAR ══════════════ */}
         <div className="dragon-panel px-3 py-2.5">
