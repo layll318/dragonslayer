@@ -26,9 +26,6 @@ function isTelegramWebApp() {
   return typeof window !== 'undefined' && !!(window as any).Telegram?.WebApp?.initData;
 }
 
-function nativeDeeplink(uuid: string) {
-  return `xumm://sign/${uuid}`;
-}
 
 export default function XamanConnect({ onConnected }: XamanConnectProps) {
   const [phase, setPhase] = useState<Phase>('idle');
@@ -226,7 +223,18 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
   // ── 'waiting' phase ──
   const mobile = isMobileDevice();
   const inTelegram = isTelegramWebApp();
-  const nativeLink = uuid ? nativeDeeplink(uuid) : null;
+
+  // On mobile: full-page redirect to the https:// web URL so the OS can open Xaman
+  // via App Link (Android) or Universal Link (iOS), and the return_url fires in the
+  // same browser session. On desktop: open in new tab.
+  const handleOpenXaman = () => {
+    if (!deeplink) return;
+    if (mobile) {
+      window.location.href = deeplink;
+    } else {
+      window.open(deeplink, '_blank', 'noopener,noreferrer');
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -254,13 +262,11 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
           </div>
         </div>
 
-        {/* ── Primary action buttons (always shown) ── */}
+        {/* ── Primary CTA ── */}
         <div className="flex flex-col gap-2 mb-4">
-
-          {/* 1. Open native app — works on iOS, Android, desktop Xaman */}
-          {nativeLink && (
-            <a
-              href={nativeLink}
+          {deeplink && (
+            <button
+              onClick={handleOpenXaman}
               className="flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl font-bold text-white text-sm
                 bg-gradient-to-r from-orange-500 to-orange-600 active:scale-95 transition-all shadow-lg"
             >
@@ -271,20 +277,18 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
                 onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
               />
               Open Xaman App
-            </a>
+            </button>
           )}
 
-          {/* 2. Open web fallback — works if app not installed or on Telegram */}
-          {deeplink && (
-            <a
-              href={deeplink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-xl font-bold text-[#d4a017] text-sm
-                border border-[rgba(212,160,23,0.3)] bg-[rgba(212,160,23,0.06)] active:scale-95 transition-all"
+          {/* Manual check — safety net for users who already approved */}
+          {uuid && (
+            <button
+              onClick={() => uuid && doPoll(uuid)}
+              className="w-full py-2 rounded-xl text-xs font-bold border active:scale-95 transition-all"
+              style={{ border: '1px solid rgba(212,160,23,0.3)', color: '#d4a017', background: 'rgba(212,160,23,0.06)' }}
             >
-              Open in Browser
-            </a>
+              Already approved in Xaman? Tap to check
+            </button>
           )}
         </div>
 
@@ -295,7 +299,7 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
               onClick={() => setShowQr(v => !v)}
               className="w-full text-xs text-[#6b5a3a] underline text-center mb-2"
             >
-              {showQr ? 'Hide QR code' : 'Or scan QR from another device'}
+              {showQr ? 'Hide QR code' : 'Scan QR from another device'}
             </button>
           )}
           {showQr && (
@@ -309,7 +313,6 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
           )}
         </div>
 
-        {/* Telegram note */}
         {inTelegram && (
           <p className="text-[9px] text-[#4a3a2a] text-center mb-2">
             Tap "Open Xaman App", approve in Xaman, then return here.

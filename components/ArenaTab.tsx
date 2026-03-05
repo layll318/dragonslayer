@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { useGame, calcDefensePower, calcArmyPower } from '@/contexts/GameContext';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useGame, calcDefensePower } from '@/contexts/GameContext';
 import { formatNumber } from '@/utils/format';
 
 const API_URL = typeof process !== 'undefined' ? (process.env.NEXT_PUBLIC_API_URL ?? '') : '';
@@ -54,8 +54,23 @@ function winChance(myAtk: number, formation: Formation, theirDef: number): numbe
   return Math.round(Math.min(95, Math.max(5, (eff / (eff + theirDef)) * 100)));
 }
 
+function makeBotOpponent(armyPower: number, level: number): Opponent {
+  const defPwr = Math.max(1, Math.round(armyPower * (0.8 + Math.random() * 0.5)));
+  const atkPwr = Math.max(1, Math.round(armyPower * (0.7 + Math.random() * 0.6)));
+  const gold = level * 500 + Math.floor(Math.random() * level * 300);
+  return {
+    player_id: 0,
+    name: 'Shadow Raider 🤖',
+    level: Math.max(1, level + Math.floor(Math.random() * 3) - 1),
+    attack_power: atkPwr,
+    defense_power: defPwr,
+    idle_gold: gold,
+    buildings: [],
+  };
+}
+
 export default function ArenaTab() {
-  const { state, armyPower } = useGame();
+  const { state, armyPower, recordBotBattle } = useGame();
   const defPower = calcDefensePower(state.buildings);
 
   const [opponents, setOpponents] = useState<Opponent[]>([]);
@@ -68,6 +83,8 @@ export default function ArenaTab() {
   const [error, setError] = useState('');
 
   const attacksLeft = MAX_ATTACKS - (state.arenaAttacksToday ?? 0);
+
+  const botOpponent = useMemo(() => makeBotOpponent(armyPower, state.level), [armyPower, state.level]);
 
   const loadOpponents = useCallback(async () => {
     if (!state.playerId) return;
@@ -88,7 +105,50 @@ export default function ArenaTab() {
   useEffect(() => { loadOpponents(); }, [loadOpponents]);
 
   const handleAttack = async () => {
-    if (!selected || !state.playerId || attacking || attacksLeft <= 0) return;
+    if (!selected || attacking || attacksLeft <= 0) return;
+
+    // ── Bot battle (client-side) ────────────────────────────────────────────
+    if (selected.player_id === 0) {
+      setAttacking(true);
+      setRoundIdx(0);
+      setResult(null);
+      const fm = FORMATION_INFO[formation];
+      const rand = 0.85 + Math.random() * 0.30;
+      const effAtk = Math.round(armyPower * fm.atkMod * rand);
+      const effDef = Math.round(selected.defense_power * fm.defMod * (0.85 + Math.random() * 0.30));
+      const win = effAtk > effDef;
+      const goldStolen = win ? Math.floor(selected.idle_gold * 0.04) : 0;
+      for (let i = 0; i < 3; i++) {
+        setRoundIdx(i);
+        await new Promise(r => setTimeout(r, 1100));
+      }
+      const rounds = win
+        ? [
+            { label: 'Round 1', desc: 'You charge the Shadow Raider — they falter!' },
+            { label: 'Round 2', desc: 'Your forces overwhelm the bot defenses.' },
+            { label: 'Round 3', desc: 'VICTORY — the Shadow Raider retreats!' },
+          ]
+        : [
+            { label: 'Round 1', desc: 'The Shadow Raider holds the line.' },
+            { label: 'Round 2', desc: 'Bot defenses push back hard.' },
+            { label: 'Round 3', desc: 'DEFEAT — regroup and try again.' },
+          ];
+      recordBotBattle(win, goldStolen);
+      setResult({
+        win,
+        gold_stolen: goldStolen,
+        effective_attack: effAtk,
+        effective_defense: effDef,
+        rounds,
+        attacks_remaining: attacksLeft - 1,
+        arena_points: (state.arenaPoints ?? 0) + (win ? 5 : 1),
+      });
+      setAttacking(false);
+      return;
+    }
+
+    // ── Real PvP battle (server) ─────────────────────────────────────────────
+    if (!state.playerId) return;
     setAttacking(true);
     setRoundIdx(0);
     setResult(null);
@@ -288,32 +348,30 @@ export default function ArenaTab() {
             </button>
           </div>
           {loading && (
-            <div className="text-center py-4 text-[#6b5a3a] text-xs">Loading opponents…</div>
-          )}
-          {!loading && opponents.length === 0 && (
-            <div className="text-center py-4 text-[#6b5a3a] text-xs">No opponents available yet — check back soon!</div>
+            <div className="text-center py-2 text-[#6b5a3a] text-xs">Loading real players…</div>
           )}
           <div className="flex flex-col gap-1.5">
-            {opponents.map(opp => {
+            {[botOpponent, ...opponents].map(opp => {
               const isSelected = selected?.player_id === opp.player_id;
               const ch = winChance(armyPower, formation, opp.defense_power);
+              const isBot = opp.player_id === 0;
               return (
                 <button
-                  key={opp.player_id}
+                  key={isBot ? 'bot' : opp.player_id}
                   onClick={() => setSelected(isSelected ? null : opp)}
                   className="flex items-center gap-2 px-2 py-2 rounded-lg text-left transition-all"
                   style={{
-                    background: isSelected ? 'rgba(212,160,23,0.12)' : 'rgba(255,255,255,0.02)',
-                    border: isSelected ? '1px solid rgba(212,160,23,0.4)' : '1px solid rgba(255,255,255,0.06)',
+                    background: isSelected ? 'rgba(212,160,23,0.12)' : isBot ? 'rgba(124,58,237,0.06)' : 'rgba(255,255,255,0.02)',
+                    border: isSelected ? '1px solid rgba(212,160,23,0.4)' : isBot ? '1px solid rgba(124,58,237,0.25)' : '1px solid rgba(255,255,255,0.06)',
                   }}
                 >
                   <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm flex-shrink-0"
-                    style={{ background: 'rgba(212,160,23,0.08)', border: '1px solid rgba(212,160,23,0.2)' }}>
-                    Lv{opp.level}
+                    style={{ background: isBot ? 'rgba(124,58,237,0.15)' : 'rgba(212,160,23,0.08)', border: `1px solid ${isBot ? 'rgba(124,58,237,0.3)' : 'rgba(212,160,23,0.2)'}` }}>
+                    {isBot ? '🤖' : `Lv${opp.level}`}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-[#e8d8a8] text-[10px] font-bold truncate">{opp.name}</p>
-                    <p className="text-[8px] text-[#6b5a3a]">⚔️{opp.attack_power} · 🛡️{opp.defense_power}</p>
+                    <p className="text-[10px] font-bold truncate" style={{ color: isBot ? '#c084fc' : '#e8d8a8' }}>{opp.name}</p>
+                    <p className="text-[8px] text-[#6b5a3a]">⚔️{opp.attack_power} · 🛡️{opp.defense_power}{isBot ? ' · AI' : ''}</p>
                   </div>
                   <div className="text-right flex-shrink-0">
                     <p className="text-[9px] font-bold"

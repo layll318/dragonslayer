@@ -129,6 +129,7 @@ export default function ExpeditionTab() {
   const [walletCopied, setWalletCopied] = React.useState(false);
   const [showAd, setShowAd] = React.useState(false);
   const [adWatched, setAdWatched] = React.useState(false);
+  const [adUsed, setAdUsed] = React.useState(false);
   const [adDuration, setAdDuration] = React.useState('');
   const [eggNowMs, setEggNowMs] = React.useState(Date.now());
   const [premiumHash, setPremiumHash] = React.useState('');
@@ -265,9 +266,9 @@ export default function ExpeditionTab() {
     return () => clearInterval(id);
   }, [state.activeExpedition]);
 
-  // Reset claimed flag when new expedition starts
+  // Reset claimed and adUsed flags when new expedition starts
   useEffect(() => {
-    if (state.activeExpedition) setClaimed(false);
+    if (state.activeExpedition) { setClaimed(false); setAdUsed(false); }
   }, [state.activeExpedition]);
 
   const exp = state.activeExpedition;
@@ -356,7 +357,9 @@ export default function ExpeditionTab() {
                 const saveLabel = halfMins >= 60
                   ? `${(halfMins / 60).toFixed(1).replace('.0','')}h`
                   : `${halfMins}m`;
-                return (
+                return adUsed ? (
+                  <p className="mt-1 text-center text-[10px] text-[#4ade80] font-bold">✅ Ad boost used — expedition sped up!</p>
+                ) : (
                   <button
                     onClick={() => { setAdWatched(false); setShowAd(true); }}
                     className="mt-1 w-full py-2 rounded-xl text-[11px] font-bold tracking-wide"
@@ -753,15 +756,15 @@ export default function ExpeditionTab() {
           </div>
         ) : (
           <div className="dragon-panel px-3 py-2.5">
-            <div className="flex flex-wrap gap-2">
+            <div className="grid grid-cols-2 gap-1.5">
               {state.materials.map((m, i) => (
                 <div
                   key={i}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg"
-                  style={{ background: 'rgba(212,160,23,0.08)', border: '1px solid rgba(212,160,23,0.2)' }}
+                  className="flex items-center justify-between px-2.5 py-1.5 rounded-lg"
+                  style={{ background: 'rgba(212,160,23,0.07)', border: '1px solid rgba(212,160,23,0.18)' }}
                 >
-                  <span className="text-[10px]">{MATERIAL_LABELS[m.type]}</span>
-                  <span className="font-cinzel font-bold text-[#f0c040] text-sm">×{m.quantity}</span>
+                  <span className="text-[10px] text-[#c8b87a]">{MATERIAL_LABELS[m.type]}</span>
+                  <span className="font-cinzel font-bold text-[#f0c040] text-sm ml-2">×{m.quantity}</span>
                 </div>
               ))}
             </div>
@@ -1277,8 +1280,11 @@ export default function ExpeditionTab() {
             playsInline
             className="w-full max-h-[75vh] object-contain"
             onEnded={() => {
+              if (!adUsed) {
+                speedUpExpedition();
+                setAdUsed(true);
+              }
               setAdWatched(true);
-              speedUpExpedition();
             }}
             style={{ pointerEvents: 'none' }}
           />

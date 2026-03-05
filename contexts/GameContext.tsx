@@ -200,6 +200,7 @@ interface GameContextType {
   getBuildingCost: (building: Building) => number;
   canAfford: (cost: number) => boolean;
   getCharacterTier: () => number;
+  recordBotBattle: (win: boolean, goldStolen: number) => void;
   CRAFTING_RECIPES: CraftingRecipe[];
   ITEM_UNLOCK_LEVELS: Record<ItemType, number>;
 }
@@ -382,6 +383,14 @@ export function calcDefensePower(buildings: Building[]): number {
 export function calcGearBonus(equipment: EquipmentSlots): number {
   const equipped = Object.values(equipment).filter(Boolean) as InventoryItem[];
   return equipped.reduce((sum, item) => sum + RARITY_SCORES[item.rarity], 0);
+}
+
+function mergeMaterialsByType(mats: Material[]): Material[] {
+  const map: Record<string, number> = {};
+  for (const m of mats) {
+    map[m.type] = (map[m.type] ?? 0) + m.quantity;
+  }
+  return Object.entries(map).map(([type, quantity]) => ({ type: type as MaterialType, quantity }));
 }
 
 function calcExpeditionYield(
@@ -639,7 +648,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         buildings: migratedBuildings,
         equipment: savedEquipment,
         inventory: saved.inventory ?? [],
-        materials: saved.materials ?? [],
+        materials: mergeMaterialsByType(saved.materials ?? []),
         activeExpedition: saved.activeExpedition ?? null,
         lastExpeditionResult: null,
         totalDragonsSlain: saved.totalDragonsSlain ?? 0,
@@ -1195,6 +1204,22 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const recordBotBattle = useCallback((win: boolean, goldStolen: number) => {
+    setState(prev => {
+      const today = new Date().toISOString().split('T')[0];
+      const lastReset = prev.arenaLastReset;
+      const attacks = lastReset === today ? (prev.arenaAttacksToday ?? 0) : 0;
+      return {
+        ...prev,
+        gold: prev.gold + goldStolen,
+        totalGoldEarned: prev.totalGoldEarned + goldStolen,
+        arenaAttacksToday: attacks + 1,
+        arenaLastReset: today,
+        arenaPoints: (prev.arenaPoints ?? 0) + (win ? 5 : 1),
+      };
+    });
+  }, []);
+
   const API_URL = typeof process !== 'undefined' ? (process.env.NEXT_PUBLIC_API_URL ?? '') : '';
 
   const connectWallet = useCallback(async (address: string) => {
@@ -1270,6 +1295,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         addMaterials,
         connectWallet,
         disconnectWallet,
+        recordBotBattle,
         goldPerTap,
         goldPerHour,
         gearMultiplier,
