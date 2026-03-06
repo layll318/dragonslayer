@@ -42,6 +42,7 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
   // Refs so interval callbacks always have fresh values without recreating
   const pollRef      = useRef<ReturnType<typeof setInterval> | null>(null);
   const timeoutRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wsRef        = useRef<WebSocket | null>(null);
   const uuidRef      = useRef<string | null>(null);
   const onConnectedRef = useRef(onConnected);
 
@@ -51,6 +52,7 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
   const clearTimers = useCallback(() => {
     if (pollRef.current)    { clearInterval(pollRef.current);   pollRef.current    = null; }
     if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
+    if (wsRef.current)      { wsRef.current.close();            wsRef.current       = null; }
   }, []);
 
   useEffect(() => () => clearTimers(), [clearTimers]);
@@ -218,7 +220,7 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
       const data = await res.json();
       if (!res.ok || !data.uuid) throw new Error(data.error || 'Failed to create sign-in request');
 
-      const { uuid: newUuid, qr_png, deeplink: dl } = data;
+      const { uuid: newUuid, qr_png, deeplink: dl, ws_url } = data;
       uuidRef.current = newUuid;
       localStorage.setItem(PENDING_KEY, newUuid);
       if (qr_png) localStorage.setItem(PENDING_QR_KEY, qr_png);
@@ -230,6 +232,36 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
       setShowQr(!isMobileDevice()); // auto-show QR on desktop, hidden on mobile
       setPhase('waiting');
       startPolling(newUuid);
+
+      // ── Xaman real-time WebSocket — fires the instant user approves ──
+      // This is the primary detection path; polling is the fallback.
+      if (ws_url && typeof WebSocket !== 'undefined') {
+        try {
+          if (wsRef.current) wsRef.current.close();
+          const ws = new WebSocket(ws_url);
+          wsRef.current = ws;
+          ws.onmessage = (ev) => {
+            try {
+              const msg = JSON.parse(ev.data);
+              setDebugInfo(prev => `WS: ${JSON.stringify(msg).slice(0,80)} | ${prev}`);
+              // Xaman pushes {signed:true} or {expired:true} etc.
+              if (msg.signed === true) {
+                // Signed! Poll immediately to get account address.
+                doPoll(newUuid);
+                // Then rapid burst in case first poll is too early
+                startRapidBurst(newUuid);
+              } else if (msg.expired === true) {
+                clearTimers();
+                clearPending();
+                setPhase('error');
+                setErrorMsg('Request expired — please try again.');
+              }
+            } catch { /* non-JSON message, ignore */ }
+          };
+          ws.onerror = () => setDebugInfo(prev => `WS error | ${prev}`);
+          ws.onclose = () => { if (wsRef.current === ws) wsRef.current = null; };
+        } catch { /* WebSocket not available */ }
+      }
     } catch (err: any) {
       setPhase('error');
       setErrorMsg(err.message || 'Connection failed');

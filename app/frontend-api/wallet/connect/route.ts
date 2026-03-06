@@ -44,11 +44,13 @@ export async function POST(request: NextRequest) {
     }
 
     const data = await res.json();
+    console.log('Xaman connect response:', JSON.stringify({ uuid: data.uuid, refs: data.refs, next: data.next }));
     const uuid: string = data.uuid;
     const qr_png: string = data.refs?.qr_png ?? null;
     const deeplink: string = data.next?.always ?? `https://xumm.app/sign/${uuid}`;
+    const ws_url: string = data.refs?.websocket_status ?? `wss://xumm.app/sign/${uuid}/subscribe`;
 
-    return NextResponse.json({ success: true, uuid, qr_png, deeplink });
+    return NextResponse.json({ success: true, uuid, qr_png, deeplink, ws_url });
   } catch (error: any) {
     console.error('Xaman connect error:', error);
     return NextResponse.json(
