@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
     }
 
     const res = await fetch(`${XAMAN_BASE}/payload/${uuid}`, {
+      cache: 'no-store',   // CRITICAL: Next.js Data Cache must not cache this — status changes over time
       headers: {
         'X-API-Key': XAMAN_API_KEY,
         'X-API-Secret': XAMAN_API_SECRET,
