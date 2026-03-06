@@ -829,39 +829,66 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('beforeunload', handleUnload);
   }, []);
 
-  // ── AFK detection: track real user interaction ──────────────────────────────
-  // Heartbeat fires every 60 s ONLY if the user interacted within the last 2 min.
-  // This prevents idle open windows from appearing "active" in the arena.
+  // ── AFK detection ────────────────────────────────────────────────────────────
+  // Track real user interaction (mouse, touch, keyboard, page-focus).
+  // Idle threshold is generous (10 min) — we only want to catch truly abandoned
+  // windows, not players who leave the idle screen running while watching.
   const lastActivityRef = useRef(Date.now());
   useEffect(() => {
     const onActivity = () => { lastActivityRef.current = Date.now(); };
-    window.addEventListener('mousemove',  onActivity, { passive: true });
-    window.addEventListener('keydown',    onActivity, { passive: true });
-    window.addEventListener('touchstart', onActivity, { passive: true });
-    window.addEventListener('click',      onActivity, { passive: true });
+    // visibilitychange = user switches back to the tab / returns to app on mobile
+    const onVisible = () => { if (!document.hidden) onActivity(); };
+    window.addEventListener('mousemove',   onActivity, { passive: true });
+    window.addEventListener('keydown',     onActivity, { passive: true });
+    window.addEventListener('touchstart',  onActivity, { passive: true });
+    window.addEventListener('click',       onActivity, { passive: true });
+    window.addEventListener('scroll',      onActivity, { passive: true });
+    document.addEventListener('visibilitychange', onVisible);
     return () => {
-      window.removeEventListener('mousemove',  onActivity);
-      window.removeEventListener('keydown',    onActivity);
-      window.removeEventListener('touchstart', onActivity);
-      window.removeEventListener('click',      onActivity);
+      window.removeEventListener('mousemove',   onActivity);
+      window.removeEventListener('keydown',     onActivity);
+      window.removeEventListener('touchstart',  onActivity);
+      window.removeEventListener('click',       onActivity);
+      window.removeEventListener('scroll',      onActivity);
+      document.removeEventListener('visibilitychange', onVisible);
     };
   }, []);
 
+  // Send heartbeat to server — marks player as "active" for arena AFK detection.
+  // Uses a ref so it always reads the latest playerId without needing it as a dep.
+  const sendHeartbeatRef = useRef<() => void>(() => {});
   useEffect(() => {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? '';
-    if (!apiUrl) return;
-    const sendHeartbeat = () => {
+    sendHeartbeatRef.current = () => {
       const s = stateRef.current;
-      if (!s.playerId) return;
-      const idleSec = (Date.now() - lastActivityRef.current) / 1000;
-      if (idleSec > 120) return; // no interaction in last 2 min — skip
+      if (!s.playerId || !apiUrl) return;
+      const idleMin = (Date.now() - lastActivityRef.current) / 60_000;
+      if (idleMin > 10) return; // abandoned window — don't mark active
       fetch(`${apiUrl}/api/save/heartbeat/${s.playerId}`, { method: 'POST' }).catch(() => {});
     };
-    // Fire once immediately on mount (user just loaded the game — definitely active)
-    sendHeartbeat();
-    const interval = setInterval(sendHeartbeat, 60_000);
+  }); // runs every render so apiUrl/stateRef are always fresh
+
+  // Interval: fire every 60 s
+  useEffect(() => {
+    const interval = setInterval(() => sendHeartbeatRef.current(), 60_000);
     return () => clearInterval(interval);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Also fire when playerId first becomes available (auth completes after async load)
+  const prevPlayerIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (state.playerId && state.playerId !== prevPlayerIdRef.current) {
+      prevPlayerIdRef.current = state.playerId;
+      sendHeartbeatRef.current();
+    }
+  }, [state.playerId]);
+
+  // Also fire when tab becomes visible (mobile user returns to the app)
+  useEffect(() => {
+    const onVisible = () => { if (!document.hidden) sendHeartbeatRef.current(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
 
   const gearMultiplier = calcGearMultiplier(state.equipment);
 

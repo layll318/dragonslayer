@@ -65,7 +65,7 @@ async def get_opponents(
 
         from datetime import timedelta
         now = datetime.now(timezone.utc)
-        ACTIVE_THRESHOLD = timedelta(minutes=3)
+        ACTIVE_THRESHOLD = timedelta(minutes=5)
 
         candidates = []
         for r in rows:
