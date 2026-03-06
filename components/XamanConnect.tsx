@@ -36,7 +36,8 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
   const [showQr, setShowQr] = useState(false);
   const [debugInfo, setDebugInfo] = useState<string>('');
   const [pollCount, setPollCount] = useState(0);
-  const signedNoAcctRef = useRef(0); // how many times signed=true but account=null
+  const pollCountRef = useRef(0);       // ref so doPoll never needs pollCount as a dep
+  const signedNoAcctRef = useRef(0);   // how many times signed=true but account=null
 
   // Refs so interval callbacks always have fresh values without recreating
   const pollRef      = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -65,7 +66,8 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
     try {
       const res = await fetch(`/frontend-api/wallet/payload?uuid=${id}`);
 
-      setPollCount(c => c + 1);
+      pollCountRef.current += 1;
+      setPollCount(pollCountRef.current);
 
       if (!res.ok) {
         setDebugInfo(`HTTP ${res.status} from poll API`);
@@ -75,7 +77,7 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
       const data = await res.json();
       const d = data._dbg || {};
       setDebugInfo(
-        `#${pollCount+1} signed=${data.signed} acct=${data.account ?? 'null'} ` +
+        `#${pollCountRef.current} signed=${data.signed} acct=${data.account ?? 'null'} ` +
         `resp.acct=${d.resp_account ?? '-'} resp.sgn=${d.resp_signer ?? '-'} ` +
         `signers=${JSON.stringify(d.signers)} resolved=${data.resolved}`
       );
@@ -115,7 +117,7 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
       setDebugInfo(`fetch error: ${e?.message}`);
       // Network error — keep trying until timeout fires
     }
-  }, [clearTimers, pollCount]);
+  }, [clearTimers]);
 
   const startPolling = useCallback((uuid: string) => {
     clearTimers();
