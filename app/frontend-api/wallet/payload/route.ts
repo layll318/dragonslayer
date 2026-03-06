@@ -8,7 +8,9 @@ const XAMAN_BASE = 'https://xumm.app/api/v1/platform';
 
 export async function GET(request: NextRequest) {
   try {
-    const uuid = request.nextUrl.searchParams.get('uuid');
+    // strip any cache-buster suffix (uuid may have ?t= handled by URLSearchParams already)
+    const rawUuid = request.nextUrl.searchParams.get('uuid');
+    const uuid = rawUuid?.split('?')[0] ?? null;
     if (!uuid) {
       return NextResponse.json({ error: 'uuid required' }, { status: 400 });
     }
@@ -43,7 +45,7 @@ export async function GET(request: NextRequest) {
       data.meta?.signers?.[0] ||
       null;
 
-    return NextResponse.json({
+    const payload = {
       resolved:  data.meta?.resolved  ?? false,
       signed:    data.meta?.signed    ?? false,
       cancelled: data.meta?.cancelled ?? false,
@@ -55,6 +57,13 @@ export async function GET(request: NextRequest) {
         resp_signer:  data.response?.signer  ?? null,
         signers:      data.meta?.signers     ?? null,
         resolved:     data.meta?.resolved    ?? null,
+      },
+    };
+
+    return NextResponse.json(payload, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        'Pragma': 'no-cache',
       },
     });
   } catch (error: any) {

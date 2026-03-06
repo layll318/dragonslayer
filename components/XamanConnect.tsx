@@ -66,7 +66,7 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
   // Core poll — no dependencies on props so the interval never goes stale
   const doPoll = useCallback(async (id: string) => {
     try {
-      const res = await fetch(`/frontend-api/wallet/payload?uuid=${id}`);
+      const res = await fetch(`/frontend-api/wallet/payload?uuid=${id}&_t=${Date.now()}`, { cache: 'no-store' });
 
       pollCountRef.current += 1;
       setPollCount(pollCountRef.current);
