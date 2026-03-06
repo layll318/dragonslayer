@@ -48,15 +48,16 @@ async def get_opponents(
         )
         my_attack, _ = _extract_power(dict(my_save["save_json"]) if my_save else {})
 
-        # Fetch all other players with saves — include last_active_at for AFK detection
+        # LEFT JOIN so players who haven't synced a save yet still appear
         rows = await conn.fetch(
             """
             SELECT p.id, p.username, p.wallet_address,
-                   gs.save_json,
+                   COALESCE(gs.save_json, '{}'::jsonb) AS save_json,
                    gs.last_active_at
             FROM players p
-            JOIN game_saves gs ON gs.player_id = p.id
+            LEFT JOIN game_saves gs ON gs.player_id = p.id
             WHERE p.id != $1
+              AND p.wallet_address IS NOT NULL
             ORDER BY RANDOM()
             LIMIT 50
             """,
