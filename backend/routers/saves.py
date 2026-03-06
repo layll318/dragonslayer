@@ -48,8 +48,8 @@ async def upsert_save(player_id: int, req: SaveRequest):
 
         await conn.execute(
             """
-            INSERT INTO game_saves (player_id, save_json, updated_at)
-            VALUES ($1, $2::jsonb, NOW())
+            INSERT INTO game_saves (player_id, save_json, updated_at, last_active_at)
+            VALUES ($1, $2::jsonb, NOW(), NOW())
             ON CONFLICT (player_id) DO UPDATE
               SET save_json = $2::jsonb, updated_at = NOW()
             """,
@@ -65,3 +65,17 @@ async def upsert_save(player_id: int, req: SaveRequest):
             player_id=player_id,
             save_json=dict(row["save_json"]) if row else None,
         )
+
+
+@router.post("/heartbeat/{player_id}")
+async def heartbeat(player_id: int):
+    """Lightweight ping — updates last_active_at only. Called every 60 s from the client."""
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            "UPDATE game_saves SET last_active_at = NOW() WHERE player_id = $1",
+            player_id,
+        )
+        if result == "UPDATE 0":
+            raise HTTPException(status_code=404, detail="No save found for player")
+    return {"ok": True}

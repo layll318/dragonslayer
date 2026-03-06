@@ -48,11 +48,12 @@ async def get_opponents(
         )
         my_attack, _ = _extract_power(dict(my_save["save_json"]) if my_save else {})
 
-        # Fetch all other players with saves
+        # Fetch all other players with saves — include last_active_at for AFK detection
         rows = await conn.fetch(
             """
             SELECT p.id, p.username, p.wallet_address,
-                   gs.save_json
+                   gs.save_json,
+                   gs.last_active_at
             FROM players p
             JOIN game_saves gs ON gs.player_id = p.id
             WHERE p.id != $1
@@ -61,6 +62,10 @@ async def get_opponents(
             """,
             player_id,
         )
+
+        from datetime import timedelta
+        now = datetime.now(timezone.utc)
+        ACTIVE_THRESHOLD = timedelta(minutes=3)
 
         candidates = []
         for r in rows:
@@ -74,6 +79,10 @@ async def get_opponents(
                 or (f"{wallet[:5]}…{wallet[-4:]}" if len(wallet) >= 10 else wallet)
                 or f"Hero #{r['id']}"
             )
+            last_active = r["last_active_at"]
+            is_active = bool(
+                last_active and (now - last_active.replace(tzinfo=timezone.utc) if last_active.tzinfo is None else now - last_active) < ACTIVE_THRESHOLD
+            )
             candidates.append({
                 "player_id": r["id"],
                 "name": name,
@@ -82,6 +91,7 @@ async def get_opponents(
                 "defense_power": def_pwr,
                 "idle_gold": gold,
                 "buildings": save.get("buildings", []),
+                "is_active": is_active,
             })
 
         # Sort by closeness to player's attack power, pick top `limit`

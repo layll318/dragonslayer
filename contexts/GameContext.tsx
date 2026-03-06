@@ -829,6 +829,40 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('beforeunload', handleUnload);
   }, []);
 
+  // ── AFK detection: track real user interaction ──────────────────────────────
+  // Heartbeat fires every 60 s ONLY if the user interacted within the last 2 min.
+  // This prevents idle open windows from appearing "active" in the arena.
+  const lastActivityRef = useRef(Date.now());
+  useEffect(() => {
+    const onActivity = () => { lastActivityRef.current = Date.now(); };
+    window.addEventListener('mousemove',  onActivity, { passive: true });
+    window.addEventListener('keydown',    onActivity, { passive: true });
+    window.addEventListener('touchstart', onActivity, { passive: true });
+    window.addEventListener('click',      onActivity, { passive: true });
+    return () => {
+      window.removeEventListener('mousemove',  onActivity);
+      window.removeEventListener('keydown',    onActivity);
+      window.removeEventListener('touchstart', onActivity);
+      window.removeEventListener('click',      onActivity);
+    };
+  }, []);
+
+  useEffect(() => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? '';
+    if (!apiUrl) return;
+    const sendHeartbeat = () => {
+      const s = stateRef.current;
+      if (!s.playerId) return;
+      const idleSec = (Date.now() - lastActivityRef.current) / 1000;
+      if (idleSec > 120) return; // no interaction in last 2 min — skip
+      fetch(`${apiUrl}/api/save/heartbeat/${s.playerId}`, { method: 'POST' }).catch(() => {});
+    };
+    // Fire once immediately on mount (user just loaded the game — definitely active)
+    sendHeartbeat();
+    const interval = setInterval(sendHeartbeat, 60_000);
+    return () => clearInterval(interval);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const gearMultiplier = calcGearMultiplier(state.equipment);
 
   const armyPower = useMemo(() => calcArmyPower(state.buildings), [state.buildings]);

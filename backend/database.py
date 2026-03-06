@@ -112,6 +112,11 @@ async def create_tables():
                 result_json    JSONB
             );
         """)
+        # Add last_active_at to track player presence for AFK detection
+        await conn.execute("""
+            ALTER TABLE game_saves
+                ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMPTZ DEFAULT NOW()
+        """)
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS arena_battles (
                 id              SERIAL PRIMARY KEY,

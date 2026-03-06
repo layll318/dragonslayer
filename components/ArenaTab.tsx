@@ -17,6 +17,7 @@ interface Opponent {
   defense_power: number;
   idle_gold: number;
   buildings: { id: string; owned: number }[];
+  is_active?: boolean;
 }
 
 interface BattleResult {
@@ -370,7 +371,20 @@ export default function ArenaTab() {
                     {isBot ? '🤖' : `Lv${opp.level}`}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-[10px] font-bold truncate" style={{ color: isBot ? '#c084fc' : '#e8d8a8' }}>{opp.name}</p>
+                    <div className="flex items-center gap-1 mb-0.5">
+                      <p className="text-[10px] font-bold truncate" style={{ color: isBot ? '#c084fc' : '#e8d8a8' }}>{opp.name}</p>
+                      {!isBot && (
+                        <span
+                          className="flex-shrink-0 px-1 py-0 rounded text-[7px] font-bold leading-4"
+                          style={opp.is_active
+                            ? { background: 'rgba(74,222,128,0.15)', color: '#4ade80', border: '1px solid rgba(74,222,128,0.3)' }
+                            : { background: 'rgba(255,255,255,0.05)', color: '#6b5a3a', border: '1px solid rgba(255,255,255,0.08)' }
+                          }
+                        >
+                          {opp.is_active ? '● Online' : '○ AFK'}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-[8px] text-[#6b5a3a]">⚔️{opp.attack_power} · 🛡️{opp.defense_power}{isBot ? ' · AI' : ''}</p>
                   </div>
                   <div className="text-right flex-shrink-0">
