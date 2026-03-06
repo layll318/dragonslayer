@@ -125,20 +125,37 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Poll immediately when the tab becomes visible again (user returns from Xaman)
+  // Rapid-burst poll when tab becomes visible — catches approval the moment user returns
+  const rapidBurstRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const startRapidBurst = useCallback((id: string) => {
+    if (rapidBurstRef.current) clearInterval(rapidBurstRef.current);
+    let ticks = 0;
+    rapidBurstRef.current = setInterval(() => {
+      ticks++;
+      doPoll(id);
+      if (ticks >= 12) {
+        clearInterval(rapidBurstRef.current!);
+        rapidBurstRef.current = null;
+      }
+    }, 800);
+  }, [doPoll]);
+
   useEffect(() => {
     const onVisible = () => {
-      if (!document.hidden && uuidRef.current) doPoll(uuidRef.current);
+      if (!document.hidden && uuidRef.current) {
+        doPoll(uuidRef.current);          // immediate
+        startRapidBurst(uuidRef.current); // then every 800ms for ~10s
+      }
     };
-    // visibilitychange: tab focus on desktop / switching back on mobile
     document.addEventListener('visibilitychange', onVisible);
-    // pageshow: fires when browser navigates back to this page
     window.addEventListener('pageshow', onVisible);
     return () => {
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('pageshow', onVisible);
+      if (rapidBurstRef.current) clearInterval(rapidBurstRef.current);
     };
-  }, [doPoll]);
+  }, [doPoll, startRapidBurst]);
 
   // Cross-tab: if /wallet-connected (opened in another tab) sets xaman_linked_address,
   // the storage event fires HERE in the original game tab — connect immediately.
@@ -307,8 +324,8 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
               </button>
             )}
 
-            <p className="text-[9px] text-[#4a3a2a] text-center leading-relaxed">
-              After approving in Xaman, return to this tab — it will connect automatically.
+            <p className="text-[10px] text-[#6b5a3a] text-center leading-relaxed px-2">
+              After approving in Xaman, press the back button and return to this tab.
             </p>
 
             {/* Manual check — prominent, since polling may need a nudge */}

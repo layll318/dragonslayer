@@ -20,15 +20,6 @@ export async function POST(request: NextRequest) {
       ? body.returnTo
       : '/';
 
-    const appUrl = (
-      process.env.NEXT_PUBLIC_APP_URL ||
-      request.headers.get('origin') ||
-      'https://dragonslayer-production.up.railway.app'
-    ).replace(/\/$/, '');
-    // {id} is substituted by Xaman with the real payload UUID.
-    // Route to the dedicated verification page — dependency-free, clear feedback UI.
-    const returnUrl = `${appUrl}/wallet-connected?payloadId={id}`;
-
     const res = await fetch(`${XAMAN_BASE}/payload`, {
       method: 'POST',
       headers: {
@@ -38,10 +29,7 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         txjson: { TransactionType: 'SignIn' },
-        options: {
-          submit: false,
-          return_url: { app: returnUrl, web: returnUrl },
-        },
+        options: { submit: false },
         custom_meta: { instruction: 'Sign in to DragonSlayer' },
       }),
     });
