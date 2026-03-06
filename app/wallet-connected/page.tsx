@@ -45,22 +45,35 @@ function WalletConnectedContent() {
         const r = await fetch(`/frontend-api/wallet/payload?uuid=${payloadId}`);
         const d = await r.json();
 
-        if (d.signed && d.account && typeof d.account === 'string' && d.account.startsWith('r') && d.account.length >= 25) {
-          if (cancelled) return;
-          localStorage.removeItem('xaman_pending_uuid');
-          localStorage.setItem('xaman_linked_address', d.account);
-          setAddress(d.account);
-          setStatus('success');
-          // Hard redirect — works in any browser / webview
-          setTimeout(() => {
-            const dest = returnTo.startsWith('/') ? returnTo : '/';
-            window.location.href = `${dest}?wallet_linked=${encodeURIComponent(d.account)}`;
-          }, 1500);
+        // Surface API-level errors immediately instead of silently retrying
+        if (d.error) {
+          setStatus('error');
+          setErrorMsg(`Xaman error: ${d.error}. Please go back and try again.`);
           return;
         }
 
         if (d.cancelled) { setStatus('error'); setErrorMsg('Sign-in was cancelled in Xaman.'); return; }
         if (d.expired)   { setStatus('error'); setErrorMsg('Request expired — please try again.'); return; }
+
+        if (d.signed) {
+          const acct = d.account;
+          if (acct && typeof acct === 'string' && acct.startsWith('r') && acct.length >= 25) {
+            if (cancelled) return;
+            localStorage.removeItem('xaman_pending_uuid');
+            localStorage.setItem('xaman_linked_address', acct);
+            setAddress(acct);
+            setStatus('success');
+            // Hard redirect — works in any browser / webview
+            setTimeout(() => {
+              const dest = returnTo.startsWith('/') ? returnTo : '/';
+              window.location.href = `${dest}?wallet_linked=${encodeURIComponent(acct)}`;
+            }, 1500);
+            return;
+          }
+          // signed=true but account not populated yet — brief retry
+          attempt++;
+          if (attempt < MAX) { setTimeout(check, 1000); return; }
+        }
 
         // Not yet signed — keep retrying
         attempt++;
@@ -68,7 +81,7 @@ function WalletConnectedContent() {
           setTimeout(check, 2000);
         } else {
           setStatus('error');
-          setErrorMsg('Timed out waiting for approval. Please try again.');
+          setErrorMsg('Timed out. Please go back and try again.');
         }
       } catch {
         attempt++;

@@ -30,12 +30,15 @@ export async function GET(request: NextRequest) {
 
     const data = await res.json();
 
+    // account can live in response.account or response.signer depending on Xaman version
+    const account = data.response?.account || data.response?.signer || null;
+
     return NextResponse.json({
-      resolved: data.meta?.resolved ?? false,
-      signed: data.meta?.signed ?? false,
+      resolved:  data.meta?.resolved  ?? false,
+      signed:    data.meta?.signed    ?? false,
       cancelled: data.meta?.cancelled ?? false,
-      expired: data.meta?.expired ?? false,
-      account: data.response?.account ?? null,
+      expired:   data.meta?.expired   ?? false,
+      account,
     });
   } catch (error: any) {
     console.error('Xaman payload poll error:', error);

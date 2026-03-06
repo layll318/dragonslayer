@@ -120,13 +120,19 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Extra check on tab-focus — catches desktop users who switched tabs
+  // Poll immediately when the tab becomes visible again (user returns from Xaman)
   useEffect(() => {
     const onVisible = () => {
       if (!document.hidden && uuidRef.current) doPoll(uuidRef.current);
     };
+    // visibilitychange: tab focus on desktop / switching back on mobile
     document.addEventListener('visibilitychange', onVisible);
-    return () => document.removeEventListener('visibilitychange', onVisible);
+    // pageshow: fires when browser navigates back to this page
+    window.addEventListener('pageshow', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('pageshow', onVisible);
+    };
   }, [doPoll]);
 
   const startConnect = useCallback(async () => {
@@ -251,11 +257,16 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
         </div>
 
         {mobile ? (
-          /* ── MOBILE: button onClick → window.location.href — preserves gesture chain, triggers iOS Universal Link / Android App Link ── */
+          /* ── MOBILE: window.open keeps THIS tab alive so polling detects approval automatically ── */
           <div className="flex flex-col gap-2 mb-4">
             {deeplink && (
               <button
-                onClick={() => { window.location.href = deeplink; }}
+                onClick={() => {
+                  // Open in new tab/trigger App Link — keeps THIS tab alive so polling works
+                  const w = window.open(deeplink, '_blank', 'noopener,noreferrer');
+                  // If popup blocked (rare from direct click), navigate current tab
+                  if (!w) window.location.href = deeplink;
+                }}
                 className="flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl font-bold text-white text-sm
                   bg-gradient-to-r from-orange-500 to-orange-600 active:scale-95 transition-all shadow-lg"
               >
@@ -272,14 +283,18 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
               </button>
             )}
 
-            {/* Already approved — manual poll trigger */}
+            <p className="text-[9px] text-[#4a3a2a] text-center leading-relaxed">
+              After approving in Xaman, return to this tab — it will connect automatically.
+            </p>
+
+            {/* Manual check — prominent, since polling may need a nudge */}
             {uuid && (
               <button
-                onClick={() => doPoll(uuid)}
-                className="w-full py-2 rounded-xl text-xs font-bold active:scale-95 transition-all"
-                style={{ border: '1px solid rgba(212,160,23,0.3)', color: '#d4a017', background: 'rgba(212,160,23,0.06)' }}
+                onClick={() => uuid && doPoll(uuid)}
+                className="w-full py-2.5 rounded-xl text-sm font-bold active:scale-95 transition-all"
+                style={{ border: '1px solid rgba(212,160,23,0.4)', color: '#f0c040', background: 'rgba(212,160,23,0.08)' }}
               >
-                Already approved? Tap to check
+                ✓ Already approved? Tap here
               </button>
             )}
 
@@ -288,7 +303,7 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
               onClick={() => setShowQr(v => !v)}
               className="w-full text-xs text-[#6b5a3a] underline text-center"
             >
-              {showQr ? 'Hide QR' : 'Scan QR from another device instead'}
+              {showQr ? 'Hide QR' : 'Use QR code instead'}
             </button>
             {showQr && (
               <div className="bg-white rounded-xl p-3 flex items-center justify-center min-h-[180px]">
