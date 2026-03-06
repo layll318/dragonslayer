@@ -60,6 +60,9 @@ function WalletConnectedContent() {
           if (acct && typeof acct === 'string' && acct.startsWith('r') && acct.length >= 25) {
             if (cancelled) return;
             localStorage.removeItem('xaman_pending_uuid');
+            // Remove before set — guarantees the storage event fires in other tabs
+            // even if the user reconnects with the same wallet address.
+            localStorage.removeItem('xaman_linked_address');
             localStorage.setItem('xaman_linked_address', acct);
             setAddress(acct);
             setStatus('success');

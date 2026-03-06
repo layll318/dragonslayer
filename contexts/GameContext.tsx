@@ -1258,6 +1258,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   }, [API_URL]);
 
   const disconnectWallet = useCallback(() => {
+    // Clear localStorage so the storage event fires correctly on reconnect
+    localStorage.removeItem('xaman_linked_address');
+    localStorage.removeItem('xaman_pending_uuid');
     setState(prev => ({ ...prev, walletAddress: null, playerId: null, isSynced: false }));
   }, []);
 

@@ -67,11 +67,16 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
 
       // Success: signed. Don't require "resolved" — Xaman can set signed=true
       // slightly before resolved=true, causing misses if we require both.
-      if (data.signed && data.account) {
-        clearTimers();
-        clearPending();
-        setPhase('success');
-        onConnectedRef.current(data.account);
+      if (data.signed) {
+        const acct = data.account || localStorage.getItem('xaman_linked_address');
+        if (acct && acct.startsWith('r') && acct.length >= 25) {
+          clearTimers();
+          clearPending();
+          setPhase('success');
+          onConnectedRef.current(acct);
+          return;
+        }
+        // signed=true but no account yet — keep polling briefly (account populates async)
         return;
       }
 
