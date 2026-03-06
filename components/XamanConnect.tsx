@@ -251,14 +251,13 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
         </div>
 
         {mobile ? (
-          /* ── MOBILE: <a href> anchor — never blocked, triggers iOS Universal Link / Android App Link ── */
+          /* ── MOBILE: button onClick → window.location.href — preserves gesture chain, triggers iOS Universal Link / Android App Link ── */
           <div className="flex flex-col gap-2 mb-4">
             {deeplink && (
-              <a
-                href={deeplink}
+              <button
+                onClick={() => { window.location.href = deeplink; }}
                 className="flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl font-bold text-white text-sm
-                  bg-gradient-to-r from-orange-500 to-orange-600 active:scale-95 transition-all shadow-lg no-underline"
-                style={{ textDecoration: 'none' }}
+                  bg-gradient-to-r from-orange-500 to-orange-600 active:scale-95 transition-all shadow-lg"
               >
                 <img
                   src="https://xumm.app/assets/icons/favicon-196x196.png"
@@ -270,7 +269,7 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
                   <span>Open Xaman App</span>
                   <span className="text-[10px] font-normal opacity-80">iOS &amp; Android</span>
                 </span>
-              </a>
+              </button>
             )}
 
             {/* Already approved — manual poll trigger */}
