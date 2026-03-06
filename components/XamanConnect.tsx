@@ -135,6 +135,25 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
     };
   }, [doPoll]);
 
+  // Cross-tab: if /wallet-connected (opened in another tab) sets xaman_linked_address,
+  // the storage event fires HERE in the original game tab — connect immediately.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'xaman_linked_address' && e.newValue && phase === 'waiting') {
+        const addr = e.newValue;
+        if (addr.startsWith('r') && addr.length >= 25) {
+          clearTimers();
+          clearPending();
+          uuidRef.current = null;
+          setPhase('success');
+          onConnectedRef.current(addr);
+        }
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [phase, clearTimers]);
+
   const startConnect = useCallback(async () => {
     setPhase('loading');
     setErrorMsg(null);
