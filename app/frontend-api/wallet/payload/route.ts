@@ -30,8 +30,18 @@ export async function GET(request: NextRequest) {
 
     const data = await res.json();
 
-    // account can live in response.account or response.signer depending on Xaman version
-    const account = data.response?.account || data.response?.signer || null;
+    // Log the full raw Xaman response so we can see what's actually returned
+    console.log('Xaman payload raw:', JSON.stringify({
+      meta: data.meta,
+      response: data.response,
+    }));
+
+    // account can live in several places depending on Xaman version / payload type
+    const account =
+      data.response?.account ||
+      data.response?.signer  ||
+      data.meta?.signers?.[0] ||
+      null;
 
     return NextResponse.json({
       resolved:  data.meta?.resolved  ?? false,
@@ -39,6 +49,13 @@ export async function GET(request: NextRequest) {
       cancelled: data.meta?.cancelled ?? false,
       expired:   data.meta?.expired   ?? false,
       account,
+      // debug fields so the client UI can show exactly what Xaman returned
+      _dbg: {
+        resp_account: data.response?.account ?? null,
+        resp_signer:  data.response?.signer  ?? null,
+        signers:      data.meta?.signers     ?? null,
+        resolved:     data.meta?.resolved    ?? null,
+      },
     });
   } catch (error: any) {
     console.error('Xaman payload poll error:', error);

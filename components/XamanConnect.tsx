@@ -34,6 +34,9 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
   const [uuid, setUuid] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showQr, setShowQr] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<string>('');
+  const [pollCount, setPollCount] = useState(0);
+  const signedNoAcctRef = useRef(0); // how many times signed=true but account=null
 
   // Refs so interval callbacks always have fresh values without recreating
   const pollRef      = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -58,25 +61,46 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
   };
 
   // Core poll — no dependencies on props so the interval never goes stale
-  const doPoll = useCallback(async (uuid: string) => {
+  const doPoll = useCallback(async (id: string) => {
     try {
-      const res = await fetch(`/frontend-api/wallet/payload?uuid=${uuid}`);
-      if (!res.ok) return; // transient — keep trying
+      const res = await fetch(`/frontend-api/wallet/payload?uuid=${id}`);
+
+      setPollCount(c => c + 1);
+
+      if (!res.ok) {
+        setDebugInfo(`HTTP ${res.status} from poll API`);
+        return; // transient — keep trying
+      }
 
       const data = await res.json();
+      const d = data._dbg || {};
+      setDebugInfo(
+        `#${pollCount+1} signed=${data.signed} acct=${data.account ?? 'null'} ` +
+        `resp.acct=${d.resp_account ?? '-'} resp.sgn=${d.resp_signer ?? '-'} ` +
+        `signers=${JSON.stringify(d.signers)} resolved=${data.resolved}`
+      );
 
       // Success: signed. Don't require "resolved" — Xaman can set signed=true
       // slightly before resolved=true, causing misses if we require both.
       if (data.signed) {
         const acct = data.account || localStorage.getItem('xaman_linked_address');
-        if (acct && acct.startsWith('r') && acct.length >= 25) {
+        if (acct && typeof acct === 'string' && acct.startsWith('r') && acct.length >= 25) {
+          signedNoAcctRef.current = 0;
           clearTimers();
           clearPending();
           setPhase('success');
           onConnectedRef.current(acct);
           return;
         }
-        // signed=true but no account yet — keep polling briefly (account populates async)
+        // signed=true but account still null — Xaman populates it async.
+        // After 8 attempts (~20s) give up and surface an error.
+        signedNoAcctRef.current += 1;
+        if (signedNoAcctRef.current >= 8) {
+          clearTimers();
+          clearPending();
+          setPhase('error');
+          setErrorMsg('Xaman approved but no account returned. Check Railway logs for raw response.');
+        }
         return;
       }
 
@@ -87,10 +111,11 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
         setPhase('error');
         setErrorMsg(data.cancelled ? 'Sign-in was cancelled.' : 'Request expired — please try again.');
       }
-    } catch {
+    } catch (e: any) {
+      setDebugInfo(`fetch error: ${e?.message}`);
       // Network error — keep trying until timeout fires
     }
-  }, [clearTimers]);
+  }, [clearTimers, pollCount]);
 
   const startPolling = useCallback((uuid: string) => {
     clearTimers();
@@ -404,6 +429,14 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
           >
             Cancel
           </button>
+        </div>
+
+        {/* DEBUG — visible in UI so you can screenshot & report */}
+        <div className="mt-2 p-2 rounded-lg bg-black/40 border border-white/5">
+          <p className="text-[8px] font-mono text-[#4a3a2a] break-all leading-relaxed">
+            polls: {pollCount} | uuid: {uuid?.slice(0,8) ?? 'none'}<br/>
+            {debugInfo || 'waiting…'}
+          </p>
         </div>
       </div>
     </div>
