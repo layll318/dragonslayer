@@ -9,6 +9,15 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/save", tags=["saves"])
 
 
+def _to_dict(val) -> dict:
+    """Safely convert an asyncpg save_json value (string or dict) to a plain dict."""
+    if val is None:
+        return {}
+    if isinstance(val, str):
+        return json.loads(val)
+    return dict(val)
+
+
 class SaveRequest(BaseModel):
     save_json: dict[str, Any]
 
@@ -34,7 +43,7 @@ async def load_save(player_id: int):
         return SaveResponse(
             success=True,
             player_id=player_id,
-            save_json=dict(row["save_json"]) if row else None,
+            save_json=_to_dict(row["save_json"]) if row else None,
         )
 
 
@@ -63,7 +72,7 @@ async def upsert_save(player_id: int, req: SaveRequest):
         return SaveResponse(
             success=True,
             player_id=player_id,
-            save_json=dict(row["save_json"]) if row else None,
+            save_json=_to_dict(row["save_json"]) if row else None,
         )
 
 

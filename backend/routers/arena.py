@@ -1,3 +1,4 @@
+import json
 import logging
 import random
 from datetime import datetime, timezone
@@ -5,6 +6,15 @@ from fastapi import APIRouter, Query, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 from database import get_pool
+
+
+def _to_dict(val) -> dict:
+    """Safely convert an asyncpg save_json value (string or dict) to a plain dict."""
+    if val is None:
+        return {}
+    if isinstance(val, str):
+        return json.loads(val)
+    return dict(val)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/arena", tags=["arena"])
@@ -46,7 +56,7 @@ async def get_opponents(
         my_save = await conn.fetchrow(
             "SELECT save_json FROM game_saves WHERE player_id = $1", player_id
         )
-        my_attack, _ = _extract_power(dict(my_save["save_json"]) if my_save else {})
+        my_attack, _ = _extract_power(_to_dict(my_save["save_json"]) if my_save else {})
 
         # LEFT JOIN so players who haven't synced a save yet still appear
         from datetime import timedelta
@@ -88,7 +98,7 @@ async def get_opponents(
 
         candidates = []
         for r in rows:
-            save = dict(r["save_json"])
+            save = _to_dict(r["save_json"])
             atk, def_pwr = _extract_power(save)
             level = int(save.get("level", 1))
             gold = int(save.get("gold", 0))
@@ -138,8 +148,8 @@ async def attack(req: AttackRequest):
         if not attacker_save_row or not defender_save_row:
             raise HTTPException(status_code=404, detail="Player save not found")
 
-        attacker_save = dict(attacker_save_row["save_json"])
-        defender_save = dict(defender_save_row["save_json"])
+        attacker_save = _to_dict(attacker_save_row["save_json"])
+        defender_save = _to_dict(defender_save_row["save_json"])
 
         # Check daily attack limit
         attacks_today = int(attacker_save.get("arenaAttacksToday", 0))

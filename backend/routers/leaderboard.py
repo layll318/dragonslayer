@@ -21,11 +21,11 @@ async def get_leaderboard(
                 p.username,
                 p.wallet_address,
                 COALESCE((gs.save_json->>'level')::int, 1)              AS level,
-                COALESCE((gs.save_json->>'totalGoldEarned')::bigint, 0) AS total_gold,
-                COALESCE((gs.save_json->>'totalTaps')::bigint, 0)       AS total_taps
+                COALESCE((gs.save_json->>'totalGoldEarned')::float8::bigint, 0) AS total_gold,
+                COALESCE((gs.save_json->>'totalTaps')::float8::bigint, 0)       AS total_taps
             FROM players p
             LEFT JOIN game_saves gs ON gs.player_id = p.id
-            ORDER BY COALESCE((gs.save_json->>'totalGoldEarned')::bigint, 0) DESC
+            ORDER BY COALESCE((gs.save_json->>'totalGoldEarned')::float8::bigint, 0) DESC
             LIMIT $1
             """,
             limit,
@@ -56,9 +56,9 @@ async def get_leaderboard(
                 SELECT COUNT(*) + 1 AS rank
                 FROM players p2
                 LEFT JOIN game_saves gs2 ON gs2.player_id = p2.id
-                WHERE COALESCE((gs2.save_json->>'totalGoldEarned')::bigint, 0) >
+                WHERE COALESCE((gs2.save_json->>'totalGoldEarned')::float8::bigint, 0) >
                       (
-                          SELECT COALESCE((gs3.save_json->>'totalGoldEarned')::bigint, 0)
+                          SELECT COALESCE((gs3.save_json->>'totalGoldEarned')::float8::bigint, 0)
                           FROM game_saves gs3
                           WHERE gs3.player_id = $1
                       )
