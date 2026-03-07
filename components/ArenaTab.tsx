@@ -188,22 +188,6 @@ export default function ArenaTab() {
     loadOpponents();
   };
 
-  // ── Wallet connected but player ID not yet synced ───────────────────────────
-  if (state.walletAddress && !state.playerId) {
-    return (
-      <div className="flex flex-col flex-1 pb-4 overflow-y-auto relative z-10 page-fade">
-        <ArenaHeader attacksLeft={attacksLeft} arenaPoints={state.arenaPoints ?? 0} />
-        <div className="flex flex-col items-center justify-center flex-1 px-6 text-center gap-4">
-          <span className="text-5xl">⏳</span>
-          <p className="font-cinzel font-bold text-[#f0c040] text-lg">Syncing Account…</p>
-          <p className="text-[#6b5a3a] text-sm leading-relaxed">
-            Your wallet is connected — waiting for server sync. This only takes a moment.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   // ── No wallet ───────────────────────────────────────────────────────────────
   if (!state.walletAddress) {
     return (
@@ -355,6 +339,11 @@ export default function ArenaTab() {
         )}
 
         {/* Opponent list */}
+        {state.walletAddress && !state.playerId && (
+          <div className="text-[#6b5a3a] text-[10px] px-3 py-2 rounded-lg bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] text-center">
+            ⏳ Syncing account with server… Real players will appear shortly.
+          </div>
+        )}
         <div className="dragon-panel px-3 py-3">
           <div className="flex items-center justify-between mb-2">
             <p className="font-cinzel font-bold text-[#e8d8a8] text-[10px] tracking-wider">CHOOSE OPPONENT</p>
