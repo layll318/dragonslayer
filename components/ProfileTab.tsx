@@ -44,6 +44,31 @@ export default function ProfileTab() {
   const [lbError, setLbError] = useState<string | null>(null);
   const [lbLastRefresh, setLbLastRefresh] = useState(0);
 
+  const [showDebug, setShowDebug] = useState(false);
+  const [pingResult, setPingResult] = useState<string>('');
+  const [pinging, setPinging] = useState(false);
+
+  const API_URL = typeof process !== 'undefined' ? (process.env.NEXT_PUBLIC_API_URL ?? '') : '';
+
+  const testConnection = useCallback(async () => {
+    setPinging(true);
+    setPingResult('…');
+    try {
+      const t0 = Date.now();
+      const res = await fetch(`${API_URL}/health`, { cache: 'no-store' });
+      const ms = Date.now() - t0;
+      if (res.ok) {
+        const data = await res.json();
+        setPingResult(`✅ ${res.status} OK (${ms}ms) db=${data.db ?? '?'}`);
+      } else {
+        setPingResult(`⚠️ ${res.status} (${ms}ms)`);
+      }
+    } catch (e: any) {
+      setPingResult(`❌ ${e?.message ?? 'network error'}`);
+    }
+    setPinging(false);
+  }, [API_URL]);
+
   const loadLeaderboard = useCallback(async () => {
     setLbLoading(true); setLbError(null);
     try {
@@ -158,6 +183,51 @@ export default function ProfileTab() {
                 Link your XRPL wallet to sync progress across devices and earn DragonSlayer tokens.
               </p>
               <XamanConnect onConnected={connectWallet} />
+            </div>
+          )}
+        </div>
+
+        {/* ═══ DEBUG ═══ */}
+        <div className="dragon-panel p-3">
+          <button
+            onClick={() => setShowDebug(v => !v)}
+            className="w-full flex items-center justify-between text-[9px] font-mono text-[#4a3a2a] hover:text-[#6b5a3a] transition-colors"
+          >
+            <span>🔧 DEBUG</span>
+            <span>{showDebug ? '▲ hide' : '▼ show'}</span>
+          </button>
+          {showDebug && (
+            <div className="mt-2 space-y-1.5">
+              <div className="p-2 rounded-lg bg-black/40 border border-white/5 space-y-1">
+                <p className="text-[8px] font-mono text-[#4a3a2a] break-all leading-relaxed">
+                  <span className="text-[#6b5a3a]">API_URL: </span>{API_URL || '(empty — not set!)'}
+                </p>
+                <p className="text-[8px] font-mono text-[#4a3a2a] break-all leading-relaxed">
+                  <span className="text-[#6b5a3a]">wallet: </span>{state.walletAddress ?? 'null'}
+                </p>
+                <p className="text-[8px] font-mono text-[#4a3a2a] leading-relaxed">
+                  <span className="text-[#6b5a3a]">playerId: </span>{state.playerId ?? 'null'}
+                </p>
+                <p className="text-[8px] font-mono text-[#4a3a2a] leading-relaxed">
+                  <span className="text-[#6b5a3a]">synced: </span>{String(state.isSynced)}
+                </p>
+                {isTWA && user && (
+                  <p className="text-[8px] font-mono text-[#4a3a2a] leading-relaxed">
+                    <span className="text-[#6b5a3a]">tgId: </span>{user.id}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={testConnection}
+                disabled={pinging}
+                className="w-full py-1.5 rounded-lg text-[9px] font-bold transition-all active:scale-95"
+                style={{ border: '1px solid rgba(212,160,23,0.3)', color: '#d4a017', background: 'rgba(212,160,23,0.06)', opacity: pinging ? 0.6 : 1 }}
+              >
+                {pinging ? 'Testing…' : 'Test Backend Connection'}
+              </button>
+              {pingResult && (
+                <p className="text-[8px] font-mono text-[#6b5a3a] break-all px-1">{pingResult}</p>
+              )}
             </div>
           )}
         </div>
