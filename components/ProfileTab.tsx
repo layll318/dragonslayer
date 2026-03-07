@@ -47,6 +47,10 @@ export default function ProfileTab() {
   const [showDebug, setShowDebug] = useState(false);
   const [pingResult, setPingResult] = useState<string>('');
   const [pinging, setPinging] = useState(false);
+  const [arenaResult, setArenaResult] = useState<string>('');
+  const [arenaLoading, setArenaLoading] = useState(false);
+  const [relinkResult, setRelinkResult] = useState<string>('');
+  const [relinking, setRelinking] = useState(false);
 
   const API_URL = typeof process !== 'undefined' ? (process.env.NEXT_PUBLIC_API_URL ?? '') : '';
 
@@ -68,6 +72,48 @@ export default function ProfileTab() {
     }
     setPinging(false);
   }, [API_URL]);
+
+  const testArena = useCallback(async () => {
+    if (!state.playerId) { setArenaResult('❌ no playerId — not authed'); return; }
+    setArenaLoading(true);
+    setArenaResult('…');
+    try {
+      const t0 = Date.now();
+      const res = await fetch(`${API_URL}/api/arena/opponents?player_id=${state.playerId}`, { cache: 'no-store' });
+      const ms = Date.now() - t0;
+      const text = await res.text();
+      let detail = '';
+      try { detail = JSON.parse(text)?.detail ?? ''; } catch {}
+      setArenaResult(`${res.ok ? '✅' : '❌'} ${res.status} (${ms}ms)${detail ? ': ' + detail : ''} | raw: ${text.slice(0, 80)}`);
+    } catch (e: any) {
+      setArenaResult(`❌ ${e?.message ?? 'CORS/network'} — CORS not set on backend`);
+    }
+    setArenaLoading(false);
+  }, [API_URL, state.playerId]);
+
+  const relinkWallet = useCallback(async () => {
+    if (!state.walletAddress) { setRelinkResult('❌ no wallet connected'); return; }
+    setRelinking(true);
+    setRelinkResult('…');
+    try {
+      const t0 = Date.now();
+      const res = await fetch(`${API_URL}/api/auth/wallet`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wallet_address: state.walletAddress, player_id: state.playerId ?? undefined }),
+      });
+      const ms = Date.now() - t0;
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setRelinkResult(`✅ ${res.status} (${ms}ms) → playerId=${data.player_id} tg=${data.telegram_id ?? 'null'} new=${data.is_new}`);
+      } else {
+        setRelinkResult(`⚠️ ${res.status} (${ms}ms): ${data.detail ?? JSON.stringify(data).slice(0,60)}`);
+      }
+    } catch (e: any) {
+      setRelinkResult(`❌ ${e?.message ?? 'CORS/network'}`);
+    }
+    setRelinking(false);
+  }, [API_URL, state.walletAddress, state.playerId]);
 
   const loadLeaderboard = useCallback(async () => {
     setLbLoading(true); setLbError(null);
@@ -223,10 +269,32 @@ export default function ProfileTab() {
                 className="w-full py-1.5 rounded-lg text-[9px] font-bold transition-all active:scale-95"
                 style={{ border: '1px solid rgba(212,160,23,0.3)', color: '#d4a017', background: 'rgba(212,160,23,0.06)', opacity: pinging ? 0.6 : 1 }}
               >
-                {pinging ? 'Testing…' : 'Test Backend Connection'}
+                {pinging ? 'Testing…' : 'Test /health'}
               </button>
               {pingResult && (
                 <p className="text-[8px] font-mono text-[#6b5a3a] break-all px-1">{pingResult}</p>
+              )}
+              <button
+                onClick={testArena}
+                disabled={arenaLoading}
+                className="w-full py-1.5 rounded-lg text-[9px] font-bold transition-all active:scale-95"
+                style={{ border: '1px solid rgba(100,150,255,0.3)', color: '#7aabff', background: 'rgba(100,150,255,0.06)', opacity: arenaLoading ? 0.6 : 1 }}
+              >
+                {arenaLoading ? 'Testing…' : 'Test Arena Opponents'}
+              </button>
+              {arenaResult && (
+                <p className="text-[8px] font-mono text-[#6b5a3a] break-all px-1">{arenaResult}</p>
+              )}
+              <button
+                onClick={relinkWallet}
+                disabled={relinking}
+                className="w-full py-1.5 rounded-lg text-[9px] font-bold transition-all active:scale-95"
+                style={{ border: '1px solid rgba(100,220,100,0.3)', color: '#6ddc6d', background: 'rgba(100,220,100,0.06)', opacity: relinking ? 0.6 : 1 }}
+              >
+                {relinking ? 'Linking…' : 'Re-link Wallet → This Account'}
+              </button>
+              {relinkResult && (
+                <p className="text-[8px] font-mono text-[#6b5a3a] break-all px-1">{relinkResult}</p>
               )}
             </div>
           )}

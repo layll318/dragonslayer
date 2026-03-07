@@ -92,12 +92,18 @@ export default function ArenaTab() {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`${API_URL}/api/arena/opponents?player_id=${state.playerId}`);
+      const res = await fetch(`${API_URL}/api/arena/opponents?player_id=${state.playerId}`, { cache: 'no-store' });
+      if (!res.ok) {
+        let detail = '';
+        try { const d = await res.json(); detail = d.detail || ''; } catch {}
+        setError(`Server error ${res.status}${detail ? ': ' + detail : ''} — backend may need redeploy`);
+        return;
+      }
       const data = await res.json();
       if (data.success) setOpponents(data.opponents);
       else setError(data.detail || 'Failed to load opponents');
-    } catch {
-      setError('Could not reach server');
+    } catch (e: any) {
+      setError(`Network error: ${e?.message ?? 'CORS or unreachable'} — check console`);
     } finally {
       setLoading(false);
     }
