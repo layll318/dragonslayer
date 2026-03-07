@@ -1311,7 +1311,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       const res = await fetch(`${API_URL}/api/auth/wallet`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ wallet_address: address }),
+        body: JSON.stringify({ wallet_address: address, player_id: stateRef.current.playerId ?? undefined }),
       });
       const data = await res.json();
       if (data.success) {

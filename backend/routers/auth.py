@@ -17,6 +17,7 @@ class TWAAuthRequest(BaseModel):
 
 class WalletAuthRequest(BaseModel):
     wallet_address: str
+    player_id: int | None = None  # pass existing player_id to link wallet to that account
 
 
 class AuthResponse(BaseModel):
@@ -93,36 +94,61 @@ async def twa_auth(req: TWAAuthRequest):
 async def wallet_auth(req: WalletAuthRequest):
     """
     Called from the web when a player links their XRPL wallet.
-    Upserts a player keyed by wallet_address.
+    If player_id is provided (Telegram user), links wallet to that existing account.
+    Otherwise upserts a player keyed by wallet_address.
     """
     pool = get_pool()
     async with pool.acquire() as conn:
-        row = await conn.fetchrow(
+        # Check if wallet is already claimed by some player
+        existing = await conn.fetchrow(
             "SELECT id, telegram_id, username FROM players WHERE wallet_address = $1",
             req.wallet_address,
         )
-        if row:
+        if existing:
+            # Wallet already belongs to a player — return that player
             return AuthResponse(
                 success=True,
-                player_id=row["id"],
+                player_id=existing["id"],
                 wallet_address=req.wallet_address,
-                telegram_id=row["telegram_id"],
-                username=row["username"],
+                telegram_id=existing["telegram_id"],
+                username=existing["username"],
                 is_new=False,
             )
-        else:
-            new_row = await conn.fetchrow(
+
+        if req.player_id:
+            # Link wallet to the caller's existing account (e.g. Telegram player connecting Xaman)
+            updated = await conn.fetchrow(
                 """
-                INSERT INTO players (wallet_address)
-                VALUES ($1)
-                ON CONFLICT (wallet_address) DO UPDATE SET updated_at=NOW()
+                UPDATE players SET wallet_address = $1, updated_at = NOW()
+                WHERE id = $2
                 RETURNING *
                 """,
                 req.wallet_address,
+                req.player_id,
             )
-            return AuthResponse(
-                success=True,
-                player_id=new_row["id"],
-                wallet_address=new_row["wallet_address"],
-                is_new=True,
-            )
+            if updated:
+                return AuthResponse(
+                    success=True,
+                    player_id=updated["id"],
+                    wallet_address=updated["wallet_address"],
+                    telegram_id=updated["telegram_id"],
+                    username=updated["username"],
+                    is_new=False,
+                )
+
+        # No existing wallet match and no player_id hint — create new player
+        new_row = await conn.fetchrow(
+            """
+            INSERT INTO players (wallet_address)
+            VALUES ($1)
+            ON CONFLICT (wallet_address) DO UPDATE SET updated_at=NOW()
+            RETURNING *
+            """,
+            req.wallet_address,
+        )
+        return AuthResponse(
+            success=True,
+            player_id=new_row["id"],
+            wallet_address=new_row["wallet_address"],
+            is_new=True,
+        )

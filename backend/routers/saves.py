@@ -48,8 +48,8 @@ async def upsert_save(player_id: int, req: SaveRequest):
 
         await conn.execute(
             """
-            INSERT INTO game_saves (player_id, save_json, updated_at, last_active_at)
-            VALUES ($1, $2::jsonb, NOW(), NOW())
+            INSERT INTO game_saves (player_id, save_json, updated_at)
+            VALUES ($1, $2::jsonb, NOW())
             ON CONFLICT (player_id) DO UPDATE
               SET save_json = $2::jsonb, updated_at = NOW()
             """,

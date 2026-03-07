@@ -43,13 +43,8 @@ app = FastAPI(
 # CORS — allow the game frontend + any embed origin
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        FRONTEND_URL,
-        "http://localhost:3000",
-        "https://localhost:3000",
-        "*",  # embed origins are checked at the route level; CORS itself is open
-    ],
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
