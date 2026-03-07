@@ -679,6 +679,25 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         walletAddress: saved.walletAddress ?? null,
         isSynced: saved.isSynced ?? false,
       });
+
+      // Auto-recover: wallet saved but playerId missing (backend was down on first connect)
+      if (saved.walletAddress && !saved.playerId) {
+        const apiUrl2 = process.env.NEXT_PUBLIC_API_URL ?? '';
+        if (apiUrl2) {
+          fetch(`${apiUrl2}/api/auth/wallet`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ wallet_address: saved.walletAddress }),
+          })
+            .then(r => r.json())
+            .then(data => {
+              if (data.success && data.player_id) {
+                setState(prev => ({ ...prev, playerId: data.player_id, isSynced: true }));
+              }
+            })
+            .catch(() => {});
+        }
+      }
     }
 
     // Pick up wallet address from Xaman return redirect or localStorage fallback
