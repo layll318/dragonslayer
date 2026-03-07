@@ -201,6 +201,7 @@ interface GameContextType {
   canAfford: (cost: number) => boolean;
   getCharacterTier: () => number;
   recordBotBattle: (win: boolean, goldStolen: number) => void;
+  resetArenaAttacks: () => void;
   CRAFTING_RECIPES: CraftingRecipe[];
   ITEM_UNLOCK_LEVELS: Record<ItemType, number>;
 }
@@ -687,7 +688,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           fetch(`${apiUrl2}/api/auth/wallet`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ wallet_address: saved.walletAddress }),
+            body: JSON.stringify({ wallet_address: saved.walletAddress, player_id: stateRef.current.playerId ?? undefined }),
           })
             .then(r => r.json())
             .then(data => {
@@ -911,7 +912,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const gearMultiplier = calcGearMultiplier(state.equipment);
 
-  const armyPower = useMemo(() => calcArmyPower(state.buildings), [state.buildings]);
+  const dragonArmyPowerFlat = useMemo(
+    () => state.hatchedDragons.filter(d => d.bonusType === 'army_power_flat').reduce((s, d) => s + d.bonusValue, 0),
+    [state.hatchedDragons]
+  );
+
+  const armyPower = useMemo(() => calcArmyPower(state.buildings) + dragonArmyPowerFlat, [state.buildings, dragonArmyPowerFlat]);
 
   const goldPerTap = Math.max(1, Math.floor((1 + state.level * 0.5) * gearMultiplier));
 
@@ -1237,9 +1243,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       newBuildings[idx] = { ...building, owned: building.owned + qty };
       const xpUpdate = addXp(10 * qty, prev);
 
-      // Update buy_buildings quest
-      const newBoughtToday = prev.buildingsBoughtToday + qty;
-      const dailyQuests = prev.dailyQuests.map(q => {
+      // Update buy_buildings quest, handling intra-session day rollover
+      const today = getToday();
+      const isNewDay = prev.questDate !== today;
+      const newBoughtToday = (isNewDay ? 0 : prev.buildingsBoughtToday) + qty;
+      const dailyQuests = (isNewDay ? generateDailyQuests(prev.level) : prev.dailyQuests).map(q => {
         if (q.type === 'buy_buildings' && !q.completed) {
           const progress = Math.min(newBoughtToday, q.target);
           return { ...q, progress, completed: progress >= q.target };
@@ -1254,6 +1262,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         buildings: newBuildings,
         buildingsBoughtToday: newBoughtToday,
         dailyQuests,
+        questDate: isNewDay ? today : prev.questDate,
+        tapGoldToday: isNewDay ? 0 : prev.tapGoldToday,
+        expeditionsToday: isNewDay ? 0 : prev.expeditionsToday,
       };
     });
   }, [addXp]);
@@ -1296,9 +1307,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         totalGoldEarned: prev.totalGoldEarned + goldStolen,
         arenaAttacksToday: attacks + 1,
         arenaLastReset: today,
-        arenaPoints: (prev.arenaPoints ?? 0) + (win ? 5 : 1),
+        arenaPoints: (prev.arenaPoints ?? 0) + (win ? 10 : 2),
       };
     });
+  }, []);
+
+  const resetArenaAttacks = useCallback(() => {
+    setState(prev => ({ ...prev, arenaAttacksToday: 0, arenaLastReset: getToday() }));
   }, []);
 
   const API_URL = typeof process !== 'undefined' ? (process.env.NEXT_PUBLIC_API_URL ?? '') : '';
@@ -1369,7 +1384,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         addEggs,
         dragonBonuses: {
           tapGoldPct: state.hatchedDragons.filter(d => d.bonusType === 'tap_gold_pct').reduce((s, d) => s + d.bonusValue, 0),
-          armyPowerFlat: state.hatchedDragons.filter(d => d.bonusType === 'army_power_flat').reduce((s, d) => s + d.bonusValue, 0),
+          armyPowerFlat: dragonArmyPowerFlat,
           materialDropPct: state.hatchedDragons.filter(d => d.bonusType === 'material_drop_pct').reduce((s, d) => s + d.bonusValue, 0),
           expeditionTimePct: state.hatchedDragons.filter(d => d.bonusType === 'expedition_time_pct').reduce((s, d) => s + d.bonusValue, 0),
         },
@@ -1380,6 +1395,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         connectWallet,
         disconnectWallet,
         recordBotBattle,
+        resetArenaAttacks,
         goldPerTap,
         goldPerHour,
         gearMultiplier,

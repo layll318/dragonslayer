@@ -100,9 +100,7 @@ async def get_opponents(
             )
             if has_active_col:
                 last_active = r["last_active_at"]
-                is_active = bool(
-                    last_active and (now - last_active.replace(tzinfo=timezone.utc) if last_active.tzinfo is None else now - last_active) < ACTIVE_THRESHOLD
-                )
+                is_active = bool(last_active and (now - last_active) < ACTIVE_THRESHOLD)
             else:
                 is_active = False
             candidates.append({

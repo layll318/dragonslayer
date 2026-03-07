@@ -388,10 +388,10 @@ export default function ExpeditionTab() {
                 className="action-btn flex flex-col items-center py-3 gap-0.5"
               >
                 <span className="font-cinzel font-bold text-base">{h}h</span>
-                <span className="text-[8px] opacity-80">
+                <span className="text-[10px] opacity-80">
                   🐉 {estLow(h)}–{estHigh(h)}
                 </span>
-                <span className="text-[8px] opacity-60">
+                <span className="text-[10px] opacity-60">
                   {h === 4 ? 'Common' : h === 8 ? 'Uncommon' : 'Rare'} mats
                 </span>
               </button>

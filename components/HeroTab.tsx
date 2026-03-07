@@ -184,7 +184,7 @@ export default function HeroTab() {
                 <div className="xp-bar-bg w-28 h-2">
                   <div className="xp-bar-fill h-full" style={{ width: `${xpPercent}%` }} />
                 </div>
-                <span className="text-[9px] text-[#6b5a3a] font-bold uppercase tracking-wider">{TIER_NAMES[tier - 1]}</span>
+                <span className="text-[11px] text-[#8a7a5a] font-bold uppercase tracking-wider">{TIER_NAMES[tier - 1]}</span>
               </div>
             </div>
           </div>

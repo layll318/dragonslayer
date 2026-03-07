@@ -35,7 +35,7 @@ const TIER_ICONS = ['🧑‍🌾', '🛡️', '⚔️', '🐲', '👑'];
 const TIER_LEVELS = [1, 10, 25, 50, 80];
 
 export default function ProfileTab() {
-  const { state, goldPerHour, goldPerTap, getCharacterTier, connectWallet, disconnectWallet } = useGame();
+  const { state, goldPerHour, goldPerTap, getCharacterTier, connectWallet, disconnectWallet, resetArenaAttacks } = useGame();
   const { user, isTWA } = useTelegramWebApp();
 
   const [lbEntries, setLbEntries] = useState<LeaderboardEntry[]>([]);
@@ -44,7 +44,7 @@ export default function ProfileTab() {
   const [lbError, setLbError] = useState<string | null>(null);
   const [lbLastRefresh, setLbLastRefresh] = useState(0);
 
-  const [showDebug, setShowDebug] = useState(false);
+  const [showDebug, setShowDebug] = useState(true);
   const [pingResult, setPingResult] = useState<string>('');
   const [pinging, setPinging] = useState(false);
   const [arenaResult, setArenaResult] = useState<string>('');
@@ -237,7 +237,7 @@ export default function ProfileTab() {
         <div className="dragon-panel p-3">
           <button
             onClick={() => setShowDebug(v => !v)}
-            className="w-full flex items-center justify-between text-[9px] font-mono text-[#4a3a2a] hover:text-[#6b5a3a] transition-colors"
+            className="w-full flex items-center justify-between text-[11px] font-mono text-[#8a7a5a] hover:text-[#a89878] transition-colors"
           >
             <span>🔧 DEBUG</span>
             <span>{showDebug ? '▲ hide' : '▼ show'}</span>
@@ -245,21 +245,36 @@ export default function ProfileTab() {
           {showDebug && (
             <div className="mt-2 space-y-1.5">
               <div className="p-2 rounded-lg bg-black/40 border border-white/5 space-y-1">
-                <p className="text-[8px] font-mono text-[#4a3a2a] break-all leading-relaxed">
-                  <span className="text-[#6b5a3a]">API_URL: </span>{API_URL || '(empty — not set!)'}
+                <p className="text-[12px] font-mono text-[#8a7a5a] break-all leading-relaxed">
+                  <span className="text-[#a89878]">API_URL: </span>{API_URL || '(empty — not set!)'}
                 </p>
-                <p className="text-[8px] font-mono text-[#4a3a2a] break-all leading-relaxed">
-                  <span className="text-[#6b5a3a]">wallet: </span>{state.walletAddress ?? 'null'}
+                <p className="text-[12px] font-mono text-[#8a7a5a] break-all leading-relaxed">
+                  <span className="text-[#a89878]">wallet: </span>{state.walletAddress ?? 'null'}
                 </p>
-                <p className="text-[8px] font-mono text-[#4a3a2a] leading-relaxed">
-                  <span className="text-[#6b5a3a]">playerId: </span>{state.playerId ?? 'null'}
+                <p className="text-[12px] font-mono text-[#8a7a5a] leading-relaxed">
+                  <span className="text-[#a89878]">playerId: </span>{state.playerId ?? 'null'}
                 </p>
-                <p className="text-[8px] font-mono text-[#4a3a2a] leading-relaxed">
-                  <span className="text-[#6b5a3a]">synced: </span>{String(state.isSynced)}
+                <p className="text-[12px] font-mono text-[#8a7a5a] leading-relaxed">
+                  <span className="text-[#a89878]">synced: </span>{String(state.isSynced)}
+                </p>
+                <p className="text-[12px] font-mono text-[#8a7a5a] leading-relaxed">
+                  <span className="text-[#a89878]">level: </span>{state.level}
+                </p>
+                <p className="text-[12px] font-mono text-[#8a7a5a] leading-relaxed">
+                  <span className="text-[#a89878]">gold: </span>{Math.floor(state.gold)}
+                </p>
+                <p className="text-[12px] font-mono text-[#8a7a5a] leading-relaxed">
+                  <span className="text-[#a89878]">arenaAttacksToday: </span>{state.arenaAttacksToday ?? 0}
+                </p>
+                <p className="text-[12px] font-mono text-[#8a7a5a] leading-relaxed">
+                  <span className="text-[#a89878]">arenaLastReset: </span>{state.arenaLastReset || 'not set'}
+                </p>
+                <p className="text-[12px] font-mono text-[#8a7a5a] leading-relaxed">
+                  <span className="text-[#a89878]">arenaPoints: </span>{state.arenaPoints ?? 0}
                 </p>
                 {isTWA && user && (
-                  <p className="text-[8px] font-mono text-[#4a3a2a] leading-relaxed">
-                    <span className="text-[#6b5a3a]">tgId: </span>{user.id}
+                  <p className="text-[12px] font-mono text-[#8a7a5a] leading-relaxed">
+                    <span className="text-[#a89878]">tgId: </span>{user.id}
                   </p>
                 )}
               </div>
@@ -272,7 +287,7 @@ export default function ProfileTab() {
                 {pinging ? 'Testing…' : 'Test /health'}
               </button>
               {pingResult && (
-                <p className="text-[8px] font-mono text-[#6b5a3a] break-all px-1">{pingResult}</p>
+                <p className="text-[12px] font-mono text-[#8a7a5a] break-all px-1">{pingResult}</p>
               )}
               <button
                 onClick={testArena}
@@ -283,7 +298,7 @@ export default function ProfileTab() {
                 {arenaLoading ? 'Testing…' : 'Test Arena Opponents'}
               </button>
               {arenaResult && (
-                <p className="text-[8px] font-mono text-[#6b5a3a] break-all px-1">{arenaResult}</p>
+                <p className="text-[12px] font-mono text-[#8a7a5a] break-all px-1">{arenaResult}</p>
               )}
               <button
                 onClick={relinkWallet}
@@ -294,8 +309,22 @@ export default function ProfileTab() {
                 {relinking ? 'Linking…' : 'Re-link Wallet → This Account'}
               </button>
               {relinkResult && (
-                <p className="text-[8px] font-mono text-[#6b5a3a] break-all px-1">{relinkResult}</p>
+                <p className="text-[12px] font-mono text-[#8a7a5a] break-all px-1">{relinkResult}</p>
               )}
+              <button
+                onClick={resetArenaAttacks}
+                className="w-full py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95"
+                style={{ border: '1px solid rgba(248,113,113,0.3)', color: '#f87171', background: 'rgba(248,113,113,0.06)' }}
+              >
+                🔄 Force Reset Arena Attacks
+              </button>
+              <button
+                onClick={() => { localStorage.clear(); window.location.reload(); }}
+                className="w-full py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95"
+                style={{ border: '1px solid rgba(255,100,100,0.3)', color: '#ff6060', background: 'rgba(255,60,60,0.06)' }}
+              >
+                🗑️ Clear LocalStorage + Reload
+              </button>
             </div>
           )}
         </div>
@@ -344,7 +373,7 @@ export default function ProfileTab() {
                   >
                     {name}
                   </span>
-                  <span className="text-[9px] text-[#4a3a2a] font-bold relative z-10">Lv.{tierLevel}</span>
+                  <span className="text-[10px] text-[#6b5a3a] font-bold relative z-10">Lv.{tierLevel}</span>
                   {isUnlocked && (
                     <span className="relative z-10 w-5 h-5 rounded-full bg-green-900/30 border border-green-500/30 flex items-center justify-center">
                       <span className="text-green-400 text-[10px]">✓</span>
@@ -444,7 +473,7 @@ function StatCard({ icon, label, value, highlight }: { icon: string; label: stri
     >
       <div className="text-lg mb-0.5">{icon}</div>
       <div className={`font-bold text-sm tabular-nums ${highlight ? 'text-[#f0c040]' : 'text-[#d8c8a8]'}`}>{value}</div>
-      <div className="text-[#4a3a2a] text-[8px] uppercase tracking-widest mt-0.5">{label}</div>
+      <div className="text-[#6b5a3a] text-[10px] uppercase tracking-widest mt-0.5">{label}</div>
     </div>
   );
 }

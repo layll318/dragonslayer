@@ -83,7 +83,9 @@ export default function ArenaTab() {
   const [result, setResult] = useState<BattleResult | null>(null);
   const [error, setError] = useState('');
 
-  const attacksLeft = MAX_ATTACKS - (state.arenaAttacksToday ?? 0);
+  const today = new Date().toISOString().split('T')[0];
+  const effectiveAttacksToday = state.arenaLastReset === today ? (state.arenaAttacksToday ?? 0) : 0;
+  const attacksLeft = MAX_ATTACKS - effectiveAttacksToday;
 
   const botOpponent = useMemo(() => makeBotOpponent(armyPower, state.level), [armyPower, state.level]);
 
@@ -148,7 +150,7 @@ export default function ArenaTab() {
         effective_defense: effDef,
         rounds,
         attacks_remaining: attacksLeft - 1,
-        arena_points: (state.arenaPoints ?? 0) + (win ? 5 : 1),
+        arena_points: (state.arenaPoints ?? 0) + (win ? 10 : 2),
       });
       setAttacking(false);
       return;
@@ -180,6 +182,7 @@ export default function ArenaTab() {
         setRoundIdx(i);
         await new Promise(r => setTimeout(r, 1100));
       }
+      recordBotBattle(data.win, data.gold_stolen);
       setResult(data);
     } catch {
       setError('Attack failed — server unreachable');
@@ -194,21 +197,6 @@ export default function ArenaTab() {
     loadOpponents();
   };
 
-  // ── No wallet ───────────────────────────────────────────────────────────────
-  if (!state.walletAddress) {
-    return (
-      <div className="flex flex-col flex-1 pb-4 overflow-y-auto relative z-10 page-fade">
-        <ArenaHeader attacksLeft={attacksLeft} arenaPoints={state.arenaPoints ?? 0} />
-        <div className="flex flex-col items-center justify-center flex-1 px-6 text-center gap-4">
-          <span className="text-5xl">⚔️</span>
-          <p className="font-cinzel font-bold text-[#f0c040] text-lg">Arena Locked</p>
-          <p className="text-[#6b5a3a] text-sm leading-relaxed">
-            Connect your Xaman wallet in Profile to compete in the Arena and battle real players.
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   // ── Battle animation ────────────────────────────────────────────────────────
   if (attacking && selected) {
@@ -296,8 +284,8 @@ export default function ArenaTab() {
             <p className="font-cinzel font-bold text-[#e8d8a8] text-[10px] tracking-wider mb-2">BATTLE LOG</p>
             {result.rounds.map((r, i) => (
               <div key={i} className="flex gap-2 mb-1.5">
-                <span className="text-[#d4a017] text-[9px] font-bold w-14 flex-shrink-0">{r.label}</span>
-                <span className="text-[#6b5a3a] text-[9px]">{r.desc}</span>
+                <span className="text-[#d4a017] text-[11px] font-bold w-14 flex-shrink-0">{r.label}</span>
+                <span className="text-[#8a7a5a] text-[11px]">{r.desc}</span>
               </div>
             ))}
           </div>
@@ -353,17 +341,19 @@ export default function ArenaTab() {
         <div className="dragon-panel px-3 py-3">
           <div className="flex items-center justify-between mb-2">
             <p className="font-cinzel font-bold text-[#e8d8a8] text-[10px] tracking-wider">CHOOSE OPPONENT</p>
-            <button onClick={loadOpponents} disabled={loading}
-              className="text-[9px] text-[#6b5a3a] underline transition-opacity"
-              style={{ opacity: loading ? 0.5 : 1 }}>
-              {loading ? '…' : '↻ Refresh'}
-            </button>
+            {state.walletAddress && (
+              <button onClick={loadOpponents} disabled={loading}
+                className="text-[9px] text-[#6b5a3a] underline transition-opacity"
+                style={{ opacity: loading ? 0.5 : 1 }}>
+                {loading ? '…' : '↻ Refresh'}
+              </button>
+            )}
           </div>
-          {loading && (
+          {state.walletAddress && loading && (
             <div className="text-center py-2 text-[#6b5a3a] text-xs">Loading real players…</div>
           )}
           <div className="flex flex-col gap-1.5">
-            {[botOpponent, ...opponents].map(opp => {
+            {[botOpponent, ...(state.walletAddress ? opponents : [])].map(opp => {
               const isSelected = selected?.player_id === opp.player_id;
               const ch = winChance(armyPower, formation, opp.defense_power);
               const isBot = opp.player_id === 0;
@@ -396,7 +386,7 @@ export default function ArenaTab() {
                         </span>
                       )}
                     </div>
-                    <p className="text-[8px] text-[#6b5a3a]">⚔️{opp.attack_power} · 🛡️{opp.defense_power}{isBot ? ' · AI' : ''}</p>
+                    <p className="text-[10px] text-[#8a7a5a]">⚔️{opp.attack_power} · 🛡️{opp.defense_power}{isBot ? ' · AI' : ''}</p>
                   </div>
                   <div className="text-right flex-shrink-0">
                     <p className="text-[9px] font-bold"
@@ -408,6 +398,16 @@ export default function ArenaTab() {
                 </button>
               );
             })}
+            {!state.walletAddress && (
+              <div className="mt-2 flex flex-col items-center gap-2 px-3 py-3 rounded-lg text-center"
+                style={{ background: 'rgba(212,160,23,0.05)', border: '1px solid rgba(212,160,23,0.15)' }}>
+                <span className="text-2xl">🔒</span>
+                <p className="font-cinzel font-bold text-[#f0c040] text-xs">PvP Locked</p>
+                <p className="text-[#8a7a5a] text-[10px] leading-relaxed">
+                  Connect your Xaman wallet in the <span className="text-[#f0c040] font-bold">Profile</span> tab to battle real players and earn bonus arena points.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -450,7 +450,7 @@ export default function ArenaTab() {
                   <p className="text-[9px] font-bold" style={{ color: formation === f ? '#f0c040' : '#6b5a3a' }}>
                     {FORMATION_INFO[f].label}
                   </p>
-                  <p className="text-[7px] text-[#4a3a2a] leading-tight">{FORMATION_INFO[f].desc}</p>
+                  <p className="text-[10px] text-[#7a6a4a] leading-tight">{FORMATION_INFO[f].desc}</p>
                 </button>
               ))}
             </div>

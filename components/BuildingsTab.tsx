@@ -102,7 +102,7 @@ export default function BuildingsTab() {
                       <button
                         onClick={() => canBuy10 && buyBuilding(building.id, 10)}
                         disabled={!canBuy10}
-                        className="text-[8px] font-black px-2 py-0.5 rounded w-[70px] transition-opacity"
+                        className="text-[10px] font-black px-2 py-0.5 rounded w-[70px] transition-opacity"
                         style={{
                           background: canBuy10
                             ? 'linear-gradient(180deg, #ffaa33 0%, #d4a017 100%)'
@@ -122,8 +122,8 @@ export default function BuildingsTab() {
                         <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
                         <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                       </svg>
-                      <span className="text-[9px] text-[#4a3a2a] font-bold block">Lv.{building.unlockLevel}</span>
-                      <span className="text-[8px] text-[#3a2a1a] block mt-0.5">
+                      <span className="text-[10px] text-[#6b5a3a] font-bold block">Lv.{building.unlockLevel}</span>
+                      <span className="text-[10px] text-[#6b5a3a] block mt-0.5">
                         {building.unlockLevel - state.level} lvls
                       </span>
                     </div>
