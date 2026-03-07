@@ -49,24 +49,42 @@ async def get_opponents(
         my_attack, _ = _extract_power(dict(my_save["save_json"]) if my_save else {})
 
         # LEFT JOIN so players who haven't synced a save yet still appear
-        rows = await conn.fetch(
-            """
-            SELECT p.id, p.username, p.wallet_address,
-                   COALESCE(gs.save_json, '{}'::jsonb) AS save_json,
-                   gs.last_active_at
-            FROM players p
-            LEFT JOIN game_saves gs ON gs.player_id = p.id
-            WHERE p.id != $1
-              AND p.wallet_address IS NOT NULL
-            ORDER BY RANDOM()
-            LIMIT 50
-            """,
-            player_id,
-        )
-
         from datetime import timedelta
         now = datetime.now(timezone.utc)
         ACTIVE_THRESHOLD = timedelta(minutes=5)
+
+        try:
+            rows = await conn.fetch(
+                """
+                SELECT p.id, p.username, p.wallet_address,
+                       COALESCE(gs.save_json, '{}'::jsonb) AS save_json,
+                       gs.last_active_at
+                FROM players p
+                LEFT JOIN game_saves gs ON gs.player_id = p.id
+                WHERE p.id != $1
+                  AND p.wallet_address IS NOT NULL
+                ORDER BY RANDOM()
+                LIMIT 50
+                """,
+                player_id,
+            )
+            has_active_col = True
+        except Exception:
+            # last_active_at column doesn't exist yet — fall back without it
+            rows = await conn.fetch(
+                """
+                SELECT p.id, p.username, p.wallet_address,
+                       COALESCE(gs.save_json, '{}'::jsonb) AS save_json
+                FROM players p
+                LEFT JOIN game_saves gs ON gs.player_id = p.id
+                WHERE p.id != $1
+                  AND p.wallet_address IS NOT NULL
+                ORDER BY RANDOM()
+                LIMIT 50
+                """,
+                player_id,
+            )
+            has_active_col = False
 
         candidates = []
         for r in rows:
@@ -80,10 +98,13 @@ async def get_opponents(
                 or (f"{wallet[:5]}…{wallet[-4:]}" if len(wallet) >= 10 else wallet)
                 or f"Hero #{r['id']}"
             )
-            last_active = r["last_active_at"]
-            is_active = bool(
-                last_active and (now - last_active.replace(tzinfo=timezone.utc) if last_active.tzinfo is None else now - last_active) < ACTIVE_THRESHOLD
-            )
+            if has_active_col:
+                last_active = r["last_active_at"]
+                is_active = bool(
+                    last_active and (now - last_active.replace(tzinfo=timezone.utc) if last_active.tzinfo is None else now - last_active) < ACTIVE_THRESHOLD
+                )
+            else:
+                is_active = False
             candidates.append({
                 "player_id": r["id"],
                 "name": name,

@@ -105,7 +105,28 @@ async def wallet_auth(req: WalletAuthRequest):
             req.wallet_address,
         )
         if existing:
-            # Wallet already belongs to a player — return that player
+            # Wallet already belongs to some player
+            if req.player_id and existing["id"] != req.player_id:
+                # Caller is authenticated as a different player (e.g. Telegram user) —
+                # transfer the wallet to their account and orphan the old wallet-only player.
+                await conn.execute(
+                    "UPDATE players SET wallet_address = NULL, updated_at = NOW() WHERE id = $1",
+                    existing["id"],
+                )
+                updated = await conn.fetchrow(
+                    "UPDATE players SET wallet_address = $1, updated_at = NOW() WHERE id = $2 RETURNING *",
+                    req.wallet_address, req.player_id,
+                )
+                if updated:
+                    return AuthResponse(
+                        success=True,
+                        player_id=updated["id"],
+                        wallet_address=updated["wallet_address"],
+                        telegram_id=updated["telegram_id"],
+                        username=updated["username"],
+                        is_new=False,
+                    )
+            # Wallet belongs to the same player (or no player_id hint) — return as-is
             return AuthResponse(
                 success=True,
                 player_id=existing["id"],
