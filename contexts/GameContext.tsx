@@ -715,7 +715,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           fetch(`${apiUrl2}/api/auth/wallet`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ wallet_address: linkedAddr }),
+            body: JSON.stringify({ wallet_address: linkedAddr, player_id: saved?.playerId ?? undefined }),
           })
             .then(r => r.json())
             .then(data => {
@@ -763,15 +763,27 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         .then(r => r?.json())
         .then(saveData => {
           if (saveData?.save_json && Object.keys(saveData.save_json).length > 0) {
-            setState(prev => ({
-              ...prev,
-              ...saveData.save_json,
-              // Keep real-time fields from current state
-              lastTick: Date.now(),
-              playerId: prev.playerId,
-              walletAddress: prev.walletAddress,
-              isSynced: true,
-            }));
+            setState(prev => {
+              const serverLevel = Number(saveData.save_json.level ?? 0);
+              const localLevel  = Number(prev.level ?? 0);
+              const serverGold  = Number(saveData.save_json.totalGoldEarned ?? 0);
+              const localGold   = Number(prev.totalGoldEarned ?? 0);
+              // Only overwrite local state if server save is strictly ahead
+              const serverAhead = serverLevel > localLevel ||
+                (serverLevel === localLevel && serverGold > localGold);
+              if (serverAhead) {
+                return {
+                  ...prev,
+                  ...saveData.save_json,
+                  lastTick: Date.now(),
+                  playerId: prev.playerId,
+                  walletAddress: prev.walletAddress,
+                  isSynced: true,
+                };
+              }
+              // Local state is equal or better — keep it, just mark synced
+              return { ...prev, isSynced: true };
+            });
           }
         })
         .catch(() => {/* ignore network errors */});
