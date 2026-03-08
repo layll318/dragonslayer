@@ -14,7 +14,7 @@ export default function Home() {
   return (
     <>
       <main className="flex-1 flex flex-col overflow-y-auto" style={{ paddingBottom: 'calc(68px + env(safe-area-inset-bottom))' }}>
-        {activeTab === 'hero' && <HeroTab />}
+        {activeTab === 'hero' && <HeroTab onTabChange={setActiveTab} />}
         {activeTab === 'buildings' && <BuildingsTab />}
         {activeTab === 'expedition' && <ExpeditionTab />}
         {activeTab === 'arena' && <ArenaTab />}

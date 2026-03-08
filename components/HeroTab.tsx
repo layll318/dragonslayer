@@ -66,7 +66,7 @@ function getNextGoal(state: ReturnType<typeof useGame>['state'], goldPerHour: nu
   return null;
 }
 
-export default function HeroTab() {
+export default function HeroTab({ onTabChange }: { onTabChange?: (tab: string) => void }) {
   const { state, tap, goldPerTap, goldPerHour, gearMultiplier, getCharacterTier } = useGame();
   const { hapticFeedback, isTWA } = useTelegramWebApp();
 
@@ -318,7 +318,9 @@ export default function HeroTab() {
           const hatchReady = state.incubator?.some(s => s.egg && s.endsAt && Date.now() >= s.endsAt);
           return (
             <div
-              className="flex items-center gap-3 px-3 py-2.5 rounded-xl"
+              role="button"
+              onClick={() => onTabChange?.('expedition')}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer"
               style={{
                 background: 'linear-gradient(135deg, rgba(249,115,22,0.12) 0%, rgba(239,68,68,0.06) 100%)',
                 border: `1px solid ${hatchReady ? 'rgba(74,222,128,0.5)' : 'rgba(249,115,22,0.35)'}`,
@@ -373,7 +375,7 @@ export default function HeroTab() {
         })()}
 
         {/* ══════════════ GEAR POWER BAR ══════════════ */}
-        <div className="dragon-panel px-3 py-2.5">
+        <div role="button" onClick={() => onTabChange?.('buildings')} className="dragon-panel px-3 py-2.5 cursor-pointer">
           <div className="flex items-center gap-3">
             <span className="text-sm">⚔️</span>
             <span className="text-[#e8d8a8] text-[12px] font-bold tracking-wide flex-shrink-0">Gear Power</span>
