@@ -730,7 +730,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
                   (serverLevel === localLevel && serverGold > localGold)
                 );
                 if (serverAhead) {
-                  return { ...prev, ...serverSave, lastTick: Date.now(),
+                  const { tokenDiscount: _td, ...serverSaveWithoutDiscount } = serverSave as any;
+                  return { ...prev, ...serverSaveWithoutDiscount, lastTick: Date.now(),
                     playerId: data.player_id, walletAddress: saved.walletAddress, isSynced: true };
                 }
                 return { ...prev, playerId: data.player_id, walletAddress: saved.walletAddress,
@@ -751,6 +752,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
                   body: JSON.stringify({ save_json: cur }),
                 }).catch(() => {});
               }
+              // Always re-verify token discount on reconnect (covers mobile/TWA restarts)
+              refreshTokenDiscount();
             })
             .catch(() => {});
         }
@@ -1459,9 +1462,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
       if (serverAhead) {
         // Server save is better — load it (preserve displayName from auth response)
+        // Strip tokenDiscount from serverSave — it will be re-verified fresh below
+        const { tokenDiscount: _td, ...serverSaveWithoutDiscount } = serverSave as any;
         setState(prev => ({
           ...prev,
-          ...serverSave,
+          ...serverSaveWithoutDiscount,
           lastTick: Date.now(),
           playerId: data.player_id,
           walletAddress: address,
