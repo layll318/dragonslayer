@@ -76,7 +76,7 @@ function makeBotOpponent(armyPower: number, level: number): Opponent {
 type ArenaView = 'battle' | 'defense';
 
 export default function ArenaTab() {
-  const { state, armyPower, recordBotBattle, markDefenseLogSeen } = useGame();
+  const { state, armyPower, recordBotBattle, recordPvpBattle, markDefenseLogSeen } = useGame();
   const defPower = calcDefensePower(state.buildings);
 
   const [opponents, setOpponents] = useState<Opponent[]>([]);
@@ -205,7 +205,7 @@ export default function ArenaTab() {
         setRoundIdx(i);
         await new Promise(r => setTimeout(r, 1100));
       }
-      recordBotBattle(data.win, data.gold_stolen, 'easy');
+      recordPvpBattle(data.win, data.gold_stolen ?? 0, data.trophies ?? (state.trophies ?? 0));
       setResult(data);
     } catch {
       setError('Attack failed — server unreachable');

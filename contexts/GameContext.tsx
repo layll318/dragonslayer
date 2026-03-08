@@ -236,6 +236,7 @@ interface GameContextType {
   canAfford: (cost: number) => boolean;
   getCharacterTier: () => number;
   recordBotBattle: (win: boolean, goldStolen: number, botTier?: 'easy' | 'hard') => void;
+  recordPvpBattle: (win: boolean, goldStolen: number, newTrophies: number) => void;
   markDefenseLogSeen: () => void;
   resetArenaAttacks: () => void;
   CRAFTING_RECIPES: CraftingRecipe[];
@@ -1488,6 +1489,22 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const recordPvpBattle = useCallback((win: boolean, goldStolen: number, newTrophies: number) => {
+    setState(prev => {
+      const today = new Date().toISOString().split('T')[0];
+      const attacks = prev.arenaLastReset === today ? (prev.arenaAttacksToday ?? 0) : 0;
+      return {
+        ...prev,
+        gold: prev.gold + goldStolen,
+        totalGoldEarned: prev.totalGoldEarned + goldStolen,
+        arenaAttacksToday: attacks + 1,
+        arenaLastReset: today,
+        arenaPoints: (prev.arenaPoints ?? 0) + (win ? 10 : 2),
+        trophies: Math.max(0, newTrophies),
+      };
+    });
+  }, []);
+
   const markDefenseLogSeen = useCallback(() => {
     setState(prev => ({ ...prev, defenseLogSeen: Date.now() }));
   }, []);
@@ -1679,6 +1696,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         addIncubatorSlot,
         refreshTokenDiscount,
         recordBotBattle,
+        recordPvpBattle,
         markDefenseLogSeen,
         resetArenaAttacks,
         goldPerTap,
