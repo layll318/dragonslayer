@@ -459,13 +459,13 @@ export default function BuildingsTab() {
               {state.tokenDiscount && (
                 <div className="flex items-center gap-1.5 flex-wrap">
                   {[
-                    { key: 'lynx',        label: '$LYNX',      holds: state.tokenDiscount.lynx },
-                    { key: 'xrpnomics',   label: 'XRPNOMICS',  holds: state.tokenDiscount.xrpnomics },
-                    { key: 'dragonslayer',label: 'DS Token',    holds: state.tokenDiscount.dragonslayer },
+                    { key: 'lynx',        label: '$LYNX',      holds: state.tokenDiscount.lynx,        bal: state.tokenDiscount.lynxBalance },
+                    { key: 'xrpnomics',   label: 'XRPNOMICS',  holds: state.tokenDiscount.xrpnomics,   bal: state.tokenDiscount.xrpnomicsBalance },
+                    { key: 'dragonslayer',label: 'DS Token',    holds: state.tokenDiscount.dragonslayer, bal: state.tokenDiscount.dragonslayerBalance },
                   ].map(t => (
                     <span key={t.key} className="px-1.5 py-0.5 rounded text-[8px] font-bold"
                       style={{ background: t.holds ? 'rgba(74,222,128,0.12)' : 'rgba(100,80,40,0.15)', border: `1px solid ${t.holds ? 'rgba(74,222,128,0.35)' : 'rgba(100,80,40,0.25)'}`, color: t.holds ? '#4ade80' : '#6b5a3a' }}>
-                      {t.holds ? '✓' : '✗'} {t.label}
+                      {t.holds ? '✓' : '✗'} {t.label}{t.bal > 0 ? ` (${t.bal.toLocaleString()})` : ''}
                     </span>
                   ))}
                   {discountPct > 0 && (

@@ -27,8 +27,11 @@ export interface IncubatorSlot {
 
 export interface TokenDiscount {
   lynx: boolean;
+  lynxBalance: number;
   xrpnomics: boolean;
+  xrpnomicsBalance: number;
   dragonslayer: boolean;
+  dragonslayerBalance: number;
   pct: number;
   checkedAt: number;
 }
@@ -1432,6 +1435,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           const lynx    = data.lynxError         ? (cached?.lynx        ?? false) : !!data.lynx;
           const xrpnomics = data.xrpnomicsError  ? (cached?.xrpnomics   ?? false) : !!data.xrpnomics;
           const dragonslayer = data.dragonslayerError ? (cached?.dragonslayer ?? false) : !!data.dragonslayer;
+          const lynxBalance         = data.lynxError         ? (cached?.lynxBalance         ?? 0) : (data.lynxBalance         ?? 0);
+          const xrpnomicsBalance    = data.xrpnomicsError    ? (cached?.xrpnomicsBalance    ?? 0) : (data.xrpnomicsBalance    ?? 0);
+          const dragonslayerBalance = data.dragonslayerError ? (cached?.dragonslayerBalance ?? 0) : (data.dragonslayerBalance ?? 0);
           const tokensHeld = [lynx, xrpnomics, dragonslayer].filter(Boolean).length;
           let pct = 0;
           if (tokensHeld >= 3) pct = 50;
@@ -1439,7 +1445,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           else if (tokensHeld >= 1) pct = 25;
           return {
             ...prev,
-            tokenDiscount: { lynx, xrpnomics, dragonslayer, pct, checkedAt: Date.now() },
+            tokenDiscount: { lynx, lynxBalance, xrpnomics, xrpnomicsBalance, dragonslayer, dragonslayerBalance, pct, checkedAt: Date.now() },
           };
         });
       }
