@@ -14,7 +14,6 @@ import {
   ItemRarity,
   MaterialType,
   calcGearBonus,
-  calcArmyPower,
   EGG_CONFIG,
   DragonEgg,
   EggRarity,
