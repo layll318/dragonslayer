@@ -211,7 +211,7 @@ async def attack(req: AttackRequest):
             SET save_json = save_json ||
                 jsonb_build_object(
                     'arenaAttacksToday', $2::int,
-                    'arenaLastReset', $3,
+                    'arenaLastReset', $3::text,
                     'arenaPoints', $4::int
                 ),
                 updated_at = NOW()
