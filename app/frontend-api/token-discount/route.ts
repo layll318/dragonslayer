@@ -9,19 +9,19 @@ const TOKEN_CONFIG = {
   lynx: {
     currencyHex: '244C594E58000000000000000000000000000000',
     issuer: 'rsr8BspVLwDWgrYamEJE3mqZhKozfWLfkv',
-    minBalance: 850_000,        // 0.1% of 850M supply
+    minBalance: 1,              // hold any LYNX
     label: '$LYNX',
   },
   xrpnomics: {
     currencyHex: '5852504E4F4D4943530000000000000000000000',
     issuer: 'r38o5rKYgTUg5Dgu2pDsC1xkroMbpivGJj',
-    minBalance: 0.1,            // 0.1 tokens of 100-supply token
+    minBalance: 0.000001,       // hold any XRPNOMICS
     label: 'XRPNOMICS',
   },
   dragonslayer: {
     currencyHex: null,           // resolved at runtime via account_currencies
     issuer: 'rBRUGYxmu5Lr9L246JzybRoE7TaL9VznSh',
-    minBalance: 30_113_636_363, // 1% of ~3.01T (265B = 8.8%)
+    minBalance: 1,              // hold any DragonSlayer token
     label: 'DragonSlayer',
   },
 } as const;
@@ -62,6 +62,7 @@ async function checkTokenBalance(
       params: [{ account: wallet, ledger_index: 'validated' }],
     });
 
+    if (data?.result?.status === 'error') return { holds: false, balance: 0 };
     const lines: any[] = data?.result?.lines ?? [];
 
     for (const line of lines) {

@@ -1306,7 +1306,11 @@ export default function ExpeditionTab() {
             </p>
             {adWatched && (
               <button
-                onClick={() => setShowAd(false)}
+                onClick={() => {
+                  const reductionMs = (exp?.durationHours ?? 4) * 3600 * 1000 * 0.25;
+                  speedUpExpedition(reductionMs);
+                  setShowAd(false);
+                }}
                 className="text-[#6b5a3a] text-lg leading-none px-2"
               >✕</button>
             )}
@@ -1319,13 +1323,7 @@ export default function ExpeditionTab() {
             autoPlay
             playsInline
             className="w-full max-h-[75vh] object-contain"
-            onEnded={() => {
-              if ((state.adsUsedThisExpedition ?? 0) < 2) {
-                const reductionMs = (state.activeExpedition?.durationHours ?? 4) * 3600 * 1000 * 0.25;
-                speedUpExpedition(reductionMs);
-              }
-              setAdWatched(true);
-            }}
+            onEnded={() => setAdWatched(true)}
             style={{ pointerEvents: 'none' }}
           />
 
@@ -1338,11 +1336,15 @@ export default function ExpeditionTab() {
               <>
                 <p className="text-[#4ade80] font-bold text-[11px] tracking-wider">✅ Expedition complete! Claim your rewards.</p>
                 <button
-                  onClick={() => setShowAd(false)}
+                  onClick={() => {
+                    const reductionMs = (exp?.durationHours ?? 4) * 3600 * 1000 * 0.25;
+                    speedUpExpedition(reductionMs);
+                    setShowAd(false);
+                  }}
                   className="action-btn px-8 py-2.5 text-sm"
                   style={{ animation: 'goldShimmerBtn 1.5s ease-in-out infinite' }}
                 >
-                  ⚔️ Claim Now
+                  ⚔️ Claim Boost
                 </button>
               </>
             )}
