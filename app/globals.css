@@ -33,8 +33,10 @@ body {
   color: var(--text-body);
   font-family: Georgia, 'Times New Roman', serif;
   overflow-x: hidden;
-  min-height: 100vh;
-  min-height: 100dvh;
+  /* In Telegram mini app, --tg-viewport-stable-height is injected and must be used
+     to size the app correctly (100dvh overflows the Telegram chrome). */
+  height: var(--tg-viewport-stable-height, 100dvh);
+  min-height: var(--tg-viewport-stable-height, 100dvh);
   -webkit-tap-highlight-color: transparent;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;

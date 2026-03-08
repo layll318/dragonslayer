@@ -81,6 +81,8 @@ interface TelegramWebApp {
   setHeaderColor: (color: string) => void
   setBackgroundColor: (color: string) => void
   isVersionAtLeast: (version: string) => boolean
+  onEvent: (eventType: string, eventHandler: () => void) => void
+  offEvent: (eventType: string, eventHandler: () => void) => void
 }
 
 declare global {
@@ -115,6 +117,16 @@ export function useTelegramWebApp(): UseTelegramWebAppReturn {
         tg.setHeaderColor('#0d0900')
         tg.setBackgroundColor('#0d0900')
       }
+
+      // Keep --tg-viewport-stable-height in sync so CSS layout uses the real height
+      const syncVh = () => {
+        const h = tg.viewportStableHeight || tg.viewportHeight
+        if (h) {
+          document.documentElement.style.setProperty('--tg-viewport-stable-height', `${h}px`)
+        }
+      }
+      syncVh()
+      tg.onEvent('viewportChanged', syncVh)
 
       setWebApp(tg)
       setIsReady(true)
