@@ -179,9 +179,14 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
     };
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('pageshow', onVisible);
+    // Telegram WebApp 'activated' fires when user returns to the mini app —
+    // more reliable than visibilitychange inside TWA WebViews.
+    const twa = typeof window !== 'undefined' ? (window as any).Telegram?.WebApp : null;
+    if (twa?.onEvent) twa.onEvent('activated', onVisible);
     return () => {
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('pageshow', onVisible);
+      if (twa?.offEvent) twa.offEvent('activated', onVisible);
       if (rapidBurstRef.current) clearInterval(rapidBurstRef.current);
     };
   }, [doPoll, startRapidBurst]);
@@ -357,15 +362,21 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
         </div>
 
         {mobile ? (
-          /* ── MOBILE: window.open keeps THIS tab alive so polling detects approval automatically ── */
+          /* ── MOBILE / TWA: open Xaman, keep this tab alive, burst-poll on return ── */
           <div className="flex flex-col gap-2 mb-4">
             {deeplink && (
               <button
                 onClick={() => {
-                  // Open in new tab/trigger App Link — keeps THIS tab alive so polling works
-                  const w = window.open(deeplink, '_blank', 'noopener,noreferrer');
-                  // If popup blocked (rare from direct click), navigate current tab
-                  if (!w) window.location.href = deeplink;
+                  const twa = (window as any).Telegram?.WebApp;
+                  if (twa?.openLink) {
+                    // TWA: use Telegram's openLink — mini app stays alive & activated event fires on return
+                    twa.openLink(deeplink);
+                  } else {
+                    const w = window.open(deeplink, '_blank', 'noopener,noreferrer');
+                    if (!w) window.location.href = deeplink;
+                  }
+                  // Start burst-polling immediately after opening Xaman
+                  if (uuidRef.current) startRapidBurst(uuidRef.current);
                 }}
                 className="flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl font-bold text-white text-sm
                   bg-gradient-to-r from-orange-500 to-orange-600 active:scale-95 transition-all shadow-lg"
@@ -383,20 +394,20 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
               </button>
             )}
 
-            <p className="text-[10px] text-[#6b5a3a] text-center leading-relaxed px-2">
-              After approving in Xaman, press the back button and return to this tab.
-            </p>
-
-            {/* Manual check — prominent, since polling may need a nudge */}
+            {/* After approving in Xaman, tap this — prominent primary action for TWA ── */}
             {uuid && (
               <button
-                onClick={() => uuid && doPoll(uuid)}
-                className="w-full py-2.5 rounded-xl text-sm font-bold active:scale-95 transition-all"
-                style={{ border: '1px solid rgba(212,160,23,0.4)', color: '#f0c040', background: 'rgba(212,160,23,0.08)' }}
+                onClick={() => { doPoll(uuid); if (uuidRef.current) startRapidBurst(uuidRef.current); }}
+                className="w-full py-3 rounded-xl text-sm font-bold active:scale-95 transition-all"
+                style={{ border: '2px solid rgba(212,160,23,0.7)', color: '#f0c040', background: 'rgba(212,160,23,0.15)' }}
               >
-                ✓ Already approved? Tap here
+                ✓ Approved in Xaman? Tap here to continue
               </button>
             )}
+
+            <p className="text-[10px] text-[#6b5a3a] text-center leading-relaxed px-2">
+              Open Xaman → approve → return here and tap the gold button above.
+            </p>
 
             {/* QR fallback toggle */}
             <button
