@@ -5,7 +5,7 @@ import {
   useGame,
   MaterialType,
   MATERIAL_LABELS,
-  EGG_CONFIG,
+  EGG_VARIANTS,
   EggRarity,
 } from '@/contexts/GameContext';
 import { formatNumber } from '@/utils/format';
@@ -220,8 +220,9 @@ export default function BuildingsTab() {
       const data = await res.json();
       if (!data.success) { setPremiumMsg(data.error || 'Verification failed.'); setPremiumStatus('error'); return; }
       if (data.eggRarity) {
-        const cfg = EGG_CONFIG[data.eggRarity as EggRarity];
-        addEggs([{ rarity: data.eggRarity, hatchHours: cfg.hatchHours, bonusType: cfg.bonusType, bonusValue: cfg.bonusValue }]);
+        const variants = EGG_VARIANTS[data.eggRarity as EggRarity];
+        const variant = variants[Math.floor(Math.random() * variants.length)];
+        addEggs([{ rarity: data.eggRarity, variantName: variant.variantName, hatchHours: variant.hatchHours, bonusType: variant.bonusType, bonusValue: variant.bonusValue }]);
       }
       if (data.materialCredits) addMaterials(data.materialCredits);
       if (data.incubatorSlot) addIncubatorSlot();

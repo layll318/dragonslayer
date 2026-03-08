@@ -133,6 +133,48 @@ async def list_players(authorization: Optional[str] = Header(None)):
         ]
 
 
+@router.post("/season-reset")
+async def season_reset(
+    dry_run: bool = Query(default=True),
+    authorization: Optional[str] = Header(None),
+):
+    """Soft-reset all player trophies for a new season (carry over 25%).
+    dry_run=true (default) returns the count without modifying anything."""
+    verify_admin(authorization)
+    from datetime import datetime, timezone
+    import math
+    current_month = datetime.now(timezone.utc).strftime("%Y-%m")
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT player_id, COALESCE((save_json->>'trophies')::int, 0) AS trophies
+            FROM game_saves
+            WHERE COALESCE((save_json->>'trophies')::int, 0) > 0
+            """
+        )
+        if dry_run:
+            return {
+                "dry_run": True,
+                "season_month": current_month,
+                "players_affected": len(rows),
+                "preview": [{"player_id": r["player_id"], "old": r["trophies"], "new": math.floor(r["trophies"] * 0.25)} for r in rows[:10]],
+            }
+        for r in rows:
+            new_trophies = math.floor(r["trophies"] * 0.25)
+            await conn.execute(
+                """
+                UPDATE game_saves
+                SET save_json = save_json ||
+                    jsonb_build_object('trophies', $2::int, 'seasonMonth', $3::text),
+                    updated_at = NOW()
+                WHERE player_id = $1
+                """,
+                r["player_id"], new_trophies, current_month,
+            )
+        return {"success": True, "season_month": current_month, "players_reset": len(rows)}
+
+
 @router.post("/cleanup-orphans")
 async def cleanup_orphans(
     dry_run: bool = Query(default=True),

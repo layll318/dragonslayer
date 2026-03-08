@@ -13,6 +13,7 @@ interface LeaderboardEntry {
   level: number;
   total_taps: number;
   total_gold: number;
+  trophies: number;
   rank: number;
 }
 
@@ -64,6 +65,7 @@ export default function ProfileTab() {
   const [lbLoading, setLbLoading] = useState(true);
   const [lbError, setLbError] = useState<string | null>(null);
   const [lbLastRefresh, setLbLastRefresh] = useState(0);
+  const [lbSeasonMonth, setLbSeasonMonth] = useState<string>('');
 
   const [showDebug, setShowDebug] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -146,7 +148,7 @@ export default function ProfileTab() {
       if (state.playerId) params.set('player_id', String(state.playerId));
       const res = await fetch(`/frontend-api/leaderboard?${params}`);
       const data = await res.json();
-      if (data.success) { setLbEntries(data.entries ?? []); setLbOwnRank(data.own_rank ?? null); }
+      if (data.success) { setLbEntries(data.entries ?? []); setLbOwnRank(data.own_rank ?? null); setLbSeasonMonth(data.season_month ?? ''); }
       else setLbError(data.error || 'Failed to load');
     } catch { setLbError('Could not reach server'); }
     finally { setLbLoading(false); setLbLastRefresh(Date.now()); }
@@ -233,7 +235,8 @@ export default function ProfileTab() {
           <StatCard icon="👆" label="Total Taps" value={formatNumber(state.totalTaps)} />
           <StatCard icon="⚡" label="Per Tap" value={`+${goldPerTap}`} />
           <StatCard icon="🏗️" label="Gold/Hr" value={formatNumber(goldPerHour)} />
-          <StatCard icon="🏛️" label="Buildings" value={`${totalBuildings}`} />
+          <StatCard icon="�" label="Trophies" value={`${state.trophies ?? 0}`} highlight />
+          <StatCard icon="�🏛️" label="Buildings" value={`${totalBuildings}`} />
           <StatCard icon="⏱️" label="Played" value={`${hours}h ${minutes}m`} />
         </div>
 
@@ -607,10 +610,13 @@ export default function ProfileTab() {
         {/* ═══ LEADERBOARD ═══ */}
         <div className="dragon-panel p-3">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-cinzel text-[#f0c040] font-bold text-xs uppercase tracking-widest">Top Dragonslayers</h3>
+            <div>
+              <h3 className="font-cinzel text-[#f0c040] font-bold text-xs uppercase tracking-widest">Season Trophies</h3>
+              {lbSeasonMonth && <p className="text-[#6b5a3a] text-[8px] mt-0.5">{lbSeasonMonth} season</p>}
+            </div>
             <div className="flex items-center gap-2">
               {lbOwnRank !== null && (
-                <span className="text-[9px] font-bold text-[#d4a017]">Your rank: #{lbOwnRank}</span>
+                <span className="text-[9px] font-bold text-[#d4a017]">#{lbOwnRank}</span>
               )}
               <button
                 onClick={Date.now() - lbLastRefresh > 15000 ? loadLeaderboard : undefined}
@@ -662,9 +668,9 @@ export default function ProfileTab() {
                   </span>
                 </div>
                 <span className="text-[8px] text-[#5a4a3a] font-bold flex-shrink-0">Lv.{player.level}</span>
-                <div className="flex items-center gap-0.5 flex-shrink-0">
-                  <span className="coin-icon" style={{ width: 10, height: 10 }} />
-                  <span className="font-cinzel text-[#f0c040] font-bold text-[10px] tabular-nums">{formatNumber(player.total_gold)}</span>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <span className="text-[9px]">🏅</span>
+                  <span className="font-cinzel text-[#a78bfa] font-bold text-[10px] tabular-nums">{formatNumber(player.trophies ?? 0)}</span>
                 </div>
               </div>
             );

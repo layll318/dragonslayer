@@ -14,7 +14,8 @@ import {
   ItemRarity,
   MaterialType,
   calcGearBonus,
-  EGG_CONFIG,
+  calcDiminishingBonus,
+  DragonBonusType,
   DragonEgg,
   EggRarity,
 } from '@/contexts/GameContext';
@@ -296,7 +297,7 @@ export default function ExpeditionTab() {
               {result.droppedEgg.rarity.toUpperCase()} DRAGON EGG FOUND!
             </p>
             <p className="text-[#6b5a3a] text-[9px]">
-              {EGG_CONFIG[result.droppedEgg.rarity].label} · Check Eggs tab to incubate
+              {result.droppedEgg.variantName} — {result.droppedEgg.bonusType === 'tap_gold_pct' ? `+${result.droppedEgg.bonusValue}% gold/tap` : result.droppedEgg.bonusType === 'army_power_flat' ? `+${result.droppedEgg.bonusValue} army power` : result.droppedEgg.bonusType === 'material_drop_pct' ? `+${result.droppedEgg.bonusValue}% material drops` : `-${result.droppedEgg.bonusValue}% expedition time`} · Check Eggs tab
             </p>
           </div>
         </div>
@@ -698,7 +699,7 @@ export default function ExpeditionTab() {
                     <p className="font-bold text-[10px]" style={{ color: EGG_RARITY_COLOR[slot.egg.rarity] }}>
                       {slot.egg.rarity.toUpperCase()} EGG
                     </p>
-                    <p className="text-[#6b5a3a] text-[9px]">{EGG_CONFIG[slot.egg.rarity].label}</p>
+                    <p className="text-[#6b5a3a] text-[9px]">{slot.egg.variantName}</p>
                   </div>
                   {slot.endsAt && nowMs >= slot.endsAt ? (
                     <button
@@ -746,8 +747,8 @@ export default function ExpeditionTab() {
                   style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${EGG_RARITY_COLOR[egg.rarity]}30` }}>
                   <span>{EGG_EMOJI[egg.rarity]}</span>
                   <div>
-                    <p className="text-[9px] font-bold" style={{ color: EGG_RARITY_COLOR[egg.rarity] }}>{egg.rarity}</p>
-                    <p className="text-[8px] text-[#6b5a3a]">{EGG_CONFIG[egg.rarity].label}</p>
+                    <p className="text-[9px] font-bold" style={{ color: EGG_RARITY_COLOR[egg.rarity] }}>{egg.variantName}</p>
+                    <p className="text-[8px] text-[#6b5a3a]">{egg.rarity} · {egg.bonusType === 'tap_gold_pct' ? `+${egg.bonusValue}% gold/tap` : egg.bonusType === 'army_power_flat' ? `+${egg.bonusValue} army pwr` : egg.bonusType === 'material_drop_pct' ? `+${egg.bonusValue}% mats` : `-${egg.bonusValue}% exp time`}</p>
                   </div>
                 </div>
               ))}
@@ -759,16 +760,28 @@ export default function ExpeditionTab() {
         {hatched.length > 0 && (
           <div className="dragon-panel px-3 py-3">
             <p className="font-cinzel font-bold text-[#e8d8a8] text-[10px] tracking-wider mb-2">🐉 ACTIVE DRAGON BONUSES</p>
-            <div className="flex flex-col gap-1.5">
+            {/* Effective totals by type */}
+            {(['tap_gold_pct','army_power_flat','material_drop_pct','expedition_time_pct'] as DragonBonusType[]).map(bt => {
+              const eff = calcDiminishingBonus(hatched, bt);
+              if (eff <= 0) return null;
+              const count = hatched.filter(d => d.bonusType === bt).length;
+              const label = bt === 'tap_gold_pct' ? `+${eff.toFixed(1)}% gold/tap` : bt === 'army_power_flat' ? `+${eff.toFixed(0)} army power` : bt === 'material_drop_pct' ? `+${eff.toFixed(1)}% material drops` : `-${eff.toFixed(1)}% expedition time`;
+              return (
+                <div key={bt} className="flex items-center justify-between px-2 py-1 rounded-lg mb-1"
+                  style={{ background: 'rgba(74,222,128,0.07)', border: '1px solid rgba(74,222,128,0.2)' }}>
+                  <span className="text-[9px] font-bold text-[#4ade80]">{label}</span>
+                  <span className="text-[8px] text-[#6b5a3a]">×{count} dragon{count > 1 ? 's' : ''}</span>
+                </div>
+              );
+            })}
+            <div className="flex flex-col gap-1 mt-1.5">
               {hatched.map(d => (
-                <div key={d.id} className="flex items-center gap-2 px-2 py-1.5 rounded-xl"
-                  style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${EGG_RARITY_COLOR[d.rarity]}30` }}>
-                  <span className="text-lg">🐉</span>
-                  <div>
-                    <p className="text-[9px] font-bold" style={{ color: EGG_RARITY_COLOR[d.rarity] }}>
-                      {d.rarity.toUpperCase()} DRAGON
-                    </p>
-                    <p className="text-[#4ade80] text-[9px] font-bold">{EGG_CONFIG[d.rarity].label}</p>
+                <div key={d.id} className="flex items-center gap-2 px-2 py-1 rounded-xl"
+                  style={{ background: 'rgba(255,255,255,0.02)', border: `1px solid ${EGG_RARITY_COLOR[d.rarity]}25` }}>
+                  <span className="text-sm">🐉</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[9px] font-bold truncate" style={{ color: EGG_RARITY_COLOR[d.rarity] }}>{d.variantName}</p>
+                    <p className="text-[8px] text-[#6b5a3a]">{d.rarity} · raw {d.bonusType === 'tap_gold_pct' ? `+${d.bonusValue}%` : d.bonusType === 'army_power_flat' ? `+${d.bonusValue}` : d.bonusType === 'material_drop_pct' ? `+${d.bonusValue}%` : `-${d.bonusValue}%`}</p>
                   </div>
                 </div>
               ))}

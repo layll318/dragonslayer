@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useGame, calcDefensePower } from '@/contexts/GameContext';
+import { useGame, calcDefensePower, DefenseLogEntry } from '@/contexts/GameContext';
 import { formatNumber } from '@/utils/format';
 
 const API_URL = typeof process !== 'undefined' ? (process.env.NEXT_PUBLIC_API_URL ?? '') : '';
@@ -28,6 +28,9 @@ interface BattleResult {
   rounds: { label: string; desc: string }[];
   attacks_remaining: number;
   arena_points: number;
+  trophies?: number;
+  trophies_won?: number;
+  trophies_lost?: number;
 }
 
 const FORMATION_INFO: Record<Formation, { icon: string; label: string; desc: string; atkMod: number; defMod: number }> = {
@@ -70,8 +73,10 @@ function makeBotOpponent(armyPower: number, level: number): Opponent {
   };
 }
 
+type ArenaView = 'battle' | 'defense';
+
 export default function ArenaTab() {
-  const { state, armyPower, recordBotBattle } = useGame();
+  const { state, armyPower, recordBotBattle, markDefenseLogSeen } = useGame();
   const defPower = calcDefensePower(state.buildings);
 
   const [opponents, setOpponents] = useState<Opponent[]>([]);
@@ -82,12 +87,22 @@ export default function ArenaTab() {
   const [roundIdx, setRoundIdx] = useState(0);
   const [result, setResult] = useState<BattleResult | null>(null);
   const [error, setError] = useState('');
+  const [view, setView] = useState<ArenaView>('battle');
 
   const today = new Date().toISOString().split('T')[0];
   const effectiveAttacksToday = state.arenaLastReset === today ? (state.arenaAttacksToday ?? 0) : 0;
   const attacksLeft = MAX_ATTACKS - effectiveAttacksToday;
 
-  const botOpponent = useMemo(() => makeBotOpponent(armyPower, state.level), [armyPower, state.level]);
+  const easyBot  = useMemo(() => ({ ...makeBotOpponent(armyPower, state.level), player_id: -1, name: 'Shadow Raider 🤖' }), [armyPower, state.level]);
+  const hardBot  = useMemo(() => ({
+    ...makeBotOpponent(Math.round(armyPower * 2), state.level + 3),
+    player_id: -2,
+    name: 'Iron Warlord ⚔️🤖',
+    idle_gold: Math.round(armyPower * 150),
+  }), [armyPower, state.level]);
+
+  const defenseLog: DefenseLogEntry[] = state.defenseLog ?? [];
+  const unreadDefense = defenseLog.some(e => e.ts > (state.defenseLogSeen ?? 0));
 
   const loadOpponents = useCallback(async () => {
     if (!state.playerId) return;
@@ -117,7 +132,10 @@ export default function ArenaTab() {
     if (!selected || attacking || attacksLeft <= 0) return;
 
     // ── Bot battle (client-side) ────────────────────────────────────────────
-    if (selected.player_id === 0) {
+    const isEasyBot = selected.player_id === -1;
+    const isHardBot = selected.player_id === -2;
+    if (isEasyBot || isHardBot) {
+      const botTier = isHardBot ? 'hard' : 'easy';
       setAttacking(true);
       setRoundIdx(0);
       setResult(null);
@@ -127,22 +145,24 @@ export default function ArenaTab() {
       const effDef = Math.round(selected.defense_power * fm.defMod * (0.85 + Math.random() * 0.30));
       const win = effAtk > effDef;
       const goldStolen = win ? Math.floor(selected.idle_gold * 0.04) : 0;
+      const trophiesWon = win ? (isHardBot ? 8 : 3) : 0;
+      const trophiesLost = !win && isHardBot ? 5 : 0;
       for (let i = 0; i < 3; i++) {
         setRoundIdx(i);
         await new Promise(r => setTimeout(r, 1100));
       }
       const rounds = win
         ? [
-            { label: 'Round 1', desc: 'You charge the Shadow Raider — they falter!' },
+            { label: 'Round 1', desc: `You charge ${selected.name} — they falter!` },
             { label: 'Round 2', desc: 'Your forces overwhelm the bot defenses.' },
-            { label: 'Round 3', desc: 'VICTORY — the Shadow Raider retreats!' },
+            { label: 'Round 3', desc: 'VICTORY — the bot retreats!' },
           ]
         : [
-            { label: 'Round 1', desc: 'The Shadow Raider holds the line.' },
+            { label: 'Round 1', desc: `${selected.name} holds the line.` },
             { label: 'Round 2', desc: 'Bot defenses push back hard.' },
             { label: 'Round 3', desc: 'DEFEAT — regroup and try again.' },
           ];
-      recordBotBattle(win, goldStolen);
+      recordBotBattle(win, goldStolen, botTier);
       setResult({
         win,
         gold_stolen: goldStolen,
@@ -151,6 +171,9 @@ export default function ArenaTab() {
         rounds,
         attacks_remaining: attacksLeft - 1,
         arena_points: (state.arenaPoints ?? 0) + (win ? 10 : 2),
+        trophies: Math.max(0, (state.trophies ?? 0) + trophiesWon - trophiesLost),
+        trophies_won: trophiesWon,
+        trophies_lost: trophiesLost,
       });
       setAttacking(false);
       return;
@@ -182,7 +205,7 @@ export default function ArenaTab() {
         setRoundIdx(i);
         await new Promise(r => setTimeout(r, 1100));
       }
-      recordBotBattle(data.win, data.gold_stolen);
+      recordBotBattle(data.win, data.gold_stolen, 'easy');
       setResult(data);
     } catch {
       setError('Attack failed — server unreachable');
@@ -246,7 +269,7 @@ export default function ArenaTab() {
   if (result) {
     return (
       <div className="flex flex-col flex-1 pb-4 overflow-y-auto relative z-10 page-fade">
-        <ArenaHeader attacksLeft={result.attacks_remaining} arenaPoints={result.arena_points} />
+        <ArenaHeader attacksLeft={result.attacks_remaining} arenaPoints={result.arena_points} trophies={state.trophies ?? 0} />
         <div className="px-3 mt-4 flex flex-col gap-3">
           <div className="dragon-panel px-4 py-6 text-center">
             <p className="text-5xl mb-3">{result.win ? '🏆' : '💀'}</p>
@@ -258,12 +281,18 @@ export default function ArenaTab() {
               vs {selected?.name} — {result.win ? 'their defenses fell' : 'their walls held firm'}
             </p>
             {result.win && result.gold_stolen > 0 && (
-              <div className="flex items-center justify-center gap-2 mb-4">
+              <div className="flex items-center justify-center gap-2 mb-2">
                 <span className="coin-icon" style={{ width: 18, height: 18 }} />
                 <span className="font-cinzel text-[#f0c040] font-bold text-lg">
                   +{formatNumber(result.gold_stolen)} gold stolen
                 </span>
               </div>
+            )}
+            {(result.trophies_won ?? 0) > 0 && (
+              <p className="text-[#4ade80] font-bold text-sm mb-2">🏅 +{result.trophies_won} trophies</p>
+            )}
+            {(result.trophies_lost ?? 0) > 0 && (
+              <p className="text-[#f87171] font-bold text-sm mb-2">🏅 -{result.trophies_lost} trophies</p>
             )}
             <div className="flex justify-center gap-6 text-center mb-4">
               <div>
@@ -294,12 +323,45 @@ export default function ArenaTab() {
     );
   }
 
+  // ── Defense log view ──────────────────────────────────────────────────────
+  if (view === 'defense') {
+    return (
+      <div className="flex flex-col flex-1 pb-4 overflow-y-auto relative z-10 page-fade">
+        <ArenaHeader attacksLeft={attacksLeft} arenaPoints={state.arenaPoints ?? 0} trophies={state.trophies ?? 0} />
+        <div className="px-3 mt-2 flex flex-col gap-3">
+          <button onClick={() => { setView('battle'); markDefenseLogSeen(); }}
+            className="self-start text-[10px] text-[#6b5a3a] underline">← Back to Battle</button>
+          <div className="dragon-panel px-3 py-3">
+            <p className="font-cinzel font-bold text-[#e8d8a8] text-[10px] tracking-wider mb-2">🛡️ DEFENSE LOG</p>
+            {defenseLog.length === 0 ? (
+              <p className="text-[#4a3a2a] text-[10px] text-center py-4">No attacks recorded yet</p>
+            ) : defenseLog.map((e, i) => (
+              <div key={i} className="flex items-center gap-2 px-2 py-2 rounded-lg mb-1"
+                style={{ background: e.result === 'loss' ? 'rgba(248,113,113,0.07)' : 'rgba(74,222,128,0.07)', border: `1px solid ${e.result === 'loss' ? 'rgba(248,113,113,0.2)' : 'rgba(74,222,128,0.2)'}` }}>
+                <span className="text-lg">{e.result === 'loss' ? '🔴' : '🟢'}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] font-bold truncate" style={{ color: e.result === 'loss' ? '#f87171' : '#4ade80' }}>
+                    {e.result === 'loss' ? 'Defended!' : `Raided by ${e.attackerName}`}
+                  </p>
+                  <p className="text-[8px] text-[#6b5a3a]">
+                    {e.result !== 'loss' && e.attackerName} · {e.goldLost > 0 ? `-${formatNumber(e.goldLost)} gold` : 'no gold lost'}{e.trophiesLost > 0 ? ` · -${e.trophiesLost} trophies` : ''}
+                  </p>
+                </div>
+                <p className="text-[8px] text-[#4a3a2a] flex-shrink-0">{new Date(e.ts).toLocaleDateString()}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ── Main Arena UI ────────────────────────────────────────────────────────────
   const chance = selected ? winChance(armyPower, formation, selected.defense_power) : null;
 
   return (
     <div className="flex flex-col flex-1 pb-4 overflow-y-auto relative z-10 page-fade">
-      <ArenaHeader attacksLeft={attacksLeft} arenaPoints={state.arenaPoints ?? 0} />
+      <ArenaHeader attacksLeft={attacksLeft} arenaPoints={state.arenaPoints ?? 0} trophies={state.trophies ?? 0} />
 
       <div className="px-3 mt-2 flex flex-col gap-3">
 
@@ -352,14 +414,24 @@ export default function ArenaTab() {
           {state.walletAddress && loading && (
             <div className="text-center py-2 text-[#6b5a3a] text-xs">Loading real players…</div>
           )}
-          <div className="flex flex-col gap-1.5">
-            {[botOpponent, ...(state.walletAddress ? opponents : [])].map(opp => {
+          {/* Defense log button */}
+          <button onClick={() => { setView('defense'); markDefenseLogSeen(); }}
+            className="flex items-center gap-1.5 self-end text-[9px] font-bold mb-1 px-2 py-1 rounded-lg"
+            style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', color: unreadDefense ? '#f87171' : '#6b5a3a' }}>
+            🛡️ Defense Log{unreadDefense && <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />}
+          </button>
+        <div className="flex flex-col gap-1.5">
+            {[easyBot, hardBot, ...(state.walletAddress ? opponents : [])].map(opp => {
               const isSelected = selected?.player_id === opp.player_id;
               const ch = winChance(armyPower, formation, opp.defense_power);
-              const isBot = opp.player_id === 0;
+              const isBot = opp.player_id < 0;
+              const isHardBot = opp.player_id === -2;
+              const trophyPreview = isBot
+                ? (isHardBot ? '🏅+8 / -5' : '🏅+3')
+                : `🏅+${Math.ceil(25 * Math.max(0.25, Math.min(2.0, 1 - ((state.level) - opp.level) * 0.04)))} / -8`;
               return (
                 <button
-                  key={isBot ? 'bot' : opp.player_id}
+                  key={opp.player_id}
                   onClick={() => setSelected(isSelected ? null : opp)}
                   className="flex items-center gap-2 px-2 py-2 rounded-lg text-left transition-all"
                   style={{
@@ -368,12 +440,12 @@ export default function ArenaTab() {
                   }}
                 >
                   <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm flex-shrink-0"
-                    style={{ background: isBot ? 'rgba(124,58,237,0.15)' : 'rgba(212,160,23,0.08)', border: `1px solid ${isBot ? 'rgba(124,58,237,0.3)' : 'rgba(212,160,23,0.2)'}` }}>
+                    style={{ background: isHardBot ? 'rgba(239,68,68,0.15)' : isBot ? 'rgba(124,58,237,0.15)' : 'rgba(212,160,23,0.08)', border: `1px solid ${isHardBot ? 'rgba(239,68,68,0.35)' : isBot ? 'rgba(124,58,237,0.3)' : 'rgba(212,160,23,0.2)'}` }}>
                     {isBot ? '🤖' : `Lv${opp.level}`}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1 mb-0.5">
-                      <p className="text-[10px] font-bold truncate" style={{ color: isBot ? '#c084fc' : '#e8d8a8' }}>{opp.name}</p>
+                      <p className="text-[10px] font-bold truncate" style={{ color: isHardBot ? '#f87171' : isBot ? '#c084fc' : '#e8d8a8' }}>{opp.name}</p>
                       {!isBot && (
                         <span
                           className="flex-shrink-0 px-1 py-0 rounded text-[7px] font-bold leading-4"
@@ -393,6 +465,7 @@ export default function ArenaTab() {
                       style={{ color: ch >= 60 ? '#4ade80' : ch >= 40 ? '#f0c040' : '#f87171' }}>
                       {ch}% win
                     </p>
+                    <p className="text-[8px] text-[#6b5a3a]">{trophyPreview}</p>
                     <p className="text-[8px] text-[#6b5a3a]">💰{formatNumber(Math.floor(opp.idle_gold * 0.04))}</p>
                   </div>
                 </button>
@@ -506,12 +579,16 @@ export default function ArenaTab() {
               <p className="text-[9px] text-[#6b5a3a]">Conquest Pts</p>
             </div>
             <div>
+              <p className="font-cinzel font-bold text-[#a78bfa]">{state.trophies ?? 0}</p>
+              <p className="text-[9px] text-[#6b5a3a]">🏅 Trophies</p>
+            </div>
+            <div>
               <p className="font-cinzel font-bold text-[#f0c040]">{attacksLeft}</p>
               <p className="text-[9px] text-[#6b5a3a]">Attacks Left</p>
             </div>
             <div>
-              <p className="font-cinzel font-bold text-[#f0c040]">{defPower}</p>
-              <p className="text-[9px] text-[#6b5a3a]">Your Defense</p>
+              <p className="font-cinzel font-bold text-[#60a5fa]">{defPower}</p>
+              <p className="text-[9px] text-[#6b5a3a]">Defense</p>
             </div>
           </div>
         </div>
@@ -521,7 +598,7 @@ export default function ArenaTab() {
   );
 }
 
-function ArenaHeader({ attacksLeft, arenaPoints }: { attacksLeft: number; arenaPoints: number }) {
+function ArenaHeader({ attacksLeft, arenaPoints, trophies }: { attacksLeft: number; arenaPoints: number; trophies: number }) {
   return (
     <div className="top-bar sticky top-0 z-30 px-4 py-3">
       <div className="flex items-center justify-between">
@@ -530,7 +607,7 @@ function ArenaHeader({ attacksLeft, arenaPoints }: { attacksLeft: number; arenaP
           <p className="text-[#6b5a3a] text-[10px] mt-0.5 uppercase tracking-wider">Battle real players</p>
         </div>
         <div className="text-right">
-          <p className="font-cinzel text-[#f0c040] font-bold text-sm">🏆 {formatNumber(arenaPoints)}</p>
+          <p className="font-cinzel text-[#a78bfa] font-bold text-sm">� {formatNumber(trophies)}</p>
           <p className="text-[#6b5a3a] text-[9px]">{attacksLeft}/{MAX_ATTACKS} attacks</p>
         </div>
       </div>

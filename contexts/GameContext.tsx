@@ -13,6 +13,7 @@ export type DragonBonusType = 'tap_gold_pct' | 'army_power_flat' | 'material_dro
 export interface DragonEgg {
   id: string;
   rarity: EggRarity;
+  variantName: string;
   hatchHours: number;
   bonusType: DragonBonusType;
   bonusValue: number;
@@ -56,9 +57,18 @@ export interface MerchantDeal {
 export interface HatchedDragon {
   id: string;
   rarity: EggRarity;
+  variantName: string;
   bonusType: DragonBonusType;
   bonusValue: number;
   hatchedAt: number;
+}
+
+export interface DefenseLogEntry {
+  attackerName: string;
+  trophiesLost: number;
+  goldLost: number;
+  result: 'win' | 'loss';
+  ts: number;
 }
 export type ItemType = 'weapon' | 'shield' | 'helm' | 'armor' | 'ring';
 export type ItemRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
@@ -180,6 +190,10 @@ export interface GameState {
   arenaAttacksToday: number;
   arenaPoints: number;
   arenaLastReset: string;
+  trophies: number;
+  seasonMonth: string;
+  defenseLog: DefenseLogEntry[];
+  defenseLogSeen: number;
   // Identity / server sync
   playerId: number | null;
   walletAddress: string | null;
@@ -221,7 +235,8 @@ interface GameContextType {
   getBuildingCost: (building: Building) => number;
   canAfford: (cost: number) => boolean;
   getCharacterTier: () => number;
-  recordBotBattle: (win: boolean, goldStolen: number) => void;
+  recordBotBattle: (win: boolean, goldStolen: number, botTier?: 'easy' | 'hard') => void;
+  markDefenseLogSeen: () => void;
   resetArenaAttacks: () => void;
   CRAFTING_RECIPES: CraftingRecipe[];
   ITEM_UNLOCK_LEVELS: Record<ItemType, number>;
@@ -438,13 +453,51 @@ function calcExpeditionYield(
   return { dragonsSlain, goldEarned, materials };
 }
 
-const EGG_CONFIG: Record<EggRarity, { hatchHours: number; bonusType: DragonBonusType; bonusValue: number; label: string }> = {
-  common:    { hatchHours: 1, bonusType: 'tap_gold_pct',       bonusValue: 5,   label: '+5% gold/tap' },
-  uncommon:  { hatchHours: 2, bonusType: 'army_power_flat',    bonusValue: 10,  label: '+10 army power' },
-  rare:      { hatchHours: 4, bonusType: 'material_drop_pct',  bonusValue: 15,  label: '+15% material drops' },
-  legendary: { hatchHours: 6, bonusType: 'expedition_time_pct', bonusValue: 10, label: '-10% expedition time' },
+export interface EggVariant {
+  variantName: string;
+  hatchHours: number;
+  bonusType: DragonBonusType;
+  bonusValue: number;
+  label: string;
+}
+
+export const EGG_VARIANTS: Record<EggRarity, EggVariant[]> = {
+  common: [
+    { variantName: 'Swift Whelp',     hatchHours: 1, bonusType: 'tap_gold_pct',        bonusValue: 5,  label: '+5% gold/tap' },
+    { variantName: 'Ember Hatchling', hatchHours: 1, bonusType: 'tap_gold_pct',        bonusValue: 6,  label: '+6% gold/tap' },
+    { variantName: 'Iron Pup',        hatchHours: 1, bonusType: 'army_power_flat',     bonusValue: 8,  label: '+8 army power' },
+    { variantName: 'Mud Snapper',     hatchHours: 1, bonusType: 'army_power_flat',     bonusValue: 5,  label: '+5 army power' },
+    { variantName: 'Stone Hatchling', hatchHours: 1, bonusType: 'material_drop_pct',   bonusValue: 4,  label: '+4% material drops' },
+    { variantName: 'Scale Pup',       hatchHours: 1, bonusType: 'material_drop_pct',   bonusValue: 3,  label: '+3% material drops' },
+    { variantName: 'Wind Whelp',      hatchHours: 1, bonusType: 'expedition_time_pct', bonusValue: 4,  label: '-4% expedition time' },
+  ],
+  uncommon: [
+    { variantName: 'Flame Drake',     hatchHours: 2, bonusType: 'tap_gold_pct',        bonusValue: 10, label: '+10% gold/tap' },
+    { variantName: 'Gilded Drake',    hatchHours: 2, bonusType: 'tap_gold_pct',        bonusValue: 12, label: '+12% gold/tap' },
+    { variantName: 'Iron Wyvern',     hatchHours: 2, bonusType: 'army_power_flat',     bonusValue: 20, label: '+20 army power' },
+    { variantName: 'Crystal Stalker', hatchHours: 2, bonusType: 'material_drop_pct',   bonusValue: 8,  label: '+8% material drops' },
+    { variantName: 'Storm Runner',    hatchHours: 2, bonusType: 'expedition_time_pct', bonusValue: 7,  label: '-7% expedition time' },
+  ],
+  rare: [
+    { variantName: 'Inferno Wyrm',    hatchHours: 4, bonusType: 'tap_gold_pct',        bonusValue: 18, label: '+18% gold/tap' },
+    { variantName: 'War Colossus',    hatchHours: 4, bonusType: 'army_power_flat',     bonusValue: 45, label: '+45 army power' },
+    { variantName: 'Ancient Stalker', hatchHours: 4, bonusType: 'material_drop_pct',   bonusValue: 15, label: '+15% material drops' },
+    { variantName: 'Void Runner',     hatchHours: 4, bonusType: 'expedition_time_pct', bonusValue: 12, label: '-12% expedition time' },
+  ],
+  legendary: [
+    { variantName: 'Ember Tyrant',    hatchHours: 6, bonusType: 'tap_gold_pct',        bonusValue: 30, label: '+30% gold/tap' },
+    { variantName: 'Iron Overlord',   hatchHours: 6, bonusType: 'army_power_flat',     bonusValue: 100, label: '+100 army power' },
+    { variantName: 'Time Rifter',     hatchHours: 6, bonusType: 'expedition_time_pct', bonusValue: 20, label: '-20% expedition time' },
+  ],
 };
-export { EGG_CONFIG };
+
+export function calcDiminishingBonus(dragons: HatchedDragon[], bonusType: DragonBonusType): number {
+  const vals = dragons
+    .filter(d => d.bonusType === bonusType)
+    .map(d => d.bonusValue)
+    .sort((a, b) => b - a);
+  return vals.reduce((total, v, i) => total + v * Math.pow(0.75, i), 0);
+}
 
 function generateEgg(hours: 4 | 8 | 12): DragonEgg | null {
   const roll = Math.random();
@@ -464,8 +517,9 @@ function generateEgg(hours: 4 | 8 | 12): DragonEgg | null {
     else if (roll < 0.18) rarity = 'common';
   }
   if (!rarity) return null;
-  const cfg = EGG_CONFIG[rarity];
-  return { id: `egg-${Date.now()}-${Math.random().toString(36).slice(2)}`, rarity, ...cfg };
+  const variants = EGG_VARIANTS[rarity];
+  const variant = variants[Math.floor(Math.random() * variants.length)];
+  return { id: `egg-${Date.now()}-${Math.random().toString(36).slice(2)}`, rarity, ...variant };
 }
 
 function getToday(): string {
@@ -615,6 +669,10 @@ function createInitialState(): GameState {
     arenaAttacksToday: 0,
     arenaPoints: 0,
     arenaLastReset: '',
+    trophies: 0,
+    seasonMonth: new Date().toISOString().slice(0, 7),
+    defenseLog: [],
+    defenseLogSeen: 0,
     playerId: null,
     walletAddress: null,
     isSynced: false,
@@ -990,10 +1048,21 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, []);
 
+  // Season soft-reset: when a new month starts, carry over 25% of trophies
+  useEffect(() => {
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    if (state.seasonMonth && state.seasonMonth !== currentMonth) {
+      setState(prev => {
+        if (prev.seasonMonth === currentMonth) return prev;
+        return { ...prev, trophies: Math.floor((prev.trophies ?? 0) * 0.25), seasonMonth: currentMonth };
+      });
+    }
+  }, [state.seasonMonth]);
+
   const gearMultiplier = calcGearMultiplier(state.equipment);
 
   const dragonArmyPowerFlat = useMemo(
-    () => state.hatchedDragons.filter(d => d.bonusType === 'army_power_flat').reduce((s, d) => s + d.bonusValue, 0),
+    () => calcDiminishingBonus(state.hatchedDragons, 'army_power_flat'),
     [state.hatchedDragons]
   );
 
@@ -1033,7 +1102,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       if (prev.activeExpedition) return prev; // fighter is away
       const base = Math.max(1, Math.floor((1 + prev.level * 0.5) * calcGearMultiplier(prev.equipment)));
       const isCrit = Math.random() < CRIT_CHANCE;
-      const tapDragonPct = prev.hatchedDragons.filter(d => d.bonusType === 'tap_gold_pct').reduce((s, d) => s + d.bonusValue, 0);
+      const tapDragonPct = calcDiminishingBonus(prev.hatchedDragons, 'tap_gold_pct');
       const earned = Math.floor(base * comboMult * (isCrit ? CRIT_MULTIPLIER : 1) * (1 + tapDragonPct / 100));
       const xpUpdate = addXp(XP_PER_TAP, prev);
 
@@ -1065,7 +1134,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setState((prev) => {
       if (prev.activeExpedition) return prev;
       const now = Date.now();
-      const expeditionTimePct = prev.hatchedDragons.filter(d => d.bonusType === 'expedition_time_pct').reduce((s, d) => s + d.bonusValue, 0);
+      const expeditionTimePct = calcDiminishingBonus(prev.hatchedDragons, 'expedition_time_pct');
       const durationMs = Math.floor(hours * 3600 * 1000 * (1 - Math.min(expeditionTimePct, 75) / 100));
       const activeExpedition: ActiveExpedition = {
         startedAt: now,
@@ -1105,7 +1174,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       const { dragonsSlain, goldEarned, materials } = calcExpeditionYield(
         prev.level, armyPwr, gearBonus, prev.activeExpedition.durationHours,
       );
-      const materialDropPct = prev.hatchedDragons.filter(d => d.bonusType === 'material_drop_pct').reduce((s, d) => s + d.bonusValue, 0);
+      const materialDropPct = calcDiminishingBonus(prev.hatchedDragons, 'material_drop_pct');
       const boostedMaterials = materialDropPct > 0
         ? materials.map(m => ({ ...m, quantity: Math.ceil(m.quantity * (1 + materialDropPct / 100)) }))
         : materials;
@@ -1181,6 +1250,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       const dragon: HatchedDragon = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
         rarity: slot.egg.rarity,
+        variantName: slot.egg.variantName,
         bonusType: slot.egg.bonusType,
         bonusValue: slot.egg.bonusValue,
         hatchedAt: Date.now(),
@@ -1228,8 +1298,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         newState = { ...newState, materials: newMats };
       } else if (deal.type === 'egg' && deal.payload.egg) {
         const rarity = deal.payload.egg;
-        const cfg = EGG_CONFIG[rarity];
-        const egg: DragonEgg = { id: `egg-${Date.now()}`, rarity, ...cfg };
+        const variants = EGG_VARIANTS[rarity];
+        const variant = variants[Math.floor(Math.random() * variants.length)];
+        const egg: DragonEgg = { id: `egg-${Date.now()}`, rarity, ...variant };
         newState = { ...newState, eggInventory: [...newState.eggInventory, egg] };
       }
       const updatedDeals = prev.merchantDeals.map(d => d.id === dealId ? { ...d, purchased: true } : d);
@@ -1399,11 +1470,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const recordBotBattle = useCallback((win: boolean, goldStolen: number) => {
+  const recordBotBattle = useCallback((win: boolean, goldStolen: number, botTier: 'easy' | 'hard' = 'easy') => {
     setState(prev => {
       const today = new Date().toISOString().split('T')[0];
-      const lastReset = prev.arenaLastReset;
-      const attacks = lastReset === today ? (prev.arenaAttacksToday ?? 0) : 0;
+      const attacks = prev.arenaLastReset === today ? (prev.arenaAttacksToday ?? 0) : 0;
+      const trophiesGained = win ? (botTier === 'hard' ? 8 : 3) : 0;
+      const trophiesLost = !win && botTier === 'hard' ? 5 : 0;
       return {
         ...prev,
         gold: prev.gold + goldStolen,
@@ -1411,8 +1483,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         arenaAttacksToday: attacks + 1,
         arenaLastReset: today,
         arenaPoints: (prev.arenaPoints ?? 0) + (win ? 10 : 2),
+        trophies: Math.max(0, (prev.trophies ?? 0) + trophiesGained - trophiesLost),
       };
     });
+  }, []);
+
+  const markDefenseLogSeen = useCallback(() => {
+    setState(prev => ({ ...prev, defenseLogSeen: Date.now() }));
   }, []);
 
   const resetArenaAttacks = useCallback(() => {
@@ -1586,10 +1663,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         addEggs,
         addGold,
         dragonBonuses: {
-          tapGoldPct: state.hatchedDragons.filter(d => d.bonusType === 'tap_gold_pct').reduce((s, d) => s + d.bonusValue, 0),
+          tapGoldPct: calcDiminishingBonus(state.hatchedDragons, 'tap_gold_pct'),
           armyPowerFlat: dragonArmyPowerFlat,
-          materialDropPct: state.hatchedDragons.filter(d => d.bonusType === 'material_drop_pct').reduce((s, d) => s + d.bonusValue, 0),
-          expeditionTimePct: state.hatchedDragons.filter(d => d.bonusType === 'expedition_time_pct').reduce((s, d) => s + d.bonusValue, 0),
+          materialDropPct: calcDiminishingBonus(state.hatchedDragons, 'material_drop_pct'),
+          expeditionTimePct: calcDiminishingBonus(state.hatchedDragons, 'expedition_time_pct'),
         },
         equipItem,
         unequipItem,
@@ -1602,6 +1679,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         addIncubatorSlot,
         refreshTokenDiscount,
         recordBotBattle,
+        markDefenseLogSeen,
         resetArenaAttacks,
         goldPerTap,
         goldPerHour,

@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timezone
 from fastapi import APIRouter, Query
 from typing import Optional
 from database import get_pool
@@ -14,18 +15,21 @@ async def get_leaderboard(
 ):
     pool = get_pool()
     async with pool.acquire() as conn:
+        current_month = datetime.now(timezone.utc).strftime("%Y-%m")
         rows = await conn.fetch(
             """
             SELECT
                 p.id,
                 p.username,
                 p.wallet_address,
-                COALESCE((gs.save_json->>'level')::int, 1)              AS level,
-                COALESCE((gs.save_json->>'totalGoldEarned')::float8::bigint, 0) AS total_gold,
-                COALESCE((gs.save_json->>'totalTaps')::float8::bigint, 0)       AS total_taps
+                COALESCE((gs.save_json->>'level')::int, 1)                        AS level,
+                COALESCE((gs.save_json->>'totalGoldEarned')::float8::bigint, 0)   AS total_gold,
+                COALESCE((gs.save_json->>'totalTaps')::float8::bigint, 0)          AS total_taps,
+                COALESCE((gs.save_json->>'trophies')::int, 0)                      AS trophies,
+                COALESCE(gs.save_json->>'seasonMonth', '')                         AS season_month
             FROM players p
             LEFT JOIN game_saves gs ON gs.player_id = p.id
-            ORDER BY COALESCE((gs.save_json->>'totalGoldEarned')::float8::bigint, 0) DESC
+            ORDER BY COALESCE((gs.save_json->>'trophies')::int, 0) DESC
             LIMIT $1
             """,
             limit,
@@ -46,6 +50,8 @@ async def get_leaderboard(
                 "level": r["level"],
                 "total_gold": r["total_gold"],
                 "total_taps": r["total_taps"],
+                "trophies": r["trophies"],
+                "season_month": r["season_month"] or current_month,
             })
 
         # Own rank (if not in top-N)
@@ -56,9 +62,9 @@ async def get_leaderboard(
                 SELECT COUNT(*) + 1 AS rank
                 FROM players p2
                 LEFT JOIN game_saves gs2 ON gs2.player_id = p2.id
-                WHERE COALESCE((gs2.save_json->>'totalGoldEarned')::float8::bigint, 0) >
+                WHERE COALESCE((gs2.save_json->>'trophies')::int, 0) >
                       (
-                          SELECT COALESCE((gs3.save_json->>'totalGoldEarned')::float8::bigint, 0)
+                          SELECT COALESCE((gs3.save_json->>'trophies')::int, 0)
                           FROM game_saves gs3
                           WHERE gs3.player_id = $1
                       )
@@ -73,4 +79,5 @@ async def get_leaderboard(
             "entries": entries,
             "total_players": len(rows),
             "own_rank": own_rank,
+            "season_month": current_month,
         }

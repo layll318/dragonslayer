@@ -1,5 +1,6 @@
 import json
 import logging
+import math
 import random
 from datetime import datetime, timezone
 from fastapi import APIRouter, Query, HTTPException
@@ -187,7 +188,65 @@ async def attack(req: AttackRequest):
         # Build battle log rounds for animation
         rounds = _build_rounds(atk_power, def_power, win)
 
-        # Record battle
+        # ── Trophy calculation with level scaling ───────────────────────────
+        atk_level = int(attacker_save.get("level", 1))
+        def_level = int(defender_save.get("level", 1))
+        level_diff = atk_level - def_level
+        gain_mult = max(0.25, min(2.0, 1.0 - level_diff * 0.04))
+
+        BASE_TROPHY_WIN  = 25
+        BASE_TROPHY_LOSS = 8   # attacker loses if they lose
+        trophies_won      = math.ceil(BASE_TROPHY_WIN  * gain_mult) if win  else 0
+        trophies_atk_lost = BASE_TROPHY_LOSS                         if not win else 0
+        trophies_def_lost = math.ceil(trophies_won / 4)              if win  else 0
+
+        # ── Season soft-reset (apply on first attack of a new month) ────────
+        current_month = today[:7]  # "YYYY-MM"
+
+        def _apply_season_reset(save: dict) -> dict:
+            if save.get("seasonMonth", "") not in ("", current_month):
+                save = dict(save)
+                save["trophies"]    = math.floor(int(save.get("trophies", 0)) * 0.25)
+                save["seasonMonth"] = current_month
+            elif not save.get("seasonMonth"):
+                save = dict(save)
+                save["seasonMonth"] = current_month
+            return save
+
+        attacker_save = _apply_season_reset(attacker_save)
+        defender_save = _apply_season_reset(defender_save)
+
+        # ── New trophy totals ────────────────────────────────────────────────
+        atk_trophies = max(0, int(attacker_save.get("trophies", 0)) + trophies_won - trophies_atk_lost)
+        def_trophies = max(0, int(defender_save.get("trophies", 0)) - trophies_def_lost)
+
+        # ── Build defender's defense log entry ───────────────────────────────
+        attacker_name = req.attacker_id  # will be enriched below
+        atk_player = await conn.fetchrow("SELECT username, wallet_address FROM players WHERE id=$1", req.attacker_id)
+        if atk_player:
+            wallet = atk_player["wallet_address"] or ""
+            attacker_name = (
+                atk_player["username"]
+                or (f"{wallet[:5]}…{wallet[-4:]}" if len(wallet) >= 10 else wallet)
+                or f"Hero #{req.attacker_id}"
+            )
+        else:
+            attacker_name = f"Hero #{req.attacker_id}"
+
+        defense_entry = {
+            "attackerName": attacker_name,
+            "trophiesLost": trophies_def_lost,
+            "goldLost": gold_stolen if win else 0,
+            "result": "loss" if win else "win",
+            "ts": int(datetime.now(timezone.utc).timestamp() * 1000),
+        }
+
+        # Keep last 10 defense log entries
+        def_log = list(defender_save.get("defenseLog", []))
+        def_log.insert(0, defense_entry)
+        def_log = def_log[:10]
+
+        # ── Record battle ────────────────────────────────────────────────────
         await conn.execute(
             """
             INSERT INTO arena_battles
@@ -201,9 +260,9 @@ async def attack(req: AttackRequest):
             gold_stolen,
         )
 
-        # Update arena state in both saves (best-effort)
+        # ── Update attacker save ─────────────────────────────────────────────
         new_attacks = attacks_today + 1
-        arena_pts = int(attacker_save.get("arenaPoints", 0)) + (10 if win else 2)
+        arena_pts   = int(attacker_save.get("arenaPoints", 0)) + (10 if win else 2)
 
         await conn.execute(
             """
@@ -211,26 +270,38 @@ async def attack(req: AttackRequest):
             SET save_json = save_json ||
                 jsonb_build_object(
                     'arenaAttacksToday', $2::int,
-                    'arenaLastReset', $3::text,
-                    'arenaPoints', $4::int
+                    'arenaLastReset',    $3::text,
+                    'arenaPoints',       $4::int,
+                    'trophies',          $5::int,
+                    'seasonMonth',       $6::text
                 ),
                 updated_at = NOW()
             WHERE player_id = $1
             """,
-            req.attacker_id, new_attacks, today, arena_pts,
+            req.attacker_id, new_attacks, today, arena_pts, atk_trophies, current_month,
         )
 
-        if win and gold_stolen > 0:
-            new_defender_gold = max(0, defender_gold - gold_stolen)
-            await conn.execute(
-                """
-                UPDATE game_saves
-                SET save_json = jsonb_set(save_json, '{gold}', $2::text::jsonb),
-                    updated_at = NOW()
-                WHERE player_id = $1
-                """,
-                req.defender_id, str(new_defender_gold),
-            )
+        # ── Update defender save (gold + trophies + defenseLog) ─────────────
+        new_defender_gold = max(0, defender_gold - gold_stolen) if win else defender_gold
+        await conn.execute(
+            """
+            UPDATE game_saves
+            SET save_json = save_json ||
+                jsonb_build_object(
+                    'gold',        $2::text::jsonb,
+                    'trophies',    $3::int,
+                    'seasonMonth', $4::text,
+                    'defenseLog',  $5::jsonb
+                ),
+                updated_at = NOW()
+            WHERE player_id = $1
+            """,
+            req.defender_id,
+            str(new_defender_gold),
+            def_trophies,
+            current_month,
+            json.dumps(def_log),
+        )
 
         return {
             "success": True,
@@ -241,6 +312,9 @@ async def attack(req: AttackRequest):
             "rounds": rounds,
             "attacks_remaining": MAX_ATTACKS_PER_DAY - new_attacks,
             "arena_points": arena_pts,
+            "trophies": atk_trophies,
+            "trophies_won": trophies_won,
+            "trophies_lost": trophies_atk_lost,
         }
 
 
