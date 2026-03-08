@@ -4,6 +4,14 @@ import React, { useMemo } from 'react';
 import Image from 'next/image';
 import { useGame, calcGearMultiplier } from '@/contexts/GameContext';
 
+const TIER_IMAGES = [
+  '/images/slayer1.png',
+  '/images/slayer2.png',
+  '/images/slayer3.png',
+  '/images/salyer4.png',
+  '/images/slayer5.png',
+];
+
 const TIER_AURA = [
   { hasAura: false, auraColor: 'transparent', glowColor: 'rgba(255,180,80,0.15)', emberCount: 2 },
   { hasAura: false, auraColor: 'transparent', glowColor: 'rgba(255,180,80,0.2)',  emberCount: 3 },
@@ -79,7 +87,7 @@ export default function CharacterDisplay() {
         }}
       >
         <Image
-          src="/images/slayer1.png"
+          src={TIER_IMAGES[tier - 1]}
           alt="DragonSlayer character"
           fill
           style={{ objectFit: 'contain', imageRendering: 'pixelated' }}

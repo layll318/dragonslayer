@@ -5,11 +5,12 @@ export const dynamic = 'force-dynamic';
 const TREASURY_WALLET = process.env.TREASURY_WALLET || 'rf84iAt8aRMJ7onNY9ZqmWVVFCAtSmTT7d';
 const XRPL_API       = 'https://xrplcluster.com/';
 const MIN_DROPS      = 1_000_000; // 1 XRP minimum
+const API_URL        = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
-    const { txHash, type } = body as { txHash?: string; type?: string };
+    const { txHash, type, playerId } = body as { txHash?: string; type?: string; playerId?: number };
 
     if (!txHash || txHash.trim().length < 60) {
       return NextResponse.json({ error: 'Invalid transaction hash.' }, { status: 400 });
@@ -76,6 +77,19 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Specify which material type to claim (1 XRP = 3× one type).' }, { status: 400 });
       }
       credits = [{ type: mat, quantity: 3 }];
+    }
+
+    // Server-side dedup — register hash only after XRPL confirms success
+    const dedupRes = await fetch(`${API_URL}/api/items/claim-tx`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tx_hash: txHash.trim().toUpperCase(), player_id: playerId ?? null, item_type: `material_${type ?? 'unknown'}` }),
+    }).catch(() => null);
+    if (dedupRes?.ok) {
+      const dedupData = await dedupRes.json().catch(() => null);
+      if (dedupData && !dedupData.success && dedupData.already_claimed) {
+        return NextResponse.json({ error: 'This transaction hash has already been used to claim a reward.' }, { status: 409 });
+      }
     }
 
     return NextResponse.json({

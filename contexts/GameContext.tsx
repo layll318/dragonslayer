@@ -22,6 +22,15 @@ export interface IncubatorSlot {
   egg: DragonEgg | null;
   startedAt: number | null;
   endsAt: number | null;
+  isPermanent?: boolean;
+}
+
+export interface TokenDiscount {
+  lynx: boolean;
+  xrpnomics: boolean;
+  dragonslayer: boolean;
+  pct: number;
+  checkedAt: number;
 }
 
 export type MerchantDealType = 'materials' | 'egg' | 'gold_boost' | 'speedup';
@@ -152,6 +161,7 @@ export interface GameState {
   tapGoldToday: number;
   buildingsBoughtToday: number;
   expeditionsToday: number;
+  adsUsedThisExpedition: number;
   // Last tap result
   lastTapEarned: number;
   lastTapCrit: boolean;
@@ -172,6 +182,8 @@ export interface GameState {
   walletAddress: string | null;
   isSynced: boolean;
   displayName: string | null;
+  // Token discount
+  tokenDiscount: TokenDiscount | null;
 }
 
 interface GameContextType {
@@ -182,7 +194,7 @@ interface GameContextType {
   buyBuilding: (id: string, qty?: number) => void;
   startExpedition: (hours: 4 | 8 | 12) => void;
   claimExpedition: () => void;
-  speedUpExpedition: () => void;
+  speedUpExpedition: (reductionMs: number) => void;
   placeEggInIncubator: (eggId: string, slotIndex: number) => void;
   claimHatchedEgg: (slotIndex: number) => void;
   buyFromMerchant: (dealId: string) => void;
@@ -195,6 +207,9 @@ interface GameContextType {
   connectWallet: (address: string) => Promise<void>;
   disconnectWallet: () => void;
   setDisplayName: (name: string) => Promise<void>;
+  forceSave: () => Promise<void>;
+  addIncubatorSlot: () => void;
+  refreshTokenDiscount: () => Promise<void>;
   goldPerTap: number;
   goldPerHour: number;
   gearMultiplier: number;
@@ -584,6 +599,7 @@ function createInitialState(): GameState {
     tapGoldToday: 0,
     buildingsBoughtToday: 0,
     expeditionsToday: 0,
+    adsUsedThisExpedition: 0,
     lastTapEarned: 0,
     lastTapCrit: false,
     eggInventory: [],
@@ -599,6 +615,7 @@ function createInitialState(): GameState {
     walletAddress: null,
     isSynced: false,
     displayName: null,
+    tokenDiscount: null,
   };
 }
 
@@ -658,6 +675,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         totalDragonsSlain: saved.totalDragonsSlain ?? 0,
         totalExpeditions: saved.totalExpeditions ?? 0,
         expeditionsToday: isNewDay ? 0 : (saved.expeditionsToday ?? 0),
+        adsUsedThisExpedition: saved.adsUsedThisExpedition ?? 0,
         gold: saved.gold + offlineGold,
         totalGoldEarned: saved.totalGoldEarned + offlineGold,
         lastTick: now,
@@ -671,7 +689,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         lastTapEarned: saved.lastTapEarned || 0,
         lastTapCrit: saved.lastTapCrit || false,
         eggInventory: saved.eggInventory || [],
-        incubator: saved.incubator || [{ egg: null, startedAt: null, endsAt: null }],
+        incubator: (saved.incubator?.length ? saved.incubator : [{ egg: null, startedAt: null, endsAt: null }]),
         hatchedDragons: saved.hatchedDragons || [],
         merchantDeals: saved.merchantDeals || [],
         merchantExpiresAt: saved.merchantExpiresAt ?? null,
@@ -682,6 +700,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         playerId: saved.playerId ?? null,
         walletAddress: saved.walletAddress ?? null,
         isSynced: saved.isSynced ?? false,
+        tokenDiscount: saved.tokenDiscount ?? null,
       });
 
       // Auto-reconnect: wallet already in localStorage — re-establish identity via wallet path
@@ -1043,20 +1062,25 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         durationHours: hours,
         endsAt: now + hours * 3600 * 1000,
       };
-      return { ...prev, activeExpedition };
+      return { ...prev, activeExpedition, adsUsedThisExpedition: 0 };
     });
   }, []);
 
-  const speedUpExpedition = useCallback(() => {
+  const speedUpExpedition = useCallback((reductionMs: number) => {
     setState((prev) => {
       if (!prev.activeExpedition) return prev;
-      const halfOriginalMs = (prev.activeExpedition.durationHours * 3600 * 1000) / 2;
-      const newEndsAt = prev.activeExpedition.endsAt - halfOriginalMs;
+      if (prev.adsUsedThisExpedition >= 2) return prev;
+      const MIN_REMAINING_MS = 60_000; // always keep at least 60 s on the clock
+      const newEndsAt = Math.max(
+        Date.now() + MIN_REMAINING_MS,
+        prev.activeExpedition.endsAt - reductionMs,
+      );
       return {
         ...prev,
+        adsUsedThisExpedition: prev.adsUsedThisExpedition + 1,
         activeExpedition: {
           ...prev.activeExpedition,
-          endsAt: newEndsAt <= Date.now() ? Date.now() - 1 : newEndsAt,
+          endsAt: newEndsAt,
         },
       };
     });
@@ -1167,8 +1191,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const buyFromMerchant = useCallback((dealId: string) => {
     setState((prev) => {
       const deal = prev.merchantDeals.find(d => d.id === dealId);
-      if (!deal || deal.purchased || prev.gold < deal.goldCost) return prev;
-      let newState = { ...prev, gold: prev.gold - deal.goldCost };
+      if (!deal || deal.purchased) return prev;
+      const discountPct = prev.tokenDiscount?.pct ?? 0;
+      const effectiveCost = discountPct > 0 ? Math.floor(deal.goldCost * (1 - discountPct / 100)) : deal.goldCost;
+      if (prev.gold < effectiveCost) return prev;
+      let newState = { ...prev, gold: prev.gold - effectiveCost };
       if (deal.type === 'materials' && deal.payload.materials) {
         const newMats = [...newState.materials];
         for (const drop of deal.payload.materials) {
@@ -1372,6 +1399,27 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const API_URL = typeof process !== 'undefined' ? (process.env.NEXT_PUBLIC_API_URL ?? '') : '';
 
+  const refreshTokenDiscount = useCallback(async () => {
+    const wallet = stateRef.current.walletAddress;
+    if (!wallet) return;
+    try {
+      const res = await fetch(`/frontend-api/token-discount?wallet=${encodeURIComponent(wallet)}`);
+      const data = await res.json();
+      if (data.success) {
+        setState(prev => ({
+          ...prev,
+          tokenDiscount: {
+            lynx: !!data.lynx,
+            xrpnomics: !!data.xrpnomics,
+            dragonslayer: !!data.dragonslayer,
+            pct: data.discountPct ?? 0,
+            checkedAt: Date.now(),
+          },
+        }));
+      }
+    } catch { /* ignore */ }
+  }, []);
+
   const connectWallet = useCallback(async (address: string) => {
     if (!address) return;
     setState(prev => ({ ...prev, walletAddress: address, isSynced: false }));
@@ -1437,7 +1485,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // API unavailable — wallet already stored locally above
     }
-  }, [API_URL]);
+    // Check token discount for this wallet
+    refreshTokenDiscount();
+  }, [API_URL, refreshTokenDiscount]);
 
   const setDisplayName = useCallback(async (name: string) => {
     const trimmed = name.trim().slice(0, 32);
@@ -1452,11 +1502,29 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     } catch { /* ignore network errors — name saved locally */ }
   }, [API_URL]);
 
+  const forceSave = useCallback(async () => {
+    const s = stateRef.current;
+    saveState(s);
+    if (!s.playerId || !API_URL) return;
+    await fetch(`${API_URL}/api/save/${s.playerId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ save_json: s }),
+    }).catch(() => {});
+  }, [API_URL]);
+
+  const addIncubatorSlot = useCallback(() => {
+    setState(prev => ({
+      ...prev,
+      incubator: [...prev.incubator, { egg: null, startedAt: null, endsAt: null, isPermanent: true }],
+    }));
+  }, []);
+
   const disconnectWallet = useCallback(() => {
     // Clear localStorage so the storage event fires correctly on reconnect
     localStorage.removeItem('xaman_linked_address');
     localStorage.removeItem('xaman_pending_uuid');
-    setState(prev => ({ ...prev, walletAddress: null, playerId: null, isSynced: false, displayName: null }));
+    setState(prev => ({ ...prev, walletAddress: null, playerId: null, isSynced: false, displayName: null, tokenDiscount: null }));
   }, []);
 
   const getCharacterTier = useCallback((): number => {
@@ -1495,6 +1563,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         connectWallet,
         disconnectWallet,
         setDisplayName,
+        forceSave,
+        addIncubatorSlot,
+        refreshTokenDiscount,
         recordBotBattle,
         resetArenaAttacks,
         goldPerTap,

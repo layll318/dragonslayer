@@ -5,7 +5,12 @@ import { useGame } from '@/contexts/GameContext';
 import { formatNumber } from '@/utils/format';
 
 export default function MerchantModal() {
-  const { state, buyFromMerchant, canAfford } = useGame();
+  const { state, canAfford, buyFromMerchant } = useGame();
+  const discountPct = state.tokenDiscount?.pct ?? 0;
+  function discountedGold(base: number) {
+    if (discountPct === 0) return base;
+    return Math.floor(base * (1 - discountPct / 100));
+  }
   const [open, setOpen] = useState(false);
   const [timeLeft, setTimeLeft] = useState('');
 
@@ -59,12 +64,13 @@ export default function MerchantModal() {
       {open && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-end justify-center z-50">
           <div
-            className="w-full max-w-[430px] rounded-t-2xl pb-safe"
+            className="w-full max-w-[430px] rounded-t-2xl"
             style={{
               background: 'linear-gradient(180deg, rgba(22,14,40,0.99) 0%, rgba(10,6,20,1) 100%)',
               border: '1px solid rgba(139,92,246,0.25)',
-              maxHeight: '85vh',
+              maxHeight: '90vh',
               overflowY: 'auto',
+              paddingBottom: 'calc(env(safe-area-inset-bottom) + 24px)',
             }}
           >
             {/* Header */}
@@ -90,7 +96,8 @@ export default function MerchantModal() {
             {/* Deals */}
             <div className="px-3 py-3 flex flex-col gap-2">
               {deals.map(deal => {
-                const affordable = canAfford(deal.goldCost);
+                const effectiveCost = discountedGold(deal.goldCost);
+                const affordable = canAfford(effectiveCost);
                 return (
                   <div
                     key={deal.id}
@@ -110,9 +117,18 @@ export default function MerchantModal() {
                         <p className="text-[#6b5a3a] text-[9px] mt-0.5 leading-snug">{deal.desc}</p>
                         <div className="flex items-center gap-1 mt-1.5">
                           <span className="coin-icon" style={{ width: 11, height: 11 }} />
-                          <span className={`font-cinzel font-bold text-[11px] ${affordable ? 'text-[#f0c040]' : 'text-red-400'}`}>
-                            {formatNumber(deal.goldCost)}
-                          </span>
+                          {discountPct > 0 ? (
+                            <>
+                              <span className="font-cinzel text-[9px] line-through text-[#4a3a2a]">{formatNumber(deal.goldCost)}</span>
+                              <span className={`font-cinzel font-bold text-[11px] ${affordable ? 'text-[#4ade80]' : 'text-red-400'}`}>
+                                {formatNumber(discountedGold(deal.goldCost))}
+                              </span>
+                            </>
+                          ) : (
+                            <span className={`font-cinzel font-bold text-[11px] ${affordable ? 'text-[#f0c040]' : 'text-red-400'}`}>
+                              {formatNumber(deal.goldCost)}
+                            </span>
+                          )}
                         </div>
                       </div>
                       <div className="flex-shrink-0">

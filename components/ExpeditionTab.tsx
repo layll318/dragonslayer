@@ -114,11 +114,19 @@ export default function ExpeditionTab() {
     placeEggInIncubator,
     claimHatchedEgg,
     addEggs,
+    addIncubatorSlot,
     gearMultiplier,
     armyPower,
     CRAFTING_RECIPES,
     ITEM_UNLOCK_LEVELS: unlockLevels,
   } = useGame();
+
+  const discountPct = state.tokenDiscount?.pct ?? 0;
+  const discountMult = 1 - discountPct / 100;
+  function discountedXrp(base: number) {
+    if (discountPct === 0) return base;
+    return parseFloat((base * discountMult).toFixed(2));
+  }
 
   const [buyStatus, setBuyStatus] = React.useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [buyMsg, setBuyMsg] = React.useState('');
@@ -127,10 +135,15 @@ export default function ExpeditionTab() {
   const [txStatus, setTxStatus] = React.useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [txMsg, setTxMsg] = React.useState('');
   const [walletCopied, setWalletCopied] = React.useState(false);
+  const AD_VIDEOS = [
+    '/images/testlynxadd.MOV',
+    '/images/testlynxadd2.MOV',
+    '/images/testlynxadd3.MOV',
+    '/images/testlynxadd4.MOV',
+  ];
   const [showAd, setShowAd] = React.useState(false);
   const [adWatched, setAdWatched] = React.useState(false);
-  const [adUsed, setAdUsed] = React.useState(false);
-  const [adDuration, setAdDuration] = React.useState('');
+  const [adVideoSrc, setAdVideoSrc] = React.useState(AD_VIDEOS[0]);
   const [eggNowMs, setEggNowMs] = React.useState(Date.now());
   const [premiumHash, setPremiumHash] = React.useState('');
   const [premiumType, setPremiumType] = React.useState<string>('');
@@ -144,16 +157,6 @@ export default function ExpeditionTab() {
     return () => clearInterval(id);
   }, []);
 
-  // Load video metadata once to get duration for the button label
-  useEffect(() => {
-    const v = document.createElement('video');
-    v.preload = 'metadata';
-    v.src = '/images/testlynxadd.MOV';
-    v.onloadedmetadata = () => {
-      const s = Math.round(v.duration);
-      setAdDuration(`${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`);
-    };
-  }, []);
   const USED_TX_KEY = 'ds_used_tx_hashes';
   const TREASURY = 'rf84iAt8aRMJ7onNY9ZqmWVVFCAtSmTT7d';
 
@@ -266,9 +269,9 @@ export default function ExpeditionTab() {
     return () => clearInterval(id);
   }, [state.activeExpedition]);
 
-  // Reset claimed and adUsed flags when new expedition starts
+  // Reset claimed flag when new expedition starts
   useEffect(() => {
-    if (state.activeExpedition) { setClaimed(false); setAdUsed(false); }
+    if (state.activeExpedition) { setClaimed(false); }
   }, [state.activeExpedition]);
 
   const exp = state.activeExpedition;
@@ -352,20 +355,25 @@ export default function ExpeditionTab() {
               </div>
               {/* Watch ad to speed up */}
               {(() => {
-                const halfMs = exp.durationHours * 3600 * 1000 / 2;
-                const halfMins = Math.round(halfMs / 60000);
-                const saveLabel = halfMins >= 60
-                  ? `${(halfMins / 60).toFixed(1).replace('.0','')}h`
-                  : `${halfMins}m`;
-                return adUsed ? (
-                  <p className="mt-1 text-center text-[10px] text-[#4ade80] font-bold">✅ Ad boost used — expedition sped up!</p>
+                const reductionMins = Math.round(exp.durationHours * 60 * 0.25);
+                const saveLabel = reductionMins >= 60
+                  ? `${(reductionMins / 60).toFixed(1).replace('.0', '')}h`
+                  : `${reductionMins}m`;
+                const adsLeft = 2 - (state.adsUsedThisExpedition ?? 0);
+                return adsLeft <= 0 ? (
+                  <p className="mt-1 text-center text-[10px] text-[#6b5a3a]">No more boosts available for this expedition.</p>
                 ) : (
                   <button
-                    onClick={() => { setAdWatched(false); setShowAd(true); }}
+                    onClick={() => {
+                      const pick = AD_VIDEOS[Math.floor(Math.random() * AD_VIDEOS.length)];
+                      setAdVideoSrc(pick);
+                      setAdWatched(false);
+                      setShowAd(true);
+                    }}
                     className="mt-1 w-full py-2 rounded-xl text-[11px] font-bold tracking-wide"
                     style={{ background: 'linear-gradient(135deg,#7c3aed,#a855f7)', color: '#fff', boxShadow: '0 0 12px rgba(168,85,247,0.4)' }}
                   >
-                    ⚡ Watch Ad {adDuration ? `(${adDuration})` : ''} → Save {saveLabel}
+                    ⚡ Speed Up ({adsLeft}/2 left) — save {saveLabel}
                   </button>
                 );
               })()}
@@ -802,7 +810,12 @@ export default function ExpeditionTab() {
                   {walletCopied ? '✓ Copied' : '📋 Copy'}
                 </button>
               </div>
-              <p className="text-[7px] text-[#4a3a2a] mt-1">1 XRP = 3× one type · 3 XRP = 3× all 5 types · then claim below with TX hash</p>
+              <p className="text-[7px] text-[#4a3a2a] mt-1">
+                {discountPct > 0
+                  ? <><span className="line-through text-[#3a2a1a]">1 XRP</span> <span className="text-[#4ade80] font-bold">{discountedXrp(1)} XRP</span> = 3× one type · <span className="line-through text-[#3a2a1a]">3 XRP</span> <span className="text-[#4ade80] font-bold">{discountedXrp(3)} XRP</span> = 3× all 5 types</>
+                  : '1 XRP = 3× one type · 3 XRP = 3× all 5 types · then claim below with TX hash'
+                }
+              </p>
             </div>
 
             {/* Single type Xaman-pay buttons */}
@@ -825,7 +838,11 @@ export default function ExpeditionTab() {
                   }}
                 >
                   <span className="text-base leading-none">{MATERIAL_LABELS[t].split(' ')[0]}</span>
-                  <span className="text-[7px] text-[#f0c040] font-bold mt-0.5">1 XRP</span>
+                  {discountPct > 0 ? (
+                    <><span className="text-[6px] line-through text-[#6b5a3a]">1</span><span className="text-[7px] text-[#4ade80] font-bold">{discountedXrp(1)}</span></>
+                  ) : (
+                    <span className="text-[7px] text-[#f0c040] font-bold mt-0.5">1 XRP</span>
+                  )}
                   <span className="text-[6px] text-[#6b5a3a]">×3</span>
                 </button>
               ))}
@@ -838,7 +855,10 @@ export default function ExpeditionTab() {
               className="action-btn w-full py-2 text-[10px]"
               style={{ opacity: !state.walletAddress ? 0.4 : 1 }}
             >
-              🎒 All 5 Types ×3 — 3 XRP
+              {discountPct > 0
+                ? <>🎒 All 5 Types ×3 — <span className="line-through opacity-60">3</span> {discountedXrp(3)} XRP</>
+                : '🎒 All 5 Types ×3 — 3 XRP'
+              }
             </button>
 
             {/* Check pending Xaman payment manually */}
@@ -916,10 +936,17 @@ export default function ExpeditionTab() {
             <p className="font-cinzel font-bold text-[11px] tracking-wider" style={{ color: '#a78bfa' }}>PREMIUM XRP STORE</p>
           </div>
           <p className="text-[#4a3a6a] text-[8px] mb-3">Exclusive items unavailable elsewhere. Send XRP to treasury, then claim with TX hash.</p>
-          {[
-            { id: 'rare_egg',      icon: '💎', label: 'Rare Dragon Egg',          xrp: 2, desc: 'Hatches in 4h · +15% material drops forever' },
-            { id: 'legendary_egg', icon: '✨', label: 'Legendary Dragon Egg',      xrp: 5, desc: 'Hatches in 6h · −10% expedition time forever' },
-            { id: 'rare_bundle',   icon: '🎁', label: 'Rare Material Mega Bundle', xrp: 5, desc: '3× RARE quality of all 5 material types' },
+          {discountPct > 0 && (
+          <div className="flex items-center gap-1.5 mb-2 px-2 py-1 rounded-lg"
+            style={{ background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)' }}>
+            <span className="text-[#4ade80] text-[9px] font-black">{discountPct}% TOKEN DISCOUNT APPLIED</span>
+          </div>
+        )}
+        {[
+            { id: 'rare_egg',       icon: '💎', label: 'Rare Dragon Egg',           xrp: 2, desc: 'Hatches in 4h · +15% material drops forever' },
+            { id: 'legendary_egg',  icon: '✨', label: 'Legendary Dragon Egg',       xrp: 5, desc: 'Hatches in 6h · −10% expedition time forever' },
+            { id: 'rare_bundle',    icon: '🎁', label: 'Rare Material Mega Bundle',  xrp: 5, desc: '3× of all 5 material types' },
+            { id: 'incubator_slot', icon: '🔥', label: 'Permanent Incubator Slot',   xrp: 1, desc: 'Extra slot that stacks forever — never expires' },
           ].map(item => (
             <div key={item.id}
               className="flex items-center gap-2.5 p-2 rounded-xl mb-1.5"
@@ -934,7 +961,14 @@ export default function ExpeditionTab() {
                 <p className="text-[#6b5a8a] text-[8px]">{item.desc}</p>
               </div>
               <div className="flex flex-col items-end gap-0.5">
-                <span className="font-cinzel font-bold text-[10px]" style={{ color: '#a78bfa' }}>{item.xrp} XRP</span>
+                {discountPct > 0 ? (
+                  <div className="flex flex-col items-end">
+                    <span className="font-cinzel text-[9px] line-through" style={{ color: '#6b5a8a' }}>{item.xrp} XRP</span>
+                    <span className="font-cinzel font-bold text-[10px]" style={{ color: '#4ade80' }}>{discountedXrp(item.xrp)} XRP</span>
+                  </div>
+                ) : (
+                  <span className="font-cinzel font-bold text-[10px]" style={{ color: '#a78bfa' }}>{item.xrp} XRP</span>
+                )}
                 <button
                   onClick={() => setPremiumType(prev => prev === item.id ? '' : item.id)}
                   className="px-2 py-0.5 rounded text-[9px] font-bold transition-all"
@@ -1041,7 +1075,7 @@ export default function ExpeditionTab() {
       const res = await fetch('/frontend-api/materials/verify-tx', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ txHash: hash, type: txType || undefined }),
+        body: JSON.stringify({ txHash: hash, type: txType || undefined, playerId: state.playerId ?? undefined }),
       });
       const data = await res.json();
       console.log('[verify-tx] response:', data);
@@ -1097,7 +1131,7 @@ export default function ExpeditionTab() {
       const res = await fetch('/frontend-api/materials/verify-premium-tx', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ txHash: hash, premiumType }),
+        body: JSON.stringify({ txHash: hash, premiumType, playerId: state.playerId ?? undefined }),
       });
       const data = await res.json();
       if (!data.success) { setPremiumMsg(data.error || 'Verification failed.'); setPremiumStatus('error'); return; }
@@ -1110,10 +1144,14 @@ export default function ExpeditionTab() {
       if (data.materialCredits) {
         addMaterials(data.materialCredits);
       }
+      if (data.incubatorSlot) {
+        addIncubatorSlot();
+      }
 
       used.push(hash);
       localStorage.setItem(USED_PREMIUM_KEY, JSON.stringify(used));
-      setPremiumMsg(`✅ Claimed: ${data.label}! Check your ${data.eggRarity ? 'Eggs tab' : 'Materials'}.`);
+      const claimDest = data.eggRarity ? 'Dragon Den (Stash tab)' : data.incubatorSlot ? 'your incubator' : 'Materials';
+      setPremiumMsg(`✅ Claimed: ${data.label}! Check ${claimDest}.`);
       setPremiumStatus('done');
       setPremiumHash('');
       setPremiumType('');
@@ -1242,11 +1280,13 @@ export default function ExpeditionTab() {
 
   // ── TAB BAR + LAYOUT ─────────────────────────────────────────────────────
 
-  const stashBadge = state.materials.reduce((n, m) => n + m.quantity, 0) + (state.eggInventory?.length || 0);
-  const tabs: { id: Section; label: string; badge?: number }[] = [
+  const eggCount = state.eggInventory?.length || 0;
+  const hatchReady = (state.incubator ?? []).some(s => s.egg && s.endsAt && Date.now() >= s.endsAt);
+  const stashBadge = state.materials.reduce((n, m) => n + m.quantity, 0) + eggCount;
+  const tabs: { id: Section; label: string; badge?: number; amber?: boolean }[] = [
     { id: 'expedition', label: '🗺️ Quest' },
     { id: 'gear',       label: '⚔️ Gear',   badge: state.inventory.length },
-    { id: 'stash',      label: '🎒 Stash',  badge: stashBadge },
+    { id: 'stash',      label: '🎒 Stash',  badge: stashBadge, amber: eggCount > 0 || hatchReady },
   ];
 
   return (
@@ -1274,15 +1314,15 @@ export default function ExpeditionTab() {
 
           {/* Video */}
           <video
-            key="ad-video"
-            src="/images/testlynxadd.MOV"
+            key={adVideoSrc}
+            src={adVideoSrc}
             autoPlay
             playsInline
             className="w-full max-h-[75vh] object-contain"
             onEnded={() => {
-              if (!adUsed) {
-                speedUpExpedition();
-                setAdUsed(true);
+              if ((state.adsUsedThisExpedition ?? 0) < 2) {
+                const reductionMs = (state.activeExpedition?.durationHours ?? 4) * 3600 * 1000 * 0.25;
+                speedUpExpedition(reductionMs);
               }
               setAdWatched(true);
             }}
@@ -1326,7 +1366,13 @@ export default function ExpeditionTab() {
             >
               {t.label}
               {t.badge !== undefined && t.badge > 0 && (
-                <span className="absolute -top-1 -right-1 bg-[#f0c040] text-[#1a0e00] text-[7px] font-black rounded-full w-3.5 h-3.5 flex items-center justify-center">
+                <span
+                  className="absolute -top-1 -right-1 text-[7px] font-black rounded-full w-3.5 h-3.5 flex items-center justify-center"
+                  style={{
+                    background: t.amber ? '#f97316' : '#f0c040',
+                    color: '#1a0e00',
+                  }}
+                >
                   {t.badge > 99 ? '99+' : t.badge}
                 </span>
               )}
@@ -1350,8 +1396,17 @@ export default function ExpeditionTab() {
         {section === 'stash' && (
           <>
             {renderMaterials()}
-            <div className="mt-1 px-1">
-              <p className="font-cinzel font-bold text-[#e8d8a8] text-[10px] tracking-wider mb-2">🥚 DRAGON EGGS</p>
+            <div className="mt-2 px-1">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xl">🐉</span>
+                <p className="font-cinzel font-bold text-[#f0c040] text-sm tracking-wider">DRAGON DEN</p>
+                {(eggCount > 0 || hatchReady) && (
+                  <span className="px-2 py-0.5 rounded-full text-[9px] font-black"
+                    style={{ background: 'rgba(249,115,22,0.2)', color: '#f97316', border: '1px solid rgba(249,115,22,0.4)' }}>
+                    {hatchReady ? '🔥 READY TO HATCH' : `${eggCount} egg${eggCount !== 1 ? 's' : ''}`}
+                  </span>
+                )}
+              </div>
             </div>
             {renderEggs()}
           </>

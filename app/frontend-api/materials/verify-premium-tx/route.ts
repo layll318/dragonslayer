@@ -4,18 +4,20 @@ export const dynamic = 'force-dynamic';
 
 const TREASURY_WALLET = process.env.TREASURY_WALLET || 'rf84iAt8aRMJ7onNY9ZqmWVVFCAtSmTT7d';
 const XRPL_API        = 'https://xrplcluster.com/';
+const API_URL         = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 // Premium XRP amounts (in drops)
 const PREMIUM_ITEMS: Record<string, { dropsRequired: number; label: string }> = {
-  rare_egg:      { dropsRequired: 2_000_000,  label: 'Rare Dragon Egg' },
-  legendary_egg: { dropsRequired: 5_000_000,  label: 'Legendary Dragon Egg' },
-  rare_bundle:   { dropsRequired: 5_000_000,  label: 'Rare Material Mega Bundle' },
+  rare_egg:        { dropsRequired: 2_000_000, label: 'Rare Dragon Egg' },
+  legendary_egg:   { dropsRequired: 5_000_000, label: 'Legendary Dragon Egg' },
+  rare_bundle:     { dropsRequired: 5_000_000, label: 'Rare Material Mega Bundle' },
+  incubator_slot:  { dropsRequired: 1_000_000, label: 'Permanent Incubator Slot' },
 };
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
-    const { txHash, premiumType } = body as { txHash?: string; premiumType?: string };
+    const { txHash, premiumType, playerId } = body as { txHash?: string; premiumType?: string; playerId?: number };
 
     if (!txHash || txHash.trim().length < 60) {
       return NextResponse.json({ error: 'Invalid transaction hash.' }, { status: 400 });
@@ -69,6 +71,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `Insufficient payment. ${item.label} requires ${xrpNeeded} XRP.` }, { status: 400 });
     }
 
+    // Server-side dedup — register hash only after XRPL confirms success
+    const dedupRes = await fetch(`${API_URL}/api/items/claim-tx`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tx_hash: txHash.trim().toUpperCase(), player_id: playerId ?? null, item_type: premiumType }),
+    }).catch(() => null);
+    if (dedupRes?.ok) {
+      const dedupData = await dedupRes.json().catch(() => null);
+      if (dedupData && !dedupData.success && dedupData.already_claimed) {
+        return NextResponse.json({ error: 'This transaction hash has already been used to claim a reward.' }, { status: 409 });
+      }
+    }
+
     const ALL_TYPES = ['dragon_scale', 'fire_crystal', 'iron_ore', 'bone_shard', 'ancient_rune'] as const;
 
     return NextResponse.json({
@@ -83,6 +98,8 @@ export async function POST(request: NextRequest) {
       materialCredits: premiumType === 'rare_bundle'
         ? ALL_TYPES.map(t => ({ type: t, quantity: 5 }))
         : null,
+      // For incubator_slot: permanent slot
+      incubatorSlot: premiumType === 'incubator_slot' ? true : null,
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unknown error';

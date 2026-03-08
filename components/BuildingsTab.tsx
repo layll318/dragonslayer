@@ -44,9 +44,25 @@ export default function BuildingsTab() {
           return (
             <div
               key={building.id}
-              className={`building-card p-3.5 ${!unlocked ? 'opacity-30 grayscale' : ''} ${unlocked && affordable ? 'building-affordable' : ''}`}
+              className={`building-card p-3.5 relative overflow-hidden ${unlocked && affordable ? 'building-affordable' : ''}`}
             >
-              <div className="flex items-center gap-3">
+              {/* Locked overlay */}
+              {!unlocked && (
+                <div className="absolute inset-0 rounded-xl z-10 flex flex-col items-center justify-center gap-1 pointer-events-none"
+                  style={{ background: 'rgba(5,3,1,0.72)', backdropFilter: 'blur(1px)' }}>
+                  <span className="text-2xl">🔒</span>
+                  <span className="font-cinzel font-black text-[#f0c040] text-xs tracking-wider">LOCKED</span>
+                  <span className="text-[9px] text-[#9a8a6a]">Reach Level {building.unlockLevel}</span>
+                  <div className="w-24 h-1.5 rounded-full mt-0.5 overflow-hidden" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                    <div className="h-full rounded-full" style={{
+                      width: `${Math.min(100, (state.level / building.unlockLevel) * 100)}%`,
+                      background: 'linear-gradient(90deg, #d4a017, #f0c040)',
+                    }} />
+                  </div>
+                  <span className="text-[8px] text-[#6b5a3a]">{state.level} / {building.unlockLevel}</span>
+                </div>
+              )}
+              <div className={`flex items-center gap-3 ${!unlocked ? 'opacity-30' : ''}`}>
                 {/* Icon */}
                 <div
                   className="w-14 h-14 rounded-lg flex items-center justify-center text-2xl flex-shrink-0 relative"
@@ -117,14 +133,11 @@ export default function BuildingsTab() {
                       </button>
                     </>
                   ) : (
-                    <div className="text-center px-2 py-2 rounded-lg bg-black/20 border border-[rgba(100,80,40,0.15)]">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="mx-auto mb-1 text-[#4a3a2a]">
-                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                      </svg>
-                      <span className="text-[10px] text-[#6b5a3a] font-bold block">Lv.{building.unlockLevel}</span>
-                      <span className="text-[10px] text-[#6b5a3a] block mt-0.5">
-                        {building.unlockLevel - state.level} lvls
+                    <div className="text-center px-2 py-1.5 rounded-lg"
+                      style={{ background: 'rgba(180,120,20,0.12)', border: '1px solid rgba(212,160,23,0.3)' }}>
+                      <span className="text-[10px] font-black text-[#f0c040] block">🔒 LV.{building.unlockLevel}</span>
+                      <span className="text-[9px] text-[#8a7a5a] block mt-0.5">
+                        {building.unlockLevel - state.level} more lvls
                       </span>
                     </div>
                   )}

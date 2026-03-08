@@ -118,6 +118,14 @@ async def create_tables():
                 ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMPTZ DEFAULT NOW()
         """)
         await conn.execute("""
+            CREATE TABLE IF NOT EXISTS used_tx_hashes (
+                tx_hash    TEXT PRIMARY KEY,
+                player_id  INTEGER REFERENCES players(id) ON DELETE SET NULL,
+                item_type  TEXT,
+                claimed_at TIMESTAMPTZ DEFAULT NOW()
+            );
+        """)
+        await conn.execute("""
             CREATE TABLE IF NOT EXISTS arena_battles (
                 id              SERIAL PRIMARY KEY,
                 attacker_id     INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,

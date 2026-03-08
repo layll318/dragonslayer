@@ -35,7 +35,7 @@ const TIER_ICONS = ['🧑‍🌾', '🛡️', '⚔️', '🐲', '👑'];
 const TIER_LEVELS = [1, 10, 25, 50, 80];
 
 export default function ProfileTab() {
-  const { state, goldPerHour, goldPerTap, getCharacterTier, connectWallet, disconnectWallet, resetArenaAttacks, setDisplayName } = useGame();
+  const { state, goldPerHour, goldPerTap, getCharacterTier, connectWallet, disconnectWallet, resetArenaAttacks, setDisplayName, forceSave, refreshTokenDiscount } = useGame();
   const { user, isTWA } = useTelegramWebApp();
 
   const [editingName, setEditingName] = useState(false);
@@ -65,7 +65,10 @@ export default function ProfileTab() {
   const [lbError, setLbError] = useState<string | null>(null);
   const [lbLastRefresh, setLbLastRefresh] = useState(0);
 
-  const [showDebug, setShowDebug] = useState(true);
+  const [showDebug, setShowDebug] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState<string>('');
+  const [refreshingDiscount, setRefreshingDiscount] = useState(false);
   const [pingResult, setPingResult] = useState<string>('');
   const [pinging, setPinging] = useState(false);
   const [arenaResult, setArenaResult] = useState<string>('');
@@ -157,6 +160,25 @@ export default function ProfileTab() {
   const totalBuildings = state.buildings.reduce((sum, b) => sum + b.owned, 0);
   const xpPercent = state.xpToNext > 0 ? (state.xp / state.xpToNext) * 100 : 0;
 
+  const handleForceSave = useCallback(async () => {
+    setSaving(true);
+    setSaveMsg('');
+    try {
+      await forceSave();
+      setSaveMsg('✅ Saved!');
+    } catch {
+      setSaveMsg('❌ Save failed');
+    }
+    setSaving(false);
+    setTimeout(() => setSaveMsg(''), 3000);
+  }, [forceSave]);
+
+  const handleRefreshDiscount = useCallback(async () => {
+    setRefreshingDiscount(true);
+    await refreshTokenDiscount();
+    setRefreshingDiscount(false);
+  }, [refreshTokenDiscount]);
+
   return (
     <div className="flex flex-col flex-1 pb-4 overflow-y-auto relative z-10 page-fade">
       {/* Header */}
@@ -166,6 +188,19 @@ export default function ProfileTab() {
             <h2 className="gold-shimmer font-cinzel font-bold text-lg tracking-wide">Profile</h2>
             <p className="text-[#6b5a3a] text-[10px] mt-0.5 uppercase tracking-wider">Your journey</p>
           </div>
+          <button
+            onClick={handleForceSave}
+            disabled={saving}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-cinzel font-bold text-[10px] transition-all active:scale-95"
+            style={{
+              background: saving ? 'rgba(212,160,23,0.05)' : 'rgba(212,160,23,0.12)',
+              border: '1px solid rgba(212,160,23,0.3)',
+              color: saving ? '#6b5a3a' : '#f0c040',
+              opacity: saving ? 0.7 : 1,
+            }}
+          >
+            ☁️ {saving ? 'Saving…' : saveMsg || 'Save'}
+          </button>
         </div>
       </div>
 
@@ -306,6 +341,90 @@ export default function ProfileTab() {
             </div>
           )}
         </div>
+
+        {/* ═══ TOKEN PERKS ═══ */}
+        {state.walletAddress && (
+          <div className="dragon-panel p-4"
+            style={{ border: '1px solid rgba(139,92,246,0.25)', background: 'linear-gradient(180deg, rgba(139,92,246,0.06) 0%, rgba(10,6,20,0) 100%)' }}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-base">🏅</span>
+                <h3 className="font-cinzel text-[#a78bfa] font-bold text-sm">Token Perks</h3>
+              </div>
+              {state.tokenDiscount && state.tokenDiscount.pct > 0 && (
+                <span className="px-2 py-0.5 rounded-full font-black text-[10px]"
+                  style={{ background: 'rgba(74,222,128,0.15)', color: '#4ade80', border: '1px solid rgba(74,222,128,0.3)' }}>
+                  {state.tokenDiscount.pct}% OFF ACTIVE
+                </span>
+              )}
+            </div>
+
+            {/* Token rows */}
+            {[
+              { key: 'lynx' as const, label: '$LYNX', icon: '🦁', desc: 'Hold 850K+', min: '850,000' },
+              { key: 'xrpnomics' as const, label: 'XRPNOMICS', icon: '📊', desc: 'Hold 0.1+', min: '0.1' },
+              { key: 'dragonslayer' as const, label: 'DragonSlayer', icon: '🐉', desc: 'Hold 30B+', min: '30.1B' },
+            ].map(({ key, label, icon, desc }) => {
+              const holds = state.tokenDiscount?.[key] ?? null;
+              return (
+                <div key={key} className="flex items-center gap-2.5 py-1.5 border-b last:border-0"
+                  style={{ borderColor: 'rgba(139,92,246,0.1)' }}>
+                  <span className="text-lg w-7 text-center flex-shrink-0">{icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-[11px] text-[#e8d8f8]">{label}</p>
+                    <p className="text-[9px] text-[#6b5a8a]">{desc}</p>
+                  </div>
+                  <span className={`text-[11px] font-black flex-shrink-0 ${
+                    holds === null ? 'text-[#4a3a6a]' :
+                    holds ? 'text-[#4ade80]' : 'text-[#f87171]'
+                  }`}>
+                    {holds === null ? '—' : holds ? '✓ Holds' : '✗ Not held'}
+                  </span>
+                </div>
+              );
+            })}
+
+            {/* Tier info */}
+            <div className="mt-3 grid grid-cols-3 gap-1.5">
+              {[
+                { tokens: 1, pct: 25, color: '#a78bfa' },
+                { tokens: 2, pct: 35, color: '#c084fc' },
+                { tokens: 3, pct: 50, color: '#f0c040' },
+              ].map(({ tokens, pct, color }) => {
+                const tokensHeld = [
+                  state.tokenDiscount?.lynx,
+                  state.tokenDiscount?.xrpnomics,
+                  state.tokenDiscount?.dragonslayer,
+                ].filter(Boolean).length;
+                const active = tokensHeld >= tokens;
+                return (
+                  <div key={tokens} className="text-center py-1.5 rounded-lg"
+                    style={{
+                      background: active ? `${color}15` : 'rgba(255,255,255,0.02)',
+                      border: `1px solid ${active ? `${color}40` : 'rgba(255,255,255,0.05)'}`,
+                    }}>
+                    <p className="font-black text-[11px]" style={{ color: active ? color : '#3a2a4a' }}>{pct}% OFF</p>
+                    <p className="text-[8px]" style={{ color: active ? '#9a8ab8' : '#3a2a4a' }}>{tokens} token{tokens > 1 ? 's' : ''}</p>
+                  </div>
+                );
+              })}
+            </div>
+
+            <button
+              onClick={handleRefreshDiscount}
+              disabled={refreshingDiscount}
+              className="mt-3 w-full py-1.5 rounded-lg font-bold text-[9px] transition-all active:scale-95"
+              style={{
+                background: 'rgba(139,92,246,0.1)',
+                border: '1px solid rgba(139,92,246,0.25)',
+                color: refreshingDiscount ? '#4a3a6a' : '#a78bfa',
+                opacity: refreshingDiscount ? 0.6 : 1,
+              }}
+            >
+              {refreshingDiscount ? '⏳ Checking balances…' : '🔄 Reverify Token Holdings'}
+            </button>
+          </div>
+        )}
 
         {/* ═══ DEBUG ═══ */}
         <div className="dragon-panel p-3">

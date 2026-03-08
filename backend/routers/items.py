@@ -198,6 +198,51 @@ async def unequip_item(req: UnequipRequest):
         return {"success": True}
 
 
+# ── TX Hash Deduplication ───────────────────────────────────────────────────
+
+class ClaimTxRequest(BaseModel):
+    tx_hash: str
+    player_id: Optional[int] = None
+    item_type: Optional[str] = None
+
+
+@router.post("/claim-tx")
+async def claim_tx(req: ClaimTxRequest):
+    """
+    Server-side idempotency gate for XRP transaction hashes.
+    Returns {success: True, already_claimed: False} on first claim.
+    Returns {success: False, already_claimed: True}  on duplicate.
+    """
+    if not req.tx_hash or len(req.tx_hash.strip()) < 60:
+        raise HTTPException(status_code=400, detail="Invalid tx_hash")
+
+    tx = req.tx_hash.strip().upper()
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        existing = await conn.fetchrow(
+            "SELECT player_id, item_type, claimed_at FROM used_tx_hashes WHERE tx_hash = $1",
+            tx,
+        )
+        if existing:
+            return {
+                "success": False,
+                "already_claimed": True,
+                "claimed_by": existing["player_id"],
+                "item_type": existing["item_type"],
+            }
+
+        await conn.execute(
+            """
+            INSERT INTO used_tx_hashes (tx_hash, player_id, item_type)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (tx_hash) DO NOTHING
+            """,
+            tx, req.player_id, req.item_type,
+        )
+
+    return {"success": True, "already_claimed": False}
+
+
 # ── XRP Material Shop ───────────────────────────────────────────────────────
 
 XAMAN_API_KEY    = os.environ.get("XAMAN_API_KEY", "")

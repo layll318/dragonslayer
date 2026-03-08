@@ -310,6 +310,43 @@ export default function HeroTab() {
         {/* ══════════════ TRAVELLING MERCHANT ══════════════ */}
         <MerchantModal />
 
+        {/* ══════════════ DRAGON DEN ══════════════ */}
+        {(state.eggInventory?.length > 0 || state.hatchedDragons?.length > 0 || state.incubator?.some(s => s.egg)) && (() => {
+          const eggCount = state.eggInventory?.length ?? 0;
+          const hatchedCount = state.hatchedDragons?.length ?? 0;
+          const incubating = state.incubator?.filter(s => s.egg).length ?? 0;
+          const hatchReady = state.incubator?.some(s => s.egg && s.endsAt && Date.now() >= s.endsAt);
+          return (
+            <div
+              className="flex items-center gap-3 px-3 py-2.5 rounded-xl"
+              style={{
+                background: 'linear-gradient(135deg, rgba(249,115,22,0.12) 0%, rgba(239,68,68,0.06) 100%)',
+                border: `1px solid ${hatchReady ? 'rgba(74,222,128,0.5)' : 'rgba(249,115,22,0.35)'}`,
+                boxShadow: hatchReady ? '0 0 16px rgba(74,222,128,0.15)' : '0 0 12px rgba(249,115,22,0.1)',
+                animation: hatchReady ? 'goldShimmerBtn 2s ease-in-out infinite' : undefined,
+              }}
+            >
+              <span className="text-2xl flex-shrink-0">{hatchReady ? '🐣' : '🐉'}</span>
+              <div className="flex-1 min-w-0">
+                <p className="font-cinzel font-bold text-[11px] tracking-wide"
+                  style={{ color: hatchReady ? '#4ade80' : '#f97316' }}>
+                  {hatchReady ? '🔥 DRAGON READY TO HATCH!' : '🥚 DRAGON DEN'}
+                </p>
+                <p className="text-[9px] mt-0.5" style={{ color: '#8a6a5a' }}>
+                  {hatchReady
+                    ? 'Your egg has hatched — claim your dragon bonus now!'
+                    : [
+                        eggCount > 0 && `${eggCount} egg${eggCount !== 1 ? 's' : ''} in inventory`,
+                        incubating > 0 && `${incubating} incubating`,
+                        hatchedCount > 0 && `${hatchedCount} dragon${hatchedCount !== 1 ? 's' : ''} active`,
+                      ].filter(Boolean).join(' · ')}
+                </p>
+              </div>
+              <span style={{ color: hatchReady ? '#4ade80' : '#f97316' }} className="text-sm">›</span>
+            </div>
+          );
+        })()}
+
         {/* ══════════════ NEXT GOAL BANNER ══════════════ */}
         {(() => {
           const goal = getNextGoal(state, goldPerHour);

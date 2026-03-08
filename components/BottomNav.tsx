@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { useGame } from '@/contexts/GameContext';
 
 interface NavItem {
   id: string;
@@ -77,6 +78,11 @@ const ProfileIcon = () => (
 );
 
 export default function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
+  const { state } = useGame();
+  const hasEggs = (state.eggInventory?.length ?? 0) > 0;
+  const hatchReady = (state.incubator ?? []).some(s => s.egg && s.endsAt && Date.now() >= s.endsAt);
+  const expBadge = hasEggs || hatchReady;
+
   const items: NavItem[] = [
     { id: 'hero',        label: 'Hero',       icon: <HeroIcon /> },
     { id: 'buildings',   label: 'Forge',      icon: <BuildingsIcon /> },
@@ -112,6 +118,12 @@ export default function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
                   />
                 )}
                 {item.icon}
+                {/* Egg badge on Expedition */}
+                {item.id === 'expedition' && expBadge && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full"
+                    style={{ background: hatchReady ? '#4ade80' : '#f97316', boxShadow: `0 0 6px ${hatchReady ? '#4ade80' : '#f97316'}` }}
+                  />
+                )}
                 <span
                   className="text-[9px] font-bold tracking-widest uppercase font-cinzel"
                   style={{ color: isActive ? '#d4a017' : '#4a3a1a' }}
