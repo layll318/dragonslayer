@@ -17,7 +17,6 @@ class TWAAuthRequest(BaseModel):
 
 class WalletAuthRequest(BaseModel):
     wallet_address: str
-    player_id: int | None = None  # pass existing player_id to link wallet to that account
 
 
 class AuthResponse(BaseModel):
@@ -93,71 +92,27 @@ async def twa_auth(req: TWAAuthRequest):
 @router.post("/wallet", response_model=AuthResponse)
 async def wallet_auth(req: WalletAuthRequest):
     """
-    Called from the web when a player links their XRPL wallet.
-    If player_id is provided (Telegram user), links wallet to that existing account.
-    Otherwise upserts a player keyed by wallet_address.
+    Wallet address is the canonical identity key.
+    Find-or-create a player record keyed exclusively on wallet_address.
+    No player_id param — the wallet IS the identity.
     """
     pool = get_pool()
     async with pool.acquire() as conn:
-        # Check if wallet is already claimed by some player
-        existing = await conn.fetchrow(
+        row = await conn.fetchrow(
             "SELECT id, telegram_id, username FROM players WHERE wallet_address = $1",
             req.wallet_address,
         )
-        if existing:
-            # Wallet already belongs to some player
-            if req.player_id and existing["id"] != req.player_id:
-                # Caller is authenticated as a different player (e.g. Telegram user) —
-                # transfer the wallet to their account and orphan the old wallet-only player.
-                await conn.execute(
-                    "UPDATE players SET wallet_address = NULL, updated_at = NOW() WHERE id = $1",
-                    existing["id"],
-                )
-                updated = await conn.fetchrow(
-                    "UPDATE players SET wallet_address = $1, updated_at = NOW() WHERE id = $2 RETURNING *",
-                    req.wallet_address, req.player_id,
-                )
-                if updated:
-                    return AuthResponse(
-                        success=True,
-                        player_id=updated["id"],
-                        wallet_address=updated["wallet_address"],
-                        telegram_id=updated["telegram_id"],
-                        username=updated["username"],
-                        is_new=False,
-                    )
-            # Wallet belongs to the same player (or no player_id hint) — return as-is
+        if row:
             return AuthResponse(
                 success=True,
-                player_id=existing["id"],
+                player_id=row["id"],
                 wallet_address=req.wallet_address,
-                telegram_id=existing["telegram_id"],
-                username=existing["username"],
+                telegram_id=row["telegram_id"],
+                username=row["username"],
                 is_new=False,
             )
 
-        if req.player_id:
-            # Link wallet to the caller's existing account (e.g. Telegram player connecting Xaman)
-            updated = await conn.fetchrow(
-                """
-                UPDATE players SET wallet_address = $1, updated_at = NOW()
-                WHERE id = $2
-                RETURNING *
-                """,
-                req.wallet_address,
-                req.player_id,
-            )
-            if updated:
-                return AuthResponse(
-                    success=True,
-                    player_id=updated["id"],
-                    wallet_address=updated["wallet_address"],
-                    telegram_id=updated["telegram_id"],
-                    username=updated["username"],
-                    is_new=False,
-                )
-
-        # No existing wallet match and no player_id hint — create new player
+        # No player for this wallet yet — create one
         new_row = await conn.fetchrow(
             """
             INSERT INTO players (wallet_address)

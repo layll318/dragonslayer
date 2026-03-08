@@ -1,6 +1,7 @@
+import json
 import logging
 import os
-from fastapi import APIRouter, HTTPException, Header
+from fastapi import APIRouter, HTTPException, Header, Query
 from pydantic import BaseModel
 from typing import Optional
 from database import get_pool
@@ -86,3 +87,81 @@ async def toggle_origin(
         if not row:
             raise HTTPException(status_code=404, detail="Origin not found")
         return OriginResponse(**dict(row))
+
+
+@router.get("/players")
+async def list_players(authorization: Optional[str] = Header(None)):
+    """Audit endpoint — lists every player row with their save quality."""
+    verify_admin(authorization)
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT
+                p.id,
+                p.telegram_id,
+                p.wallet_address,
+                p.username,
+                p.created_at,
+                p.updated_at,
+                COALESCE((gs.save_json->>'level')::int, 0)                       AS save_level,
+                COALESCE((gs.save_json->>'totalGoldEarned')::float8::bigint, 0)  AS save_gold,
+                gs.updated_at                                                     AS save_updated_at
+            FROM players p
+            LEFT JOIN game_saves gs ON gs.player_id = p.id
+            ORDER BY p.id
+            """
+        )
+        return [
+            {
+                "id": r["id"],
+                "telegram_id": r["telegram_id"],
+                "wallet_address": r["wallet_address"],
+                "username": r["username"],
+                "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+                "save_level": r["save_level"],
+                "save_gold": r["save_gold"],
+                "save_updated_at": r["save_updated_at"].isoformat() if r["save_updated_at"] else None,
+                "source": (
+                    "wallet+twa" if r["wallet_address"] and r["telegram_id"]
+                    else "wallet" if r["wallet_address"]
+                    else "twa" if r["telegram_id"]
+                    else "orphan"
+                ),
+            }
+            for r in rows
+        ]
+
+
+@router.post("/cleanup-orphans")
+async def cleanup_orphans(
+    dry_run: bool = Query(default=True),
+    authorization: Optional[str] = Header(None),
+):
+    """Delete players with no wallet_address AND no telegram_id (pure orphans).
+    dry_run=true (default) returns the list without deleting."""
+    verify_admin(authorization)
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        orphans = await conn.fetch(
+            """
+            SELECT p.id, p.created_at,
+                   COALESCE((gs.save_json->>'level')::int, 0) AS save_level
+            FROM players p
+            LEFT JOIN game_saves gs ON gs.player_id = p.id
+            WHERE p.wallet_address IS NULL AND p.telegram_id IS NULL
+            ORDER BY p.id
+            """
+        )
+        result = [
+            {"id": r["id"], "save_level": r["save_level"],
+             "created_at": r["created_at"].isoformat() if r["created_at"] else None}
+            for r in orphans
+        ]
+        if not dry_run and orphans:
+            ids = [r["id"] for r in orphans]
+            await conn.execute(
+                "DELETE FROM players WHERE id = ANY($1::int[])", ids
+            )
+            return {"deleted": len(ids), "players": result}
+        return {"dry_run": True, "would_delete": len(result), "players": result}
