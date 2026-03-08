@@ -166,10 +166,16 @@ export async function GET(request: NextRequest) {
     // If every single check errored out (XRPL unreachable), don't overwrite cached discount
     const allErrored = lynxResult.xrplError && xrpnomicsResult.xrplError && dragonslayerResult.xrplError;
     if (allErrored) {
+      console.warn('[token-discount] all XRPL checks failed for wallet', wallet);
       return NextResponse.json({ success: false, error: 'xrpl_unavailable' }, { status: 503 });
     }
 
-    const tokensHeld = [lynxResult.holds, xrpnomicsResult.holds, dragonslayerResult.holds].filter(Boolean).length;
+    // Only count tokens where the check succeeded (no XRPL error)
+    const tokensHeld = [
+      !lynxResult.xrplError && lynxResult.holds,
+      !xrpnomicsResult.xrplError && xrpnomicsResult.holds,
+      !dragonslayerResult.xrplError && dragonslayerResult.holds,
+    ].filter(Boolean).length;
 
     // Discount tiers: 1 token = 25%, 2 = 35%, 3 = 50%
     let discountPct = 0;
@@ -177,15 +183,25 @@ export async function GET(request: NextRequest) {
     else if (tokensHeld >= 2) discountPct = 35;
     else if (tokensHeld >= 1) discountPct = 25;
 
+    console.log(
+      `[token-discount] wallet=${wallet} lynx=${lynxResult.holds}(bal=${lynxResult.balance},err=${lynxResult.xrplError})` +
+      ` xrpnomics=${xrpnomicsResult.holds}(bal=${xrpnomicsResult.balance},err=${xrpnomicsResult.xrplError})` +
+      ` dragonslayer=${dragonslayerResult.holds}(bal=${dragonslayerResult.balance},err=${dragonslayerResult.xrplError})` +
+      ` tokensHeld=${tokensHeld} discountPct=${discountPct}`,
+    );
+
     return NextResponse.json({
       success: true,
       wallet,
       lynx: lynxResult.holds,
       lynxBalance: lynxResult.balance,
+      lynxError: lynxResult.xrplError,
       xrpnomics: xrpnomicsResult.holds,
       xrpnomicsBalance: xrpnomicsResult.balance,
+      xrpnomicsError: xrpnomicsResult.xrplError,
       dragonslayer: dragonslayerResult.holds,
       dragonslayerBalance: dragonslayerResult.balance,
+      dragonslayerError: dragonslayerResult.xrplError,
       tokensHeld,
       discountPct,
     });

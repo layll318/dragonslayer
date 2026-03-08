@@ -1425,16 +1425,23 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       const res = await fetch(`/frontend-api/token-discount?wallet=${encodeURIComponent(wallet)}`);
       const data = await res.json();
       if (data.success) {
-        setState(prev => ({
-          ...prev,
-          tokenDiscount: {
-            lynx: !!data.lynx,
-            xrpnomics: !!data.xrpnomics,
-            dragonslayer: !!data.dragonslayer,
-            pct: data.discountPct ?? 0,
-            checkedAt: Date.now(),
-          },
-        }));
+        setState(prev => {
+          const cached = prev.tokenDiscount;
+          // If an individual token check errored, keep the previously cached value
+          // rather than overwriting it with false
+          const lynx    = data.lynxError         ? (cached?.lynx        ?? false) : !!data.lynx;
+          const xrpnomics = data.xrpnomicsError  ? (cached?.xrpnomics   ?? false) : !!data.xrpnomics;
+          const dragonslayer = data.dragonslayerError ? (cached?.dragonslayer ?? false) : !!data.dragonslayer;
+          const tokensHeld = [lynx, xrpnomics, dragonslayer].filter(Boolean).length;
+          let pct = 0;
+          if (tokensHeld >= 3) pct = 50;
+          else if (tokensHeld >= 2) pct = 35;
+          else if (tokensHeld >= 1) pct = 25;
+          return {
+            ...prev,
+            tokenDiscount: { lynx, xrpnomics, dragonslayer, pct, checkedAt: Date.now() },
+          };
+        });
       }
     } catch { /* ignore */ }
   }, []);

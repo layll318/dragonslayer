@@ -453,22 +453,33 @@ export default function BuildingsTab() {
       {/* ── XRP STORE ── */}
       {section === 'xrp' && (
         <div className="px-3 mt-2 flex flex-col gap-3">
-          <div className="flex items-center gap-2">
-            {discountPct > 0 ? (
-              <div className="flex-1 flex items-center gap-1.5 px-2 py-1.5 rounded-lg" style={{ background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)' }}>
-                <span className="text-[#4ade80] text-[9px] font-black">{discountPct}% TOKEN DISCOUNT APPLIED</span>
-              </div>
-            ) : (
-              <div className="flex-1" />
-            )}
-            {state.walletAddress && (
+          {/* Token discount status row */}
+          {state.walletAddress && (
+            <div className="flex flex-col gap-1.5">
+              {state.tokenDiscount && (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {[
+                    { key: 'lynx',        label: '$LYNX',      holds: state.tokenDiscount.lynx },
+                    { key: 'xrpnomics',   label: 'XRPNOMICS',  holds: state.tokenDiscount.xrpnomics },
+                    { key: 'dragonslayer',label: 'DS Token',    holds: state.tokenDiscount.dragonslayer },
+                  ].map(t => (
+                    <span key={t.key} className="px-1.5 py-0.5 rounded text-[8px] font-bold"
+                      style={{ background: t.holds ? 'rgba(74,222,128,0.12)' : 'rgba(100,80,40,0.15)', border: `1px solid ${t.holds ? 'rgba(74,222,128,0.35)' : 'rgba(100,80,40,0.25)'}`, color: t.holds ? '#4ade80' : '#6b5a3a' }}>
+                      {t.holds ? '✓' : '✗'} {t.label}
+                    </span>
+                  ))}
+                  {discountPct > 0 && (
+                    <span className="text-[#4ade80] text-[8px] font-black ml-1">{discountPct}% OFF</span>
+                  )}
+                </div>
+              )}
               <button onClick={handleRefreshDiscount} disabled={discountRefreshStatus === 'loading'}
-                className="px-2 py-1.5 rounded-lg text-[8px] font-bold transition-all"
+                className="self-start px-2 py-1 rounded-lg text-[8px] font-bold transition-all"
                 style={{ background: discountRefreshStatus === 'done' ? 'rgba(74,222,128,0.15)' : discountRefreshStatus === 'error' ? 'rgba(248,113,113,0.15)' : 'rgba(212,160,23,0.1)', border: `1px solid ${discountRefreshStatus === 'done' ? 'rgba(74,222,128,0.4)' : discountRefreshStatus === 'error' ? 'rgba(248,113,113,0.4)' : 'rgba(212,160,23,0.25)'}`, color: discountRefreshStatus === 'done' ? '#4ade80' : discountRefreshStatus === 'error' ? '#f87171' : '#d4a017', opacity: discountRefreshStatus === 'loading' ? 0.6 : 1 }}>
-                {discountRefreshStatus === 'loading' ? '⏳ Checking…' : discountRefreshStatus === 'done' ? '✓ Updated' : discountRefreshStatus === 'error' ? '✗ Failed' : '🔄 Check Token Discount'}
+                {discountRefreshStatus === 'loading' ? '⏳ Checking tokens…' : discountRefreshStatus === 'done' ? '✓ Updated' : discountRefreshStatus === 'error' ? '✗ XRPL failed — retry' : '🔄 Check Token Discount'}
               </button>
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Material Shop */}
           <div className="dragon-panel px-3 py-3">
