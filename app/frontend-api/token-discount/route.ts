@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
-const XRPL_API = 'https://xrplcluster.com/';
+const XRPL_NODES = [
+  'https://xrplcluster.com/',
+  'https://s1.ripple.com:51234/',
+  'https://s2.ripple.com:51234/',
+];
 
 // Token configuration
 const TOKEN_CONFIG = {
@@ -28,14 +32,23 @@ const TOKEN_CONFIG = {
 type TokenKey = keyof typeof TOKEN_CONFIG;
 
 async function xrplPost(body: object): Promise<any> {
-  const res = await fetch(XRPL_API, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    cache: 'no-store',
-  });
-  if (!res.ok) throw new Error(`XRPL API error ${res.status}`);
-  return res.json();
+  const serialized = JSON.stringify(body);
+  for (const node of XRPL_NODES) {
+    try {
+      const res = await fetch(node, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: serialized,
+        cache: 'no-store',
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) continue;
+      return await res.json();
+    } catch {
+      // try next node
+    }
+  }
+  throw new Error('All XRPL nodes failed');
 }
 
 /** Decode hex currency code (40-char) to ASCII string */

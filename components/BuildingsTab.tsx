@@ -20,10 +20,24 @@ const PENDING_KEY = 'ds_pending_mat_purchase';
 export default function BuildingsTab() {
   const {
     state, buyBuilding, getBuildingCost, canAfford, goldPerHour, armyPower,
-    buyFromMerchant, addMaterials, addEggs, addIncubatorSlot, addGold,
+    buyFromMerchant, addMaterials, addEggs, addIncubatorSlot, addGold, refreshTokenDiscount,
   } = useGame();
 
   const [section, setSection] = useState<ShopSection>('army');
+  const [discountRefreshStatus, setDiscountRefreshStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+
+  async function handleRefreshDiscount() {
+    if (!state.walletAddress) return;
+    setDiscountRefreshStatus('loading');
+    try {
+      await refreshTokenDiscount();
+      setDiscountRefreshStatus('done');
+      setTimeout(() => setDiscountRefreshStatus('idle'), 3000);
+    } catch {
+      setDiscountRefreshStatus('error');
+      setTimeout(() => setDiscountRefreshStatus('idle'), 3000);
+    }
+  }
 
   // ── XRP shop state ────────────────────────────────────────────────────────
   const discountPct = state.tokenDiscount?.pct ?? 0;
@@ -439,11 +453,22 @@ export default function BuildingsTab() {
       {/* ── XRP STORE ── */}
       {section === 'xrp' && (
         <div className="px-3 mt-2 flex flex-col gap-3">
-          {discountPct > 0 && (
-            <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg" style={{ background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)' }}>
-              <span className="text-[#4ade80] text-[9px] font-black">{discountPct}% TOKEN DISCOUNT APPLIED</span>
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            {discountPct > 0 ? (
+              <div className="flex-1 flex items-center gap-1.5 px-2 py-1.5 rounded-lg" style={{ background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)' }}>
+                <span className="text-[#4ade80] text-[9px] font-black">{discountPct}% TOKEN DISCOUNT APPLIED</span>
+              </div>
+            ) : (
+              <div className="flex-1" />
+            )}
+            {state.walletAddress && (
+              <button onClick={handleRefreshDiscount} disabled={discountRefreshStatus === 'loading'}
+                className="px-2 py-1.5 rounded-lg text-[8px] font-bold transition-all"
+                style={{ background: discountRefreshStatus === 'done' ? 'rgba(74,222,128,0.15)' : discountRefreshStatus === 'error' ? 'rgba(248,113,113,0.15)' : 'rgba(212,160,23,0.1)', border: `1px solid ${discountRefreshStatus === 'done' ? 'rgba(74,222,128,0.4)' : discountRefreshStatus === 'error' ? 'rgba(248,113,113,0.4)' : 'rgba(212,160,23,0.25)'}`, color: discountRefreshStatus === 'done' ? '#4ade80' : discountRefreshStatus === 'error' ? '#f87171' : '#d4a017', opacity: discountRefreshStatus === 'loading' ? 0.6 : 1 }}>
+                {discountRefreshStatus === 'loading' ? '⏳ Checking…' : discountRefreshStatus === 'done' ? '✓ Updated' : discountRefreshStatus === 'error' ? '✗ Failed' : '🔄 Check Token Discount'}
+              </button>
+            )}
+          </div>
 
           {/* Material Shop */}
           <div className="dragon-panel px-3 py-3">
