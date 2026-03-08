@@ -361,11 +361,12 @@ export default function ProfileTab() {
 
             {/* Token rows */}
             {[
-              { key: 'lynx' as const, label: '$LYNX', icon: '🦁', desc: 'Hold 850K+', min: '850,000' },
-              { key: 'xrpnomics' as const, label: 'XRPNOMICS', icon: '📊', desc: 'Hold 0.1+', min: '0.1' },
-              { key: 'dragonslayer' as const, label: 'DragonSlayer', icon: '🐉', desc: 'Hold 30B+', min: '30.1B' },
-            ].map(({ key, label, icon, desc }) => {
+              { key: 'lynx' as const, label: '$LYNX', icon: '🦁', desc: 'Hold 850K+', balKey: 'lynxBalance' as const },
+              { key: 'xrpnomics' as const, label: 'XRPNOMICS', icon: '📊', desc: 'Hold 0.1+', balKey: 'xrpnomicsBalance' as const },
+              { key: 'dragonslayer' as const, label: 'DragonSlayer', icon: '🐉', desc: 'Hold 30B+', balKey: 'dragonslayerBalance' as const },
+            ].map(({ key, label, icon, desc, balKey }) => {
               const holds = state.tokenDiscount?.[key] ?? null;
+              const bal = state.tokenDiscount?.[balKey] ?? null;
               return (
                 <div key={key} className="flex items-center gap-2.5 py-1.5 border-b last:border-0"
                   style={{ borderColor: 'rgba(139,92,246,0.1)' }}>
@@ -374,12 +375,17 @@ export default function ProfileTab() {
                     <p className="font-bold text-[11px] text-[#e8d8f8]">{label}</p>
                     <p className="text-[9px] text-[#6b5a8a]">{desc}</p>
                   </div>
-                  <span className={`text-[11px] font-black flex-shrink-0 ${
-                    holds === null ? 'text-[#4a3a6a]' :
-                    holds ? 'text-[#4ade80]' : 'text-[#f87171]'
-                  }`}>
-                    {holds === null ? '—' : holds ? '✓ Holds' : '✗ Not held'}
-                  </span>
+                  <div className="flex flex-col items-end flex-shrink-0">
+                    <span className={`text-[11px] font-black ${
+                      holds === null ? 'text-[#4a3a6a]' :
+                      holds ? 'text-[#4ade80]' : 'text-[#f87171]'
+                    }`}>
+                      {holds === null ? '—' : holds ? '✓ Holds' : '✗ Not held'}
+                    </span>
+                    {bal !== null && bal > 0 && (
+                      <span className="text-[8px] text-[#6b5a8a] font-mono">{bal.toLocaleString()}</span>
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -465,6 +471,22 @@ export default function ProfileTab() {
                 <p className="text-[12px] font-mono text-[#8a7a5a] leading-relaxed">
                   <span className="text-[#a89878]">arenaPoints: </span>{state.arenaPoints ?? 0}
                 </p>
+                {state.tokenDiscount && (
+                  <>
+                    <p className="text-[12px] font-mono text-[#8a7a5a] leading-relaxed">
+                      <span className="text-[#a89878]">token.pct: </span>{state.tokenDiscount.pct}%
+                    </p>
+                    <p className="text-[12px] font-mono text-[#8a7a5a] leading-relaxed">
+                      <span className="text-[#a89878]">lynx: </span>{String(state.tokenDiscount.lynx)} <span className="text-[#6a5a3a]">(bal: {state.tokenDiscount.lynxBalance})</span>
+                    </p>
+                    <p className="text-[12px] font-mono text-[#8a7a5a] leading-relaxed">
+                      <span className="text-[#a89878]">xrpnomics: </span>{String(state.tokenDiscount.xrpnomics)} <span className="text-[#6a5a3a]">(bal: {state.tokenDiscount.xrpnomicsBalance})</span>
+                    </p>
+                    <p className="text-[12px] font-mono text-[#8a7a5a] leading-relaxed">
+                      <span className="text-[#a89878]">dragonslayer: </span>{String(state.tokenDiscount.dragonslayer)} <span className="text-[#6a5a3a]">(bal: {state.tokenDiscount.dragonslayerBalance})</span>
+                    </p>
+                  </>
+                )}
                 {isTWA && user && (
                   <p className="text-[12px] font-mono text-[#8a7a5a] leading-relaxed">
                     <span className="text-[#a89878]">tgId: </span>{user.id}
