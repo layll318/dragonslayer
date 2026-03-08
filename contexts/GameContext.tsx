@@ -199,6 +199,7 @@ interface GameContextType {
   claimHatchedEgg: (slotIndex: number) => void;
   buyFromMerchant: (dealId: string) => void;
   addEggs: (eggs: Omit<DragonEgg, 'id'>[]) => void;
+  addGold: (amount: number) => void;
   dragonBonuses: { tapGoldPct: number; armyPowerFlat: number; materialDropPct: number; expeditionTimePct: number };
   equipItem: (itemId: string) => void;
   unequipItem: (slot: keyof EquipmentSlots) => void;
@@ -1029,7 +1030,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       if (prev.activeExpedition) return prev; // fighter is away
       const base = Math.max(1, Math.floor((1 + prev.level * 0.5) * calcGearMultiplier(prev.equipment)));
       const isCrit = Math.random() < CRIT_CHANCE;
-      const earned = Math.floor(base * comboMult * (isCrit ? CRIT_MULTIPLIER : 1));
+      const tapDragonPct = prev.hatchedDragons.filter(d => d.bonusType === 'tap_gold_pct').reduce((s, d) => s + d.bonusValue, 0);
+      const earned = Math.floor(base * comboMult * (isCrit ? CRIT_MULTIPLIER : 1) * (1 + tapDragonPct / 100));
       const xpUpdate = addXp(XP_PER_TAP, prev);
 
       // Update tap_gold quest progress
@@ -1060,10 +1062,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setState((prev) => {
       if (prev.activeExpedition) return prev;
       const now = Date.now();
+      const expeditionTimePct = prev.hatchedDragons.filter(d => d.bonusType === 'expedition_time_pct').reduce((s, d) => s + d.bonusValue, 0);
+      const durationMs = Math.floor(hours * 3600 * 1000 * (1 - Math.min(expeditionTimePct, 75) / 100));
       const activeExpedition: ActiveExpedition = {
         startedAt: now,
         durationHours: hours,
-        endsAt: now + hours * 3600 * 1000,
+        endsAt: now + durationMs,
       };
       return { ...prev, activeExpedition, adsUsedThisExpedition: 0 };
     });
@@ -1098,8 +1102,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       const { dragonsSlain, goldEarned, materials } = calcExpeditionYield(
         prev.level, armyPwr, gearBonus, prev.activeExpedition.durationHours,
       );
+      const materialDropPct = prev.hatchedDragons.filter(d => d.bonusType === 'material_drop_pct').reduce((s, d) => s + d.bonusValue, 0);
+      const boostedMaterials = materialDropPct > 0
+        ? materials.map(m => ({ ...m, quantity: Math.ceil(m.quantity * (1 + materialDropPct / 100)) }))
+        : materials;
       const newMaterials = [...prev.materials];
-      for (const drop of materials) {
+      for (const drop of boostedMaterials) {
         const existing = newMaterials.find(m => m.type === drop.type);
         if (existing) existing.quantity += drop.quantity;
         else newMaterials.push({ ...drop });
@@ -1125,7 +1133,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         materials: newMaterials,
         eggInventory: newEggInventory,
         activeExpedition: null,
-        lastExpeditionResult: { dragonsSlain, goldEarned, materials, droppedEgg: droppedEgg ?? undefined },
+        lastExpeditionResult: { dragonsSlain, goldEarned, materials: boostedMaterials, droppedEgg: droppedEgg ?? undefined },
         dailyQuests,
       };
     });
@@ -1189,6 +1197,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       const newEggs = eggs.map(e => ({ ...e, id: `egg-${Date.now()}-${Math.random().toString(36).slice(2)}` }));
       return { ...prev, eggInventory: [...prev.eggInventory, ...newEggs] };
     });
+  }, []);
+
+  const addGold = useCallback((amount: number) => {
+    setState((prev) => ({
+      ...prev,
+      gold: prev.gold + amount,
+      totalGoldEarned: prev.totalGoldEarned + amount,
+    }));
   }, []);
 
   const buyFromMerchant = useCallback((dealId: string) => {
@@ -1555,6 +1571,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         claimHatchedEgg,
         buyFromMerchant,
         addEggs,
+        addGold,
         dragonBonuses: {
           tapGoldPct: state.hatchedDragons.filter(d => d.bonusType === 'tap_gold_pct').reduce((s, d) => s + d.bonusValue, 0),
           armyPowerFlat: dragonArmyPowerFlat,

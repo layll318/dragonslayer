@@ -20,7 +20,7 @@ const PENDING_KEY = 'ds_pending_mat_purchase';
 export default function BuildingsTab() {
   const {
     state, buyBuilding, getBuildingCost, canAfford, goldPerHour, armyPower,
-    buyFromMerchant, addMaterials, addEggs, addIncubatorSlot,
+    buyFromMerchant, addMaterials, addEggs, addIncubatorSlot, addGold,
   } = useGame();
 
   const [section, setSection] = useState<ShopSection>('army');
@@ -211,9 +211,10 @@ export default function BuildingsTab() {
       }
       if (data.materialCredits) addMaterials(data.materialCredits);
       if (data.incubatorSlot) addIncubatorSlot();
+      if (data.goldAmount) addGold(data.goldAmount);
       used.push(hash);
       localStorage.setItem(USED_PREMIUM_KEY, JSON.stringify(used));
-      const dest = data.eggRarity ? 'Dragon Den (Stash tab)' : data.incubatorSlot ? 'your incubator' : 'Materials';
+      const dest = data.eggRarity ? 'Dragon Den (Stash tab)' : data.incubatorSlot ? 'your incubator' : data.goldAmount ? 'your treasury' : 'Materials';
       setPremiumMsg(`✅ Claimed: ${data.label}! Check ${dest}.`);
       setPremiumStatus('done');
       setPremiumHash(''); setPremiumType('');
@@ -542,6 +543,7 @@ export default function BuildingsTab() {
               { id: 'legendary_egg',  icon: '✨', label: 'Legendary Dragon Egg',      xrp: 5, desc: 'Hatches in 6h · −10% expedition time forever' },
               { id: 'rare_bundle',    icon: '🎁', label: 'Rare Material Mega Bundle', xrp: 5, desc: '5× of all 5 material types' },
               { id: 'incubator_slot', icon: '🔥', label: 'Permanent Incubator Slot',  xrp: 1, desc: 'Extra slot that stacks forever — never expires' },
+              { id: 'gold_10m',       icon: '💰', label: '10,000,000 Gold Pack',      xrp: 3, desc: 'Instantly adds 10 million gold to your treasury' },
             ].map(item => (
               <div key={item.id} className="flex items-center gap-2.5 p-2 rounded-xl mb-1.5"
                 style={{ background: premiumType === item.id ? 'rgba(139,92,246,0.12)' : 'rgba(139,92,246,0.04)', border: `1px solid ${premiumType === item.id ? 'rgba(139,92,246,0.5)' : 'rgba(139,92,246,0.15)'}` }}>
