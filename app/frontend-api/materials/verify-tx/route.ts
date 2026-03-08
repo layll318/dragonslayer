@@ -3,10 +3,39 @@ import { NextRequest, NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 
 const TREASURY_WALLET = process.env.TREASURY_WALLET || 'rf84iAt8aRMJ7onNY9ZqmWVVFCAtSmTT7d';
-const XRPL_API       = 'https://xrplcluster.com/';
 const MIN_DROPS      = 500_000;   // 0.5 XRP minimum — covers up to 50% token discount on 1 XRP
 const BUNDLE_DROPS   = 1_500_000; // 1.5 XRP — covers up to 50% token discount on 3 XRP bundle
 const API_URL        = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
+const XRPL_NODES = [
+  'https://xrplcluster.com/',
+  'https://s1.ripple.com:51234/',
+  'https://s2.ripple.com:51234/',
+];
+
+async function xrplLookupTx(txHash: string): Promise<{ ok: boolean; result?: Record<string, unknown>; error?: string }> {
+  const body = JSON.stringify({
+    method: 'tx',
+    params: [{ transaction: txHash.trim().toUpperCase(), binary: false }],
+  });
+  for (const node of XRPL_NODES) {
+    try {
+      const res = await fetch(node, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+        cache: 'no-store',
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (data?.result && !data.result.error) return { ok: true, result: data.result };
+    } catch {
+      // try next node
+    }
+  }
+  return { ok: false, error: 'Could not reach XRPL network — all nodes failed. Try again in a moment.' };
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,29 +46,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid transaction hash.' }, { status: 400 });
     }
 
-    // Look up TX on XRPL mainnet via public Clio server
-    const xrplRes = await fetch(XRPL_API, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        method: 'tx',
-        params: [{ transaction: txHash.trim().toUpperCase(), binary: false }],
-      }),
-      cache: 'no-store',
-    });
-
-    if (!xrplRes.ok) {
-      return NextResponse.json({ error: 'Could not reach XRPL network.' }, { status: 502 });
+    // Look up TX on XRPL mainnet (tries multiple public nodes)
+    const lookup = await xrplLookupTx(txHash);
+    if (!lookup.ok || !lookup.result) {
+      return NextResponse.json({ error: lookup.error ?? 'Transaction not found on XRPL.' }, { status: 502 });
     }
-
-    const xrpl = await xrplRes.json();
-    const result = xrpl?.result;
-
-    console.log(`[verify-tx] hash=${txHash} result=${result?.meta?.TransactionResult} dest=${result?.Destination} amount=${result?.Amount}`);
-
-    if (!result || result.error) {
-      return NextResponse.json({ error: 'Transaction not found on XRPL.' }, { status: 404 });
-    }
+    const result = lookup.result;
+    console.log(`[verify-tx] hash=${txHash} result=${(result.meta as Record<string,unknown>)?.TransactionResult} dest=${result.Destination} amount=${result.Amount}`);
 
     // Validate it's a successful payment to treasury
     if (result.TransactionType !== 'Payment') {
@@ -48,8 +61,9 @@ export async function POST(request: NextRequest) {
     if (result.Destination !== TREASURY_WALLET) {
       return NextResponse.json({ error: `Payment must be sent to ${TREASURY_WALLET}.` }, { status: 400 });
     }
-    if (result.meta?.TransactionResult !== 'tesSUCCESS') {
-      return NextResponse.json({ error: `Transaction did not succeed (${result.meta?.TransactionResult}).` }, { status: 400 });
+    const meta = result.meta as Record<string, unknown> | undefined;
+    if (meta?.TransactionResult !== 'tesSUCCESS') {
+      return NextResponse.json({ error: `Transaction did not succeed (${meta?.TransactionResult}).` }, { status: 400 });
     }
 
     // Parse amount — XRP payments use drops (string), IOU would be an object
