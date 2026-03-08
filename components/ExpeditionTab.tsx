@@ -759,18 +759,23 @@ export default function ExpeditionTab() {
         {/* Hatched dragons */}
         {hatched.length > 0 && (
           <div className="dragon-panel px-3 py-3">
-            <p className="font-cinzel font-bold text-[#e8d8a8] text-[10px] tracking-wider mb-2">🐉 ACTIVE DRAGON BONUSES</p>
-            {/* Effective totals by type */}
+            <div className="flex items-center justify-between mb-2">
+              <p className="font-cinzel font-bold text-[#e8d8a8] text-[10px] tracking-wider">🐉 ACTIVE DRAGON BONUSES</p>
+              <span className="text-[8px] text-[#4a3a2a] italic">stacked (75% falloff)</span>
+            </div>
+            {/* Effective totals by type — always shown first */}
             {(['tap_gold_pct','army_power_flat','material_drop_pct','expedition_time_pct'] as DragonBonusType[]).map(bt => {
               const eff = calcDiminishingBonus(hatched, bt);
               if (eff <= 0) return null;
               const count = hatched.filter(d => d.bonusType === bt).length;
-              const label = bt === 'tap_gold_pct' ? `+${eff.toFixed(1)}% gold/tap` : bt === 'army_power_flat' ? `+${eff.toFixed(0)} army power` : bt === 'material_drop_pct' ? `+${eff.toFixed(1)}% material drops` : `-${eff.toFixed(1)}% expedition time`;
+              const label = bt === 'tap_gold_pct' ? `+${eff.toFixed(1)}% gold/tap` : bt === 'army_power_flat' ? `+${eff.toFixed(0)} army power` : bt === 'material_drop_pct' ? `+${eff.toFixed(1)}% mat drops` : `-${eff.toFixed(1)}% exp time`;
               return (
-                <div key={bt} className="flex items-center justify-between px-2 py-1 rounded-lg mb-1"
-                  style={{ background: 'rgba(74,222,128,0.07)', border: '1px solid rgba(74,222,128,0.2)' }}>
-                  <span className="text-[9px] font-bold text-[#4ade80]">{label}</span>
-                  <span className="text-[8px] text-[#6b5a3a]">×{count} dragon{count > 1 ? 's' : ''}</span>
+                <div key={bt} className="flex items-center justify-between px-2 py-1.5 rounded-lg mb-1"
+                  style={{ background: 'rgba(74,222,128,0.10)', border: '1px solid rgba(74,222,128,0.3)' }}>
+                  <span className="text-[10px] font-bold text-[#4ade80]">{label}</span>
+                  <span className="text-[8px] font-semibold" style={{ color: count > 1 ? '#f0c040' : '#6b5a3a' }}>
+                    ×{count}{count > 1 ? ' stacked' : ''}
+                  </span>
                 </div>
               );
             })}
@@ -780,8 +785,10 @@ export default function ExpeditionTab() {
                   style={{ background: 'rgba(255,255,255,0.02)', border: `1px solid ${EGG_RARITY_COLOR[d.rarity]}25` }}>
                   <span className="text-sm">🐉</span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-[9px] font-bold truncate" style={{ color: EGG_RARITY_COLOR[d.rarity] }}>{d.variantName}</p>
-                    <p className="text-[8px] text-[#6b5a3a]">{d.rarity} · raw {d.bonusType === 'tap_gold_pct' ? `+${d.bonusValue}%` : d.bonusType === 'army_power_flat' ? `+${d.bonusValue}` : d.bonusType === 'material_drop_pct' ? `+${d.bonusValue}%` : `-${d.bonusValue}%`}</p>
+                    <p className="text-[9px] font-bold truncate" style={{ color: EGG_RARITY_COLOR[d.rarity] }}>
+                      {d.variantName || `${d.rarity.charAt(0).toUpperCase()}${d.rarity.slice(1)} Dragon`}
+                    </p>
+                    <p className="text-[8px] text-[#6b5a3a]">{d.rarity} · {d.bonusType === 'tap_gold_pct' ? `+${d.bonusValue}% gold/tap` : d.bonusType === 'army_power_flat' ? `+${d.bonusValue} army pwr` : d.bonusType === 'material_drop_pct' ? `+${d.bonusValue}% mats` : `-${d.bonusValue}% exp time`}</p>
                   </div>
                 </div>
               ))}

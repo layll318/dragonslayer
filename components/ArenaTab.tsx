@@ -271,6 +271,25 @@ export default function ArenaTab() {
       <div className="flex flex-col flex-1 pb-4 overflow-y-auto relative z-10 page-fade">
         <ArenaHeader attacksLeft={result.attacks_remaining} arenaPoints={result.arena_points} trophies={state.trophies ?? 0} />
         <div className="px-3 mt-4 flex flex-col gap-3">
+          {/* Season banner on result screen */}
+          {(() => {
+            const month = state.seasonMonth || new Date().toISOString().slice(0, 7);
+            const [y, m2] = month.split('-');
+            const mn = new Date(Number(y), Number(m2) - 1).toLocaleString('en', { month: 'long' });
+            return (
+              <div className="rounded-xl px-4 py-2.5 flex items-center justify-between"
+                style={{ background: 'linear-gradient(135deg,rgba(139,92,246,0.18) 0%,rgba(109,40,217,0.08) 100%)', border: '1px solid rgba(139,92,246,0.4)' }}>
+                <div>
+                  <p className="font-cinzel font-black text-[#a78bfa] text-xl leading-none">{state.trophies ?? 0}</p>
+                  <p className="text-[8px] text-[#7c5cbf] mt-0.5 uppercase tracking-wider">🏅 trophies</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-cinzel font-bold text-[#c4b5fd] text-xs">{mn} {y}</p>
+                  <p className="text-[8px] text-[#7c5cbf] mt-0.5">Season</p>
+                </div>
+              </div>
+            );
+          })()}
           <div className="dragon-panel px-4 py-6 text-center">
             <p className="text-5xl mb-3">{result.win ? '🏆' : '💀'}</p>
             <p className="font-cinzel font-black text-2xl tracking-wider mb-1"
@@ -364,6 +383,30 @@ export default function ArenaTab() {
       <ArenaHeader attacksLeft={attacksLeft} arenaPoints={state.arenaPoints ?? 0} trophies={state.trophies ?? 0} />
 
       <div className="px-3 mt-2 flex flex-col gap-3">
+
+        {/* ── Season Trophy Banner ────────────────────────────────────────── */}
+        {(() => {
+          const month = state.seasonMonth || new Date().toISOString().slice(0, 7);
+          const [y, m] = month.split('-');
+          const monthName = new Date(Number(y), Number(m) - 1).toLocaleString('en', { month: 'long' });
+          return (
+            <div className="rounded-2xl px-4 py-3 flex items-center justify-between"
+              style={{ background: 'linear-gradient(135deg,rgba(139,92,246,0.18) 0%,rgba(109,40,217,0.08) 100%)', border: '1px solid rgba(139,92,246,0.4)' }}>
+              <div>
+                <p className="font-cinzel font-black text-[#a78bfa] text-xl leading-none">{state.trophies ?? 0}</p>
+                <p className="text-[9px] text-[#7c5cbf] mt-0.5 uppercase tracking-wider">🏅 trophies</p>
+              </div>
+              <div className="text-center">
+                <p className="font-cinzel font-bold text-[#c4b5fd] text-xs">{monthName} {y}</p>
+                <p className="text-[8px] text-[#7c5cbf] mt-0.5">Current Season</p>
+              </div>
+              <div className="text-right">
+                <p className="font-cinzel font-bold text-[#f0c040] text-sm">{state.arenaPoints ?? 0}</p>
+                <p className="text-[8px] text-[#6b5a3a] mt-0.5">Conquest Pts</p>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Your power summary */}
         <div className="dragon-panel px-3 py-2.5">
@@ -575,20 +618,12 @@ export default function ArenaTab() {
         <div className="dragon-panel px-3 py-2">
           <div className="flex justify-around text-center">
             <div>
-              <p className="font-cinzel font-bold text-[#f0c040]">{state.arenaPoints ?? 0}</p>
-              <p className="text-[9px] text-[#6b5a3a]">Conquest Pts</p>
-            </div>
-            <div>
-              <p className="font-cinzel font-bold text-[#a78bfa]">{state.trophies ?? 0}</p>
-              <p className="text-[9px] text-[#6b5a3a]">🏅 Trophies</p>
-            </div>
-            <div>
-              <p className="font-cinzel font-bold text-[#f0c040]">{attacksLeft}</p>
+              <p className="font-cinzel font-bold text-[#f0c040]">{attacksLeft}/{MAX_ATTACKS}</p>
               <p className="text-[9px] text-[#6b5a3a]">Attacks Left</p>
             </div>
             <div>
               <p className="font-cinzel font-bold text-[#60a5fa]">{defPower}</p>
-              <p className="text-[9px] text-[#6b5a3a]">Defense</p>
+              <p className="text-[9px] text-[#6b5a3a]">🛡️ Defense</p>
             </div>
           </div>
         </div>
@@ -604,11 +639,11 @@ function ArenaHeader({ attacksLeft, arenaPoints, trophies }: { attacksLeft: numb
       <div className="flex items-center justify-between">
         <div>
           <h2 className="gold-shimmer font-cinzel font-bold text-lg tracking-wide">Arena</h2>
-          <p className="text-[#6b5a3a] text-[10px] mt-0.5 uppercase tracking-wider">Battle real players</p>
+          <p className="text-[#6b5a3a] text-[10px] mt-0.5 uppercase tracking-wider">Season Leaderboard</p>
         </div>
         <div className="text-right">
-          <p className="font-cinzel text-[#a78bfa] font-bold text-sm">� {formatNumber(trophies)}</p>
-          <p className="text-[#6b5a3a] text-[9px]">{attacksLeft}/{MAX_ATTACKS} attacks</p>
+          <p className="font-cinzel text-[#a78bfa] font-bold text-base">🏅 {formatNumber(trophies)}</p>
+          <p className="text-[#6b5a3a] text-[9px]">{attacksLeft}/{MAX_ATTACKS} attacks left</p>
         </div>
       </div>
     </div>
