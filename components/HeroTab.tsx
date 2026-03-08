@@ -308,7 +308,7 @@ export default function HeroTab({ onTabChange }: { onTabChange?: (tab: string) =
         <QuestBanner />
 
         {/* ══════════════ TRAVELLING MERCHANT ══════════════ */}
-        <MerchantModal />
+        <MerchantModal onTabChange={onTabChange} />
 
         {/* ══════════════ DRAGON DEN ══════════════ */}
         {(state.eggInventory?.length > 0 || state.hatchedDragons?.length > 0 || state.incubator?.some(s => s.egg)) && (() => {

@@ -82,10 +82,12 @@ export default function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
   const hasEggs = (state.eggInventory?.length ?? 0) > 0;
   const hatchReady = (state.incubator ?? []).some(s => s.egg && s.endsAt && Date.now() >= s.endsAt);
   const expBadge = hasEggs || hatchReady;
+  const merchantActive = !!(state.merchantExpiresAt && Date.now() < state.merchantExpiresAt &&
+    (state.merchantDeals ?? []).some(d => !d.purchased));
 
   const items: NavItem[] = [
     { id: 'hero',        label: 'Hero',       icon: <HeroIcon /> },
-    { id: 'buildings',   label: 'Forge',      icon: <BuildingsIcon /> },
+    { id: 'buildings',   label: 'Shop',       icon: <BuildingsIcon /> },
     { id: 'expedition',  label: 'Expedition', icon: <ExpeditionIcon /> },
     { id: 'arena',       label: 'Arena',      icon: <ArenaIcon /> },
     { id: 'profile',     label: 'Profile',    icon: <ProfileIcon /> },
@@ -118,6 +120,12 @@ export default function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
                   />
                 )}
                 {item.icon}
+                {/* Merchant badge on Shop */}
+                {item.id === 'buildings' && merchantActive && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full"
+                    style={{ background: '#a78bfa', boxShadow: '0 0 6px #a78bfa' }}
+                  />
+                )}
                 {/* Egg badge on Expedition */}
                 {item.id === 'expedition' && expBadge && (
                   <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full"
