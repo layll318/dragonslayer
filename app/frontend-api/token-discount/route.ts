@@ -19,7 +19,6 @@ const TOKEN_CONFIG = {
     label: 'XRPNOMICS',
   },
   dragonslayer: {
-    currencyHex: null,           // resolved at runtime via account_currencies
     issuer: 'rBRUGYxmu5Lr9L246JzybRoE7TaL9VznSh',
     minBalance: 1,              // hold any DragonSlayer token
     label: 'DragonSlayer',
@@ -49,10 +48,16 @@ function decodeCurrencyHex(hex: string): string {
   }
 }
 
-/** Check if wallet holds >= minBalance of a given token */
+/** Normalise a currency code to uppercase for comparison.
+ *  Both 3-char standard codes and 40-char hex codes are returned uppercase. */
+function normCurrency(code: string): string {
+  return (code ?? '').toUpperCase().trim();
+}
+
+/** Check if wallet holds >= minBalance of a given token (matched by 40-char hex, case-insensitive) */
 async function checkTokenBalance(
   wallet: string,
-  currencyHexOrCode: string,
+  currencyHex: string,   // always pass the 40-char hex
   issuer: string,
   minBalance: number,
 ): Promise<{ holds: boolean; balance: number }> {
@@ -64,16 +69,15 @@ async function checkTokenBalance(
 
     if (data?.result?.status === 'error') return { holds: false, balance: 0 };
     const lines: any[] = data?.result?.lines ?? [];
+    const targetHex = normCurrency(currencyHex);
+    const targetDecoded = normCurrency(decodeCurrencyHex(currencyHex));
 
     for (const line of lines) {
-      if (line.account !== issuer) continue;
+      if (normCurrency(line.account) !== normCurrency(issuer)) continue;
 
-      // Match by hex or by decoded name
-      const lineCurrency: string = line.currency ?? '';
-      const matches =
-        lineCurrency === currencyHexOrCode ||
-        (lineCurrency.length === 40 && decodeCurrencyHex(lineCurrency) === decodeCurrencyHex(currencyHexOrCode)) ||
-        lineCurrency === decodeCurrencyHex(currencyHexOrCode);
+      const lc = normCurrency(line.currency ?? '');
+      // Match the 40-char hex directly (case-insensitive), OR match the decoded ASCII label
+      const matches = lc === targetHex || lc === targetDecoded;
 
       if (matches) {
         const balance = parseFloat(line.balance ?? '0');
@@ -86,18 +90,32 @@ async function checkTokenBalance(
   }
 }
 
-/** For DragonSlayer: discover the currency code first via account_currencies */
-async function getDragonSlayerCurrencyCode(issuer: string): Promise<string | null> {
+/** For DragonSlayer: match ANY trust line from the DS issuer with a positive balance.
+ *  This avoids needing to know the exact currency hex — the issuer address is the key. */
+async function checkDragonSlayerBalance(
+  wallet: string,
+  issuer: string,
+  minBalance: number,
+): Promise<{ holds: boolean; balance: number; currencyFound: string | null }> {
   try {
     const data = await xrplPost({
-      method: 'account_currencies',
-      params: [{ account: issuer, ledger_index: 'validated' }],
+      method: 'account_lines',
+      params: [{ account: wallet, ledger_index: 'validated' }],
     });
-    const obligations: string[] = data?.result?.send_currencies ?? [];
-    if (obligations.length > 0) return obligations[0];
-    return null;
+
+    if (data?.result?.status === 'error') return { holds: false, balance: 0, currencyFound: null };
+    const lines: any[] = data?.result?.lines ?? [];
+
+    for (const line of lines) {
+      if (normCurrency(line.account) !== normCurrency(issuer)) continue;
+      const balance = parseFloat(line.balance ?? '0');
+      if (balance >= minBalance) {
+        return { holds: true, balance, currencyFound: line.currency ?? null };
+      }
+    }
+    return { holds: false, balance: 0, currencyFound: null };
   } catch {
-    return null;
+    return { holds: false, balance: 0, currencyFound: null };
   }
 }
 
@@ -109,13 +127,9 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Resolve DragonSlayer currency code if not hardcoded
-    let dsHex: string | null = TOKEN_CONFIG.dragonslayer.currencyHex as string | null;
-    if (!dsHex) {
-      dsHex = await getDragonSlayerCurrencyCode(TOKEN_CONFIG.dragonslayer.issuer);
-    }
-
     // Check all three tokens in parallel
+    // LYNX + XRPNOMICS: matched by 40-char hex currency code (case-insensitive)
+    // DragonSlayer: matched by issuer address only (no need to know the currency hex)
     const [lynxResult, xrpnomicsResult, dragonslayerResult] = await Promise.all([
       checkTokenBalance(
         wallet,
@@ -129,14 +143,11 @@ export async function GET(request: NextRequest) {
         TOKEN_CONFIG.xrpnomics.issuer,
         TOKEN_CONFIG.xrpnomics.minBalance,
       ),
-      dsHex
-        ? checkTokenBalance(
-            wallet,
-            dsHex,
-            TOKEN_CONFIG.dragonslayer.issuer,
-            TOKEN_CONFIG.dragonslayer.minBalance,
-          )
-        : Promise.resolve({ holds: false, balance: 0 }),
+      checkDragonSlayerBalance(
+        wallet,
+        TOKEN_CONFIG.dragonslayer.issuer,
+        TOKEN_CONFIG.dragonslayer.minBalance,
+      ),
     ]);
 
     const tokensHeld = [lynxResult.holds, xrpnomicsResult.holds, dragonslayerResult.holds].filter(Boolean).length;
