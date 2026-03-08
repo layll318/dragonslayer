@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useGame } from '@/contexts/GameContext';
 import { formatNumber } from '@/utils/format';
 import { useTelegramWebApp } from '@/hooks/useTelegramWebApp';
 import XamanConnect from '@/components/XamanConnect';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Pencil, Check, X } from 'lucide-react';
 
 interface LeaderboardEntry {
   player_id: number;
@@ -35,8 +35,29 @@ const TIER_ICONS = ['🧑‍🌾', '🛡️', '⚔️', '🐲', '👑'];
 const TIER_LEVELS = [1, 10, 25, 50, 80];
 
 export default function ProfileTab() {
-  const { state, goldPerHour, goldPerTap, getCharacterTier, connectWallet, disconnectWallet, resetArenaAttacks } = useGame();
+  const { state, goldPerHour, goldPerTap, getCharacterTier, connectWallet, disconnectWallet, resetArenaAttacks, setDisplayName } = useGame();
   const { user, isTWA } = useTelegramWebApp();
+
+  const [editingName, setEditingName] = useState(false);
+  const [draftName, setDraftName] = useState('');
+  const [savingName, setSavingName] = useState(false);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+
+  const startEditName = useCallback(() => {
+    const suggested = state.displayName
+      || (isTWA && user ? (user.username ? `@${user.username}` : user.first_name) : '');
+    setDraftName(suggested || '');
+    setEditingName(true);
+    setTimeout(() => nameInputRef.current?.focus(), 50);
+  }, [state.displayName, isTWA, user]);
+
+  const saveName = useCallback(async () => {
+    if (!draftName.trim()) return;
+    setSavingName(true);
+    await setDisplayName(draftName.trim());
+    setSavingName(false);
+    setEditingName(false);
+  }, [draftName, setDisplayName]);
 
   const [lbEntries, setLbEntries] = useState<LeaderboardEntry[]>([]);
   const [lbOwnRank, setLbOwnRank] = useState<number | null>(null);
@@ -190,6 +211,59 @@ export default function ProfileTab() {
                 <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />
                 SYNCED
               </span>
+            )}
+          </div>
+
+          {/* Display name — editable, shown in Arena */}
+          <div className="mb-3">
+            {editingName ? (
+              <div className="flex items-center gap-2">
+                <input
+                  ref={nameInputRef}
+                  value={draftName}
+                  onChange={e => setDraftName(e.target.value.slice(0, 32))}
+                  onKeyDown={e => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') setEditingName(false); }}
+                  placeholder="Your name (shown in Arena)"
+                  maxLength={32}
+                  className="flex-1 bg-black/40 border border-[rgba(212,160,23,0.4)] rounded-lg px-2.5 py-1.5
+                    text-[#f0c040] text-xs font-bold placeholder-[#4a3a2a] outline-none focus:border-[rgba(212,160,23,0.7)]"
+                />
+                <button
+                  onClick={saveName}
+                  disabled={savingName || !draftName.trim()}
+                  className="p-1.5 rounded-lg bg-[rgba(212,160,23,0.15)] border border-[rgba(212,160,23,0.4)] disabled:opacity-40"
+                >
+                  <Check className="w-3.5 h-3.5 text-[#f0c040]" />
+                </button>
+                <button
+                  onClick={() => setEditingName(false)}
+                  className="p-1.5 rounded-lg bg-black/20 border border-[rgba(100,80,40,0.2)]"
+                >
+                  <X className="w-3.5 h-3.5 text-[#6b5a3a]" />
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 p-2 rounded-lg bg-black/30 border border-[rgba(212,160,23,0.12)]">
+                <span className="text-sm">⚔️</span>
+                <div className="flex-1 min-w-0">
+                  {state.displayName ? (
+                    <p className="text-[#f0c040] text-xs font-bold truncate">{state.displayName}</p>
+                  ) : (
+                    <p className="text-[#4a3a2a] text-xs italic">
+                      {state.playerId ? 'Set your arena name…' : 'Connect wallet to set name'}
+                    </p>
+                  )}
+                  <p className="text-[#6b5a3a] text-[9px] mt-0.5">Shown in Arena &amp; leaderboard</p>
+                </div>
+                {state.playerId && (
+                  <button
+                    onClick={startEditName}
+                    className="p-1.5 rounded-lg border border-[rgba(212,160,23,0.2)] hover:border-[rgba(212,160,23,0.5)] transition-colors"
+                  >
+                    <Pencil className="w-3 h-3 text-[#6b5a3a]" />
+                  </button>
+                )}
+              </div>
             )}
           </div>
 

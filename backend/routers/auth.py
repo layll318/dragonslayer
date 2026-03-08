@@ -21,6 +21,16 @@ class WalletAuthRequest(BaseModel):
     telegram_username: Optional[str] = None
 
 
+class UsernameUpdateRequest(BaseModel):
+    player_id: int
+    username: str
+
+
+class UsernameUpdateResponse(BaseModel):
+    success: bool
+    username: str
+
+
 class AuthResponse(BaseModel):
     success: bool
     player_id: Optional[int] = None
@@ -28,6 +38,28 @@ class AuthResponse(BaseModel):
     telegram_id: Optional[int] = None
     username: Optional[str] = None
     is_new: bool = False
+
+
+@router.patch("/username", response_model=UsernameUpdateResponse)
+async def update_username(req: UsernameUpdateRequest):
+    """
+    Let a player set their display name.
+    This name is shown in the arena opponent list and leaderboard.
+    """
+    username = req.username.strip()[:32]  # max 32 chars
+    if not username:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Username cannot be empty")
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "UPDATE players SET username=$1, updated_at=NOW() WHERE id=$2 RETURNING id, username",
+            username, req.player_id,
+        )
+        if not row:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Player not found")
+        return UsernameUpdateResponse(success=True, username=row["username"])
 
 
 @router.post("/twa", response_model=AuthResponse)

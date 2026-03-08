@@ -171,6 +171,7 @@ export interface GameState {
   playerId: number | null;
   walletAddress: string | null;
   isSynced: boolean;
+  displayName: string | null;
 }
 
 interface GameContextType {
@@ -193,6 +194,7 @@ interface GameContextType {
   addMaterials: (drops: { type: MaterialType; quantity: number }[]) => void;
   connectWallet: (address: string) => Promise<void>;
   disconnectWallet: () => void;
+  setDisplayName: (name: string) => Promise<void>;
   goldPerTap: number;
   goldPerHour: number;
   gearMultiplier: number;
@@ -596,6 +598,7 @@ function createInitialState(): GameState {
     playerId: null,
     walletAddress: null,
     isSynced: false,
+    displayName: null,
   };
 }
 
@@ -711,7 +714,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
                   return { ...prev, ...serverSave, lastTick: Date.now(),
                     playerId: data.player_id, walletAddress: saved.walletAddress, isSynced: true };
                 }
-                return { ...prev, playerId: data.player_id, walletAddress: saved.walletAddress, isSynced: false };
+                return { ...prev, playerId: data.player_id, walletAddress: saved.walletAddress,
+                displayName: data.username ?? prev.displayName, isSynced: false };
               });
               // If local was better, push it up
               const cur = stateRef.current;
@@ -786,7 +790,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
               !walletAddr.startsWith('r') || walletAddr.length < 25) return;
 
           // Full wallet identity: fetch server save, merge, set playerId
-          setState(prev => ({ ...prev, walletAddress: walletAddr }));
+          setState(prev => ({ ...prev, walletAddress: walletAddr, displayName: data.username ?? prev.displayName }));
           const saveRes = await fetch(`${apiUrl}/api/save/${data.player_id}`);
           const saveData = await saveRes.json().catch(() => null);
           setState(prev => {
@@ -802,9 +806,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             );
             if (serverAhead) {
               return { ...prev, ...serverSave, lastTick: Date.now(),
-                playerId: data.player_id, walletAddress: walletAddr, isSynced: true };
+                playerId: data.player_id, walletAddress: walletAddr,
+                displayName: data.username ?? prev.displayName, isSynced: true };
             }
-            return { ...prev, playerId: data.player_id, walletAddress: walletAddr, isSynced: false };
+            return { ...prev, playerId: data.player_id, walletAddress: walletAddr,
+              displayName: data.username ?? prev.displayName, isSynced: false };
           });
           // If local was better, push it
           const cur = stateRef.current;
@@ -1404,7 +1410,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       );
 
       if (serverAhead) {
-        // Server save is better — load it
+        // Server save is better — load it (preserve displayName from auth response)
         setState(prev => ({
           ...prev,
           ...serverSave,
@@ -1419,6 +1425,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           ...prev,
           playerId: data.player_id,
           walletAddress: address,
+          displayName: data.username ?? stateRef.current.displayName,
           isSynced: true,
         }));
         await fetch(`${API_URL}/api/save/${data.player_id}`, {
@@ -1432,11 +1439,24 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
   }, [API_URL]);
 
+  const setDisplayName = useCallback(async (name: string) => {
+    const trimmed = name.trim().slice(0, 32);
+    if (!trimmed || !stateRef.current.playerId) return;
+    setState(prev => ({ ...prev, displayName: trimmed }));
+    try {
+      await fetch(`${API_URL}/api/auth/username`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ player_id: stateRef.current.playerId, username: trimmed }),
+      });
+    } catch { /* ignore network errors — name saved locally */ }
+  }, [API_URL]);
+
   const disconnectWallet = useCallback(() => {
     // Clear localStorage so the storage event fires correctly on reconnect
     localStorage.removeItem('xaman_linked_address');
     localStorage.removeItem('xaman_pending_uuid');
-    setState(prev => ({ ...prev, walletAddress: null, playerId: null, isSynced: false }));
+    setState(prev => ({ ...prev, walletAddress: null, playerId: null, isSynced: false, displayName: null }));
   }, []);
 
   const getCharacterTier = useCallback((): number => {
@@ -1474,6 +1494,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         addMaterials,
         connectWallet,
         disconnectWallet,
+        setDisplayName,
         recordBotBattle,
         resetArenaAttacks,
         goldPerTap,
