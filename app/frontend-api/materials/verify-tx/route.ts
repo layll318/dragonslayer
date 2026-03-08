@@ -4,7 +4,8 @@ export const dynamic = 'force-dynamic';
 
 const TREASURY_WALLET = process.env.TREASURY_WALLET || 'rf84iAt8aRMJ7onNY9ZqmWVVFCAtSmTT7d';
 const XRPL_API       = 'https://xrplcluster.com/';
-const MIN_DROPS      = 1_000_000; // 1 XRP minimum
+const MIN_DROPS      = 500_000;   // 0.5 XRP minimum — covers up to 50% token discount on 1 XRP
+const BUNDLE_DROPS   = 1_500_000; // 1.5 XRP — covers up to 50% token discount on 3 XRP bundle
 const API_URL        = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export async function POST(request: NextRequest) {
@@ -58,20 +59,23 @@ export async function POST(request: NextRequest) {
     }
     const drops = parseInt(rawAmount, 10);
     if (drops < MIN_DROPS) {
-      return NextResponse.json({ error: `Payment too small (${drops} drops). Minimum 1 XRP.` }, { status: 400 });
+      return NextResponse.json({ error: `Payment too small (${drops} drops). Minimum 0.5 XRP (1 XRP with up to 50% token discount).` }, { status: 400 });
     }
 
-    // Determine credits based on amount
+    // Determine credits based on amount.
+    // Thresholds are set at 50% of the full price to accept max-discounted payments:
+    //   bundle (3 XRP full) → accept >= 1.5 XRP
+    //   single (1 XRP full) → accept >= 0.5 XRP
     const ALL_TYPES = ['dragon_scale', 'fire_crystal', 'iron_ore', 'bone_shard', 'ancient_rune'] as const;
     type MatType = typeof ALL_TYPES[number];
 
     let credits: { type: MatType; quantity: number }[];
 
-    if (drops >= 3_000_000) {
-      // 3+ XRP → bundle: 3 of every type
+    if (drops >= BUNDLE_DROPS) {
+      // >= 1.5 XRP → bundle: 3 of every type
       credits = ALL_TYPES.map(t => ({ type: t, quantity: 3 }));
     } else {
-      // 1–2 XRP → 3 of a single type (user must specify)
+      // 0.5–1.49 XRP → 3 of a single type (user must specify)
       const mat = type as MatType;
       if (!ALL_TYPES.includes(mat)) {
         return NextResponse.json({ error: 'Specify which material type to claim (1 XRP = 3× one type).' }, { status: 400 });

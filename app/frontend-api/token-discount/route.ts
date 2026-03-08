@@ -60,14 +60,14 @@ async function checkTokenBalance(
   currencyHex: string,   // always pass the 40-char hex
   issuer: string,
   minBalance: number,
-): Promise<{ holds: boolean; balance: number }> {
+): Promise<{ holds: boolean; balance: number; xrplError: boolean }> {
   try {
     const data = await xrplPost({
       method: 'account_lines',
       params: [{ account: wallet, ledger_index: 'validated' }],
     });
 
-    if (data?.result?.status === 'error') return { holds: false, balance: 0 };
+    if (data?.result?.status === 'error') return { holds: false, balance: 0, xrplError: false };
     const lines: any[] = data?.result?.lines ?? [];
     const targetHex = normCurrency(currencyHex);
     const targetDecoded = normCurrency(decodeCurrencyHex(currencyHex));
@@ -81,12 +81,12 @@ async function checkTokenBalance(
 
       if (matches) {
         const balance = parseFloat(line.balance ?? '0');
-        return { holds: balance >= minBalance, balance };
+        return { holds: balance >= minBalance, balance, xrplError: false };
       }
     }
-    return { holds: false, balance: 0 };
+    return { holds: false, balance: 0, xrplError: false };
   } catch {
-    return { holds: false, balance: 0 };
+    return { holds: false, balance: 0, xrplError: true };
   }
 }
 
@@ -96,26 +96,26 @@ async function checkDragonSlayerBalance(
   wallet: string,
   issuer: string,
   minBalance: number,
-): Promise<{ holds: boolean; balance: number; currencyFound: string | null }> {
+): Promise<{ holds: boolean; balance: number; currencyFound: string | null; xrplError: boolean }> {
   try {
     const data = await xrplPost({
       method: 'account_lines',
       params: [{ account: wallet, ledger_index: 'validated' }],
     });
 
-    if (data?.result?.status === 'error') return { holds: false, balance: 0, currencyFound: null };
+    if (data?.result?.status === 'error') return { holds: false, balance: 0, currencyFound: null, xrplError: false };
     const lines: any[] = data?.result?.lines ?? [];
 
     for (const line of lines) {
       if (normCurrency(line.account) !== normCurrency(issuer)) continue;
       const balance = parseFloat(line.balance ?? '0');
       if (balance >= minBalance) {
-        return { holds: true, balance, currencyFound: line.currency ?? null };
+        return { holds: true, balance, currencyFound: line.currency ?? null, xrplError: false };
       }
     }
-    return { holds: false, balance: 0, currencyFound: null };
+    return { holds: false, balance: 0, currencyFound: null, xrplError: false };
   } catch {
-    return { holds: false, balance: 0, currencyFound: null };
+    return { holds: false, balance: 0, currencyFound: null, xrplError: true };
   }
 }
 
@@ -127,9 +127,9 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Check all three tokens in parallel
-    // LYNX + XRPNOMICS: matched by 40-char hex currency code (case-insensitive)
-    // DragonSlayer: matched by issuer address only (no need to know the currency hex)
+    // Check all three tokens in parallel.
+    // If all three XRPL calls fail (network outage) we return success:false so the
+    // client keeps its cached discount rather than resetting it to 0.
     const [lynxResult, xrpnomicsResult, dragonslayerResult] = await Promise.all([
       checkTokenBalance(
         wallet,
@@ -149,6 +149,12 @@ export async function GET(request: NextRequest) {
         TOKEN_CONFIG.dragonslayer.minBalance,
       ),
     ]);
+
+    // If every single check errored out (XRPL unreachable), don't overwrite cached discount
+    const allErrored = lynxResult.xrplError && xrpnomicsResult.xrplError && dragonslayerResult.xrplError;
+    if (allErrored) {
+      return NextResponse.json({ success: false, error: 'xrpl_unavailable' }, { status: 503 });
+    }
 
     const tokensHeld = [lynxResult.holds, xrpnomicsResult.holds, dragonslayerResult.holds].filter(Boolean).length;
 

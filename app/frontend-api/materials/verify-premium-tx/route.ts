@@ -6,12 +6,15 @@ const TREASURY_WALLET = process.env.TREASURY_WALLET || 'rf84iAt8aRMJ7onNY9ZqmWVV
 const XRPL_API        = 'https://xrplcluster.com/';
 const API_URL         = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
-// Premium XRP amounts (in drops)
-const PREMIUM_ITEMS: Record<string, { dropsRequired: number; label: string }> = {
-  rare_egg:        { dropsRequired: 2_000_000, label: 'Rare Dragon Egg' },
-  legendary_egg:   { dropsRequired: 5_000_000, label: 'Legendary Dragon Egg' },
-  rare_bundle:     { dropsRequired: 5_000_000, label: 'Rare Material Mega Bundle' },
-  incubator_slot:  { dropsRequired: 1_000_000, label: 'Permanent Incubator Slot' },
+// Premium XRP amounts (in drops).
+// dropsRequired is set at 50% of the full price so players with up to 50% token
+// discount are always accepted.  Full prices: rare_egg=2, legendary_egg=5,
+// rare_bundle=5, incubator_slot=1.
+const PREMIUM_ITEMS: Record<string, { dropsRequired: number; fullDrops: number; label: string }> = {
+  rare_egg:        { dropsRequired: 1_000_000, fullDrops: 2_000_000, label: 'Rare Dragon Egg' },
+  legendary_egg:   { dropsRequired: 2_500_000, fullDrops: 5_000_000, label: 'Legendary Dragon Egg' },
+  rare_bundle:     { dropsRequired: 2_500_000, fullDrops: 5_000_000, label: 'Rare Material Mega Bundle' },
+  incubator_slot:  { dropsRequired:   500_000, fullDrops: 1_000_000, label: 'Permanent Incubator Slot' },
 };
 
 export async function POST(request: NextRequest) {
@@ -67,8 +70,8 @@ export async function POST(request: NextRequest) {
 
     const drops = parseInt(rawAmount, 10);
     if (drops < item.dropsRequired) {
-      const xrpNeeded = item.dropsRequired / 1_000_000;
-      return NextResponse.json({ error: `Insufficient payment. ${item.label} requires ${xrpNeeded} XRP.` }, { status: 400 });
+      const xrpFull = item.fullDrops / 1_000_000;
+      return NextResponse.json({ error: `Insufficient payment. ${item.label} costs ${xrpFull} XRP (token holders get up to 50% off).` }, { status: 400 });
     }
 
     // Server-side dedup — register hash only after XRPL confirms success
