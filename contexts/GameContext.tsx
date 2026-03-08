@@ -765,7 +765,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    // TWA auth — username enrichment only; does NOT drive playerId
+    // TWA auth — if telegram account has a wallet linked, do full wallet reconnect
     const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? '';
     if (apiUrl && typeof window !== 'undefined' && window.Telegram?.WebApp?.initDataUnsafe?.user) {
       const tgUser = window.Telegram.WebApp.initDataUnsafe.user;
@@ -779,27 +779,48 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         }),
       })
         .then(r => r.json())
-        .then(data => {
-          if (!data.success) return;
-          // If the telegram account has a wallet linked in the DB, treat it as a wallet reconnect
-          if (data.wallet_address && typeof data.wallet_address === 'string' &&
-              data.wallet_address.startsWith('r') && data.wallet_address.length >= 25) {
-            setState(prev => ({ ...prev, walletAddress: data.wallet_address }));
-            // Trigger wallet identity path
-            fetch(`${apiUrl}/api/auth/wallet`, {
+        .then(async data => {
+          if (!data.success) return; // No wallet linked yet — stay local
+          const walletAddr = data.wallet_address;
+          if (!walletAddr || typeof walletAddr !== 'string' ||
+              !walletAddr.startsWith('r') || walletAddr.length < 25) return;
+
+          // Full wallet identity: fetch server save, merge, set playerId
+          setState(prev => ({ ...prev, walletAddress: walletAddr }));
+          const saveRes = await fetch(`${apiUrl}/api/save/${data.player_id}`);
+          const saveData = await saveRes.json().catch(() => null);
+          setState(prev => {
+            const serverSave = saveData?.save_json && Object.keys(saveData.save_json).length > 0
+              ? saveData.save_json : null;
+            const serverLevel = Number(serverSave?.level ?? 0);
+            const localLevel  = Number(prev.level ?? 0);
+            const serverGold  = Number(serverSave?.totalGoldEarned ?? 0);
+            const localGold   = Number(prev.totalGoldEarned ?? 0);
+            const serverAhead = serverSave && (
+              serverLevel > localLevel ||
+              (serverLevel === localLevel && serverGold > localGold)
+            );
+            if (serverAhead) {
+              return { ...prev, ...serverSave, lastTick: Date.now(),
+                playerId: data.player_id, walletAddress: walletAddr, isSynced: true };
+            }
+            return { ...prev, playerId: data.player_id, walletAddress: walletAddr, isSynced: false };
+          });
+          // If local was better, push it
+          const cur = stateRef.current;
+          const serverSave = saveData?.save_json && Object.keys(saveData.save_json).length > 0
+            ? saveData.save_json : null;
+          const localAhead = !serverSave ||
+            Number(cur.level ?? 0) > Number(serverSave.level ?? 0) ||
+            (Number(cur.level ?? 0) === Number(serverSave.level ?? 0) &&
+             Number(cur.totalGoldEarned ?? 0) > Number(serverSave.totalGoldEarned ?? 0));
+          if (localAhead) {
+            fetch(`${apiUrl}/api/save/${data.player_id}`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ wallet_address: data.wallet_address }),
-            })
-              .then(r => r.json())
-              .then(wd => {
-                if (wd.success && wd.player_id) {
-                  setState(prev => ({ ...prev, playerId: wd.player_id, isSynced: true }));
-                }
-              })
-              .catch(() => {});
+              body: JSON.stringify({ save_json: cur }),
+            }).catch(() => {});
           }
-          // Username display update only (no playerId change)
         })
         .catch(() => {/* ignore network errors */});
     }
@@ -1349,11 +1370,19 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     if (!address) return;
     setState(prev => ({ ...prev, walletAddress: address, isSynced: false }));
     try {
-      // Wallet address IS the identity — no player_id sent
+      // Wallet address IS the identity — no player_id sent.
+      // If inside Telegram, also pass telegram_id to link TWA → wallet player.
+      const tgUser = typeof window !== 'undefined'
+        ? (window as any).Telegram?.WebApp?.initDataUnsafe?.user
+        : null;
       const res = await fetch(`${API_URL}/api/auth/wallet`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ wallet_address: address }),
+        body: JSON.stringify({
+          wallet_address: address,
+          telegram_id: tgUser?.id ?? undefined,
+          telegram_username: tgUser?.username ?? tgUser?.first_name ?? undefined,
+        }),
       });
       const data = await res.json();
       if (!data.success || !data.player_id) return;
