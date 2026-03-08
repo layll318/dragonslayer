@@ -300,7 +300,7 @@ export default function HeroTab({ onTabChange }: { onTabChange?: (tab: string) =
         {tutStep === 2 && (
           <div className="tut-callout mx-1">
             <span className="text-base">🏰</span>
-            <span className="font-cinzel font-bold text-[#f0c040] text-[11px]">Visit Forge tab — buy a building for passive gold!</span>
+            <span className="font-cinzel font-bold text-[#f0c040] text-[11px]">Visit Shop tab — buy a building for passive gold!</span>
           </div>
         )}
 
