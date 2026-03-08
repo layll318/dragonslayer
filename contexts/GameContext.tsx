@@ -194,6 +194,10 @@ export interface GameState {
   seasonMonth: string;
   defenseLog: DefenseLogEntry[];
   defenseLogSeen: number;
+  // Holder daily gift (token holders only)
+  holderGiftStreak: number;
+  holderGiftLastDate: string;
+  holderGiftPending: boolean;
   // Identity / server sync
   playerId: number | null;
   walletAddress: string | null;
@@ -239,6 +243,7 @@ interface GameContextType {
   recordPvpBattle: (win: boolean, goldStolen: number, newTrophies: number) => void;
   markDefenseLogSeen: () => void;
   resetArenaAttacks: () => void;
+  claimHolderGift: () => void;
   CRAFTING_RECIPES: CraftingRecipe[];
   ITEM_UNLOCK_LEVELS: Record<ItemType, number>;
 }
@@ -674,6 +679,9 @@ function createInitialState(): GameState {
     seasonMonth: new Date().toISOString().slice(0, 7),
     defenseLog: [],
     defenseLogSeen: 0,
+    holderGiftStreak: 0,
+    holderGiftLastDate: '',
+    holderGiftPending: false,
     playerId: null,
     walletAddress: null,
     isSynced: false,
@@ -713,6 +721,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       const today = getToday();
       const lastLogin = saved.lastLoginDate || '';
       const isNewDay = lastLogin !== today;
+      // Holder gift: set pending if cached token discount shows holdings and it's a new day
+      const cachedPct = saved.tokenDiscount?.pct ?? 0;
+      const isNewHolderDay = (saved.holderGiftLastDate || '') !== today;
+      const holderGiftPending = cachedPct > 0 && isNewHolderDay ? true : (saved.holderGiftPending ?? false);
       const newStreak = isNewDay ? (saved.loginStreak || 0) + 1 : (saved.loginStreak || 0);
 
       // Migrate daily quests — replace full_care with complete_expedition if needed
@@ -760,6 +772,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         arenaAttacksToday: saved.arenaAttacksToday || 0,
         arenaPoints: saved.arenaPoints || 0,
         arenaLastReset: saved.arenaLastReset || '',
+        holderGiftStreak: saved.holderGiftStreak ?? 0,
+        holderGiftLastDate: saved.holderGiftLastDate ?? '',
+        holderGiftPending,
         playerId: saved.playerId ?? null,
         walletAddress: saved.walletAddress ?? null,
         isSynced: saved.isSynced ?? false,
@@ -1067,9 +1082,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     [state.hatchedDragons]
   );
 
+  const tapDragonPct = useMemo(
+    () => calcDiminishingBonus(state.hatchedDragons, 'tap_gold_pct'),
+    [state.hatchedDragons]
+  );
+
   const armyPower = useMemo(() => calcArmyPower(state.buildings) + dragonArmyPowerFlat, [state.buildings, dragonArmyPowerFlat]);
 
-  const goldPerTap = Math.max(1, Math.floor((1 + state.level * 0.5) * gearMultiplier));
+  const goldPerTap = Math.max(1, Math.floor((1 + state.level * 0.5) * gearMultiplier * (1 + tapDragonPct / 100)));
 
   const goldPerHour = Math.floor(
     state.buildings.reduce((sum, b) => sum + b.baseIncome * b.owned, 0) * gearMultiplier
@@ -1412,7 +1432,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       for (let i = 0; i < qty; i++) {
         totalCost += Math.floor(building.baseCost * Math.pow(building.costMultiplier, building.owned + i));
       }
-      if (prev.gold < totalCost) return prev;
+      const discountPct = prev.tokenDiscount?.pct ?? 0;
+      const effectiveCost = discountPct > 0 ? Math.floor(totalCost * (1 - discountPct / 100)) : totalCost;
+      if (prev.gold < effectiveCost) return prev;
 
       const newBuildings = [...prev.buildings];
       newBuildings[idx] = { ...building, owned: building.owned + qty };
@@ -1433,7 +1455,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       return {
         ...prev,
         ...xpUpdate,
-        gold: prev.gold - totalCost,
+        gold: prev.gold - effectiveCost,
         buildings: newBuildings,
         buildingsBoughtToday: newBoughtToday,
         dailyQuests,
@@ -1513,6 +1535,42 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setState(prev => ({ ...prev, arenaAttacksToday: 0, arenaLastReset: getToday() }));
   }, []);
 
+  const claimHolderGift = useCallback(() => {
+    setState((prev) => {
+      if (!prev.holderGiftPending) return prev;
+      if (!prev.tokenDiscount || prev.tokenDiscount.pct === 0) return prev;
+      const today = getToday();
+      const streak = Math.min(Math.max(1, (prev.holderGiftStreak || 0) + 1), 30);
+      // Gold scales with streak: day 1 = 1300, day 30 = 10000
+      const goldBonus = 1000 + streak * 300;
+      // Egg rarity scales with streak
+      const eggRarity: EggRarity =
+        streak >= 25 ? 'legendary' : streak >= 15 ? 'rare' : streak >= 7 ? 'uncommon' : 'common';
+      const variants = EGG_VARIANTS[eggRarity];
+      const variant = variants[Math.floor(Math.random() * variants.length)];
+      const egg: DragonEgg = { id: `holder-egg-${Date.now()}`, rarity: eggRarity, ...variant };
+      // Materials: 1 per type at day 1, +1 every 5 days
+      const materialQty = 1 + Math.floor(streak / 5);
+      const allMats: MaterialType[] = ['dragon_scale', 'fire_crystal', 'iron_ore', 'bone_shard', 'ancient_rune'];
+      const newMats = [...prev.materials];
+      for (const mtype of allMats) {
+        const ex = newMats.find(m => m.type === mtype);
+        if (ex) ex.quantity += materialQty;
+        else newMats.push({ type: mtype, quantity: materialQty });
+      }
+      return {
+        ...prev,
+        gold: prev.gold + goldBonus,
+        totalGoldEarned: prev.totalGoldEarned + goldBonus,
+        eggInventory: [...prev.eggInventory, egg],
+        materials: newMats,
+        holderGiftPending: false,
+        holderGiftLastDate: today,
+        holderGiftStreak: streak,
+      };
+    });
+  }, []);
+
   const API_URL = typeof process !== 'undefined' ? (process.env.NEXT_PUBLIC_API_URL ?? '') : '';
 
   const refreshTokenDiscount = useCallback(async () => {
@@ -1537,9 +1595,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           if (tokensHeld >= 3) pct = 50;
           else if (tokensHeld >= 2) pct = 35;
           else if (tokensHeld >= 1) pct = 25;
+          // Set holder gift pending if they hold tokens and haven't claimed today
+          const today = getToday();
+          const newHolderGiftPending = pct > 0 && prev.holderGiftLastDate !== today
+            ? true : prev.holderGiftPending;
           return {
             ...prev,
             tokenDiscount: { lynx, lynxBalance, xrpnomics, xrpnomicsBalance, dragonslayer, dragonslayerBalance, pct, checkedAt: Date.now() },
+            holderGiftPending: newHolderGiftPending,
           };
         });
       }
@@ -1699,6 +1762,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         recordPvpBattle,
         markDefenseLogSeen,
         resetArenaAttacks,
+        claimHolderGift,
         goldPerTap,
         goldPerHour,
         gearMultiplier,

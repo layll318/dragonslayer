@@ -316,9 +316,12 @@ export default function BuildingsTab() {
         <div className="px-3 mt-2 space-y-2.5">
           {state.buildings.map((building) => {
             const cost     = getBuildingCost(building);
-            const affordable  = canAfford(cost);
+            const discountPct = state.tokenDiscount?.pct ?? 0;
+            const effectiveCost = discountPct > 0 ? Math.floor(cost * (1 - discountPct / 100)) : cost;
+            const affordable  = canAfford(effectiveCost);
             const cost10   = Math.floor(building.baseCost * (Math.pow(building.costMultiplier, building.owned) * (1 - Math.pow(building.costMultiplier, 10)) / (1 - building.costMultiplier)));
-            const canBuy10 = state.gold >= cost10;
+            const effectiveCost10 = discountPct > 0 ? Math.floor(cost10 * (1 - discountPct / 100)) : cost10;
+            const canBuy10 = state.gold >= effectiveCost10;
             const unlocked = state.level >= building.unlockLevel;
             const income   = building.baseIncome * building.owned;
             return (
@@ -361,7 +364,14 @@ export default function BuildingsTab() {
                         <button onClick={() => buyBuilding(building.id)} disabled={!affordable} className="action-btn text-[10px] px-3 py-1.5 w-[70px]">BUY</button>
                         <div className="flex items-center gap-0.5 justify-end">
                           <span className="coin-icon" style={{ width: 8, height: 8 }} />
-                          <span className={`text-[9px] font-bold ${affordable ? 'text-[#8a7a5a]' : 'text-red-400/70'}`}>{formatNumber(cost)}</span>
+                          {discountPct > 0 ? (
+                            <>
+                              <span className="text-[8px] line-through text-[#3a2a1a] mr-0.5">{formatNumber(cost)}</span>
+                              <span className={`text-[9px] font-bold ${affordable ? 'text-[#4ade80]' : 'text-red-400/70'}`}>{formatNumber(effectiveCost)}</span>
+                            </>
+                          ) : (
+                            <span className={`text-[9px] font-bold ${affordable ? 'text-[#8a7a5a]' : 'text-red-400/70'}`}>{formatNumber(cost)}</span>
+                          )}
                         </div>
                         <button onClick={() => canBuy10 && buyBuilding(building.id, 10)} disabled={!canBuy10}
                           className="text-[10px] font-black px-2 py-0.5 rounded w-[70px] transition-opacity"

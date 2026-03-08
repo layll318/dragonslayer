@@ -6,6 +6,7 @@ import { formatNumber } from '@/utils/format';
 import CharacterDisplay from './CharacterDisplay';
 import QuestBanner from './QuestBanner';
 import LoginBonusModal from './LoginBonusModal';
+import HolderGiftModal from './HolderGiftModal';
 import MerchantModal from './MerchantModal';
 import { useTelegramWebApp } from '@/hooks/useTelegramWebApp';
 
@@ -67,7 +68,7 @@ function getNextGoal(state: ReturnType<typeof useGame>['state'], goldPerHour: nu
 }
 
 export default function HeroTab({ onTabChange }: { onTabChange?: (tab: string) => void }) {
-  const { state, tap, goldPerTap, goldPerHour, gearMultiplier, getCharacterTier } = useGame();
+  const { state, tap, goldPerTap, goldPerHour, gearMultiplier, getCharacterTier, dragonBonuses } = useGame();
   const { hapticFeedback, isTWA } = useTelegramWebApp();
 
   const [floats,     setFloats]     = useState<GoldFloat[]>([]);
@@ -147,6 +148,9 @@ export default function HeroTab({ onTabChange }: { onTabChange?: (tab: string) =
 
       {/* ══════════════ LOGIN BONUS MODAL ══════════════ */}
       <LoginBonusModal />
+
+      {/* ══════════════ HOLDER DAILY GIFT MODAL ══════════════ */}
+      <HolderGiftModal />
 
       {/* ══════════════ LEVEL-UP OVERLAY ══════════════ */}
       {levelUp && (
@@ -340,7 +344,7 @@ export default function HeroTab({ onTabChange }: { onTabChange?: (tab: string) =
                     : [
                         eggCount > 0 && `${eggCount} egg${eggCount !== 1 ? 's' : ''} in inventory`,
                         incubating > 0 && `${incubating} incubating`,
-                        hatchedCount > 0 && `${hatchedCount} dragon${hatchedCount !== 1 ? 's' : ''} active`,
+                        hatchedCount > 0 && `${hatchedCount} dragon${hatchedCount !== 1 ? 's' : ''} active — common eggs boost tapping!`,
                       ].filter(Boolean).join(' · ')}
                 </p>
               </div>
@@ -399,6 +403,9 @@ export default function HeroTab({ onTabChange }: { onTabChange?: (tab: string) =
         {/* ══════════════ GOLD PER TAP HINT ══════════════ */}
         <div className="text-center text-[#a89878] text-xs pb-1 tracking-wider uppercase">
           <span className="text-[#f0c040] font-bold">+{goldPerTap}</span> gold per tap
+          {dragonBonuses.tapGoldPct > 0 && (
+            <span className="text-[#f97316] font-bold ml-1">(+{dragonBonuses.tapGoldPct.toFixed(1)}% 🐉)</span>
+          )}
           {' · '}
           <span className="text-[#f0c040] font-bold">{formatNumber(state.totalTaps)}</span> taps
         </div>

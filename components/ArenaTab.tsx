@@ -75,6 +75,27 @@ function makeBotOpponent(armyPower: number, level: number): Opponent {
 
 type ArenaView = 'battle' | 'defense';
 
+function useCountdownToMidnightUTC() {
+  const [label, setLabel] = useState('');
+  useEffect(() => {
+    const update = () => {
+      const now = new Date();
+      const midnight = new Date();
+      midnight.setUTCHours(24, 0, 0, 0);
+      const diff = midnight.getTime() - now.getTime();
+      if (diff <= 0) { setLabel('resetting…'); return; }
+      const h = Math.floor(diff / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+      setLabel(`${h}h ${m.toString().padStart(2,'0')}m ${s.toString().padStart(2,'0')}s`);
+    };
+    update();
+    const id = setInterval(update, 1000);
+    return () => clearInterval(id);
+  }, []);
+  return label;
+}
+
 export default function ArenaTab() {
   const { state, armyPower, recordBotBattle, recordPvpBattle, markDefenseLogSeen } = useGame();
   const defPower = calcDefensePower(state.buildings);
@@ -352,6 +373,7 @@ export default function ArenaTab() {
             className="self-start text-[10px] text-[#6b5a3a] underline">← Back to Battle</button>
           <div className="dragon-panel px-3 py-3">
             <p className="font-cinzel font-bold text-[#e8d8a8] text-[10px] tracking-wider mb-2">🛡️ DEFENSE LOG</p>
+            <p className="text-[8px] text-[#4a3a2a] mb-2">Your castle&apos;s recent defense history — trophies are lost when raiders win.</p>
             {defenseLog.length === 0 ? (
               <p className="text-[#4a3a2a] text-[10px] text-center py-4">No attacks recorded yet</p>
             ) : defenseLog.map((e, i) => (
@@ -360,10 +382,13 @@ export default function ArenaTab() {
                 <span className="text-lg">{e.result === 'loss' ? '🔴' : '🟢'}</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-[10px] font-bold truncate" style={{ color: e.result === 'loss' ? '#f87171' : '#4ade80' }}>
-                    {e.result === 'loss' ? 'Defended!' : `Raided by ${e.attackerName}`}
+                    {e.result === 'loss' ? `⚔️ Raided by ${e.attackerName}` : '🛡️ Defended!'}
                   </p>
                   <p className="text-[8px] text-[#6b5a3a]">
-                    {e.result !== 'loss' && e.attackerName} · {e.goldLost > 0 ? `-${formatNumber(e.goldLost)} gold` : 'no gold lost'}{e.trophiesLost > 0 ? ` · -${e.trophiesLost} trophies` : ''}
+                    {e.result === 'loss'
+                      ? `${e.goldLost > 0 ? `-${formatNumber(e.goldLost)} gold` : 'no gold lost'}${e.trophiesLost > 0 ? ` · -${e.trophiesLost} 🏅 trophies` : ''}`
+                      : `Your walls held — no gold or trophies lost`
+                    }
                   </p>
                 </div>
                 <p className="text-[8px] text-[#4a3a2a] flex-shrink-0">{new Date(e.ts).toLocaleDateString()}</p>
@@ -431,10 +456,7 @@ export default function ArenaTab() {
         )}
 
         {attacksLeft <= 0 && (
-          <div className="dragon-panel px-3 py-3 text-center">
-            <p className="text-[#f0c040] font-bold text-sm">⏳ No attacks remaining today</p>
-            <p className="text-[#6b5a3a] text-[10px] mt-1">Resets at midnight</p>
-          </div>
+          <AttackCooldownBanner />
         )}
 
         {/* Opponent list */}
@@ -633,7 +655,18 @@ export default function ArenaTab() {
   );
 }
 
+function AttackCooldownBanner() {
+  const countdown = useCountdownToMidnightUTC();
+  return (
+    <div className="dragon-panel px-3 py-3 text-center">
+      <p className="text-[#f87171] font-bold text-sm">⚔️ No attacks remaining today</p>
+      <p className="text-[#6b5a3a] text-[10px] mt-1">Resets in <span className="text-[#f0c040] font-mono font-bold">{countdown}</span> (midnight UTC)</p>
+    </div>
+  );
+}
+
 function ArenaHeader({ attacksLeft, arenaPoints, trophies }: { attacksLeft: number; arenaPoints: number; trophies: number }) {
+  const countdown = useCountdownToMidnightUTC();
   return (
     <div className="top-bar sticky top-0 z-30 px-4 py-3">
       <div className="flex items-center justify-between">
@@ -643,7 +676,10 @@ function ArenaHeader({ attacksLeft, arenaPoints, trophies }: { attacksLeft: numb
         </div>
         <div className="text-right">
           <p className="font-cinzel text-[#a78bfa] font-bold text-base">🏅 {formatNumber(trophies)}</p>
-          <p className="text-[#6b5a3a] text-[9px]">{attacksLeft}/{MAX_ATTACKS} attacks left</p>
+          {attacksLeft > 0
+            ? <p className="text-[#6b5a3a] text-[9px]">{attacksLeft}/{MAX_ATTACKS} attacks left</p>
+            : <p className="text-[#f87171] text-[9px] font-mono">resets in {countdown}</p>
+          }
         </div>
       </div>
     </div>
