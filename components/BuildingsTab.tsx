@@ -278,13 +278,12 @@ export default function BuildingsTab() {
           </div>
           <div className="text-right">
             <div className="flex items-center gap-1 justify-end">
-              <span className="font-cinzel text-[#f0c040] font-bold text-sm tabular-nums">⚔️ {armyPower}</span>
-              <span className="text-[#6b5a3a] text-[10px]">army pwr</span>
+              <span className="coin-icon" style={{ width: 12, height: 12 }} />
+              <span className="font-cinzel text-[#f0c040] font-bold text-sm tabular-nums">{formatNumber(state.gold)}</span>
             </div>
             <div className="flex items-center gap-1 justify-end mt-0.5">
-              <span className="coin-icon" style={{ width: 11, height: 11 }} />
-              <span className="font-cinzel text-[#a89060] font-bold text-xs tabular-nums">{formatNumber(goldPerHour)}</span>
-              <span className="text-[#6b5a3a] text-[9px]">/hr</span>
+              <span className="font-cinzel text-[#e8d8a8] font-bold text-xs tabular-nums">⚔️ {armyPower}</span>
+              <span className="text-[#6b5a3a] text-[9px]">{formatNumber(goldPerHour)}/hr</span>
             </div>
           </div>
         </div>
@@ -590,7 +589,7 @@ export default function BuildingsTab() {
               { id: 'legendary_egg',  icon: '✨', label: 'Legendary Dragon Egg',      xrp: 5, desc: 'Hatches in 6h · −10% expedition time forever' },
               { id: 'rare_bundle',    icon: '🎁', label: 'Rare Material Mega Bundle', xrp: 5, desc: '5× of all 5 material types' },
               { id: 'incubator_slot', icon: '🔥', label: 'Permanent Incubator Slot',  xrp: 1, desc: 'Extra slot that stacks forever — never expires' },
-              { id: 'gold_10m',       icon: '💰', label: '10,000,000 Gold Pack',      xrp: 3, desc: 'Instantly adds 10 million gold to your treasury' },
+              { id: 'gold_50m',       icon: '💰', label: '50,000,000 Gold Pack',      xrp: 3, desc: 'Instantly adds 50 million gold to your treasury' },
             ].map(item => (
               <div key={item.id} className="flex items-center gap-2.5 p-2 rounded-xl mb-1.5"
                 style={{ background: premiumType === item.id ? 'rgba(139,92,246,0.12)' : 'rgba(139,92,246,0.04)', border: `1px solid ${premiumType === item.id ? 'rgba(139,92,246,0.5)' : 'rgba(139,92,246,0.15)'}` }}>

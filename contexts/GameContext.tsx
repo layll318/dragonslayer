@@ -994,6 +994,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ save_json: s }),
+      }).then(r => r.ok ? r.json() : null).then(data => {
+        const serverLog: unknown[] = data?.save_json?.defenseLog;
+        if (!Array.isArray(serverLog)) return;
+        setState(prev => {
+          const localLog: unknown[] = prev.defenseLog ?? [];
+          if (serverLog.length > localLog.length) return { ...prev, defenseLog: serverLog as typeof prev.defenseLog };
+          return prev;
+        });
       }).catch(() => {/* ignore */});
     }, 30_000);
     return () => clearInterval(interval);

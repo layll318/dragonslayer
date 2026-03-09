@@ -60,7 +60,13 @@ async def upsert_save(player_id: int, req: SaveRequest):
             INSERT INTO game_saves (player_id, save_json, updated_at)
             VALUES ($1, $2::jsonb, NOW())
             ON CONFLICT (player_id) DO UPDATE
-              SET save_json = $2::jsonb, updated_at = NOW()
+              SET save_json = CASE
+                WHEN jsonb_array_length(COALESCE(game_saves.save_json->'defenseLog','[]'::jsonb))
+                     > jsonb_array_length(COALESCE(EXCLUDED.save_json->'defenseLog','[]'::jsonb))
+                THEN EXCLUDED.save_json || jsonb_build_object('defenseLog', game_saves.save_json->'defenseLog')
+                ELSE EXCLUDED.save_json
+              END,
+              updated_at = NOW()
             """,
             player_id,
             json.dumps(req.save_json),

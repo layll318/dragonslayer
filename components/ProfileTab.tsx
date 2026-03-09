@@ -71,6 +71,21 @@ export default function ProfileTab() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string>('');
   const [refreshingDiscount, setRefreshingDiscount] = useState(false);
+  const [holderGiftCountdown, setHolderGiftCountdown] = useState('');
+
+  useEffect(() => {
+    const tick = () => {
+      const now = new Date();
+      const tomorrow = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+      const ms = tomorrow.getTime() - Date.now();
+      const h = Math.floor(ms / 3_600_000);
+      const m = Math.floor((ms % 3_600_000) / 60_000);
+      setHolderGiftCountdown(`${h}h ${m}m`);
+    };
+    tick();
+    const id = setInterval(tick, 60_000);
+    return () => clearInterval(id);
+  }, []);
   const [pingResult, setPingResult] = useState<string>('');
   const [pinging, setPinging] = useState(false);
   const [arenaResult, setArenaResult] = useState<string>('');
@@ -432,6 +447,18 @@ export default function ProfileTab() {
             >
               {refreshingDiscount ? '⏳ Checking balances…' : '🔄 Reverify Token Holdings'}
             </button>
+
+            {/* Holder gift countdown */}
+            {state.tokenDiscount && state.tokenDiscount.pct > 0 && (
+              <div className="mt-2 flex items-center justify-between px-2.5 py-1.5 rounded-lg"
+                style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.18)' }}>
+                <span className="text-[10px] text-[#a78bfa] font-bold">🎁 Daily Holder Gift</span>
+                {state.holderGiftPending
+                  ? <span className="text-[10px] font-black text-[#f0c040] animate-pulse">✨ Ready to claim!</span>
+                  : <span className="text-[10px] text-[#6b5a8a]">⏳ Next in {holderGiftCountdown}</span>
+                }
+              </div>
+            )}
           </div>
         )}
 

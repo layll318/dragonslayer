@@ -44,7 +44,7 @@ const PREMIUM_ITEMS: Record<string, { dropsRequired: number; fullDrops: number; 
   legendary_egg:   { dropsRequired: 2_500_000, fullDrops: 5_000_000, label: 'Legendary Dragon Egg' },
   rare_bundle:     { dropsRequired: 2_500_000, fullDrops: 5_000_000, label: 'Rare Material Mega Bundle' },
   incubator_slot:  { dropsRequired:   500_000, fullDrops: 1_000_000, label: 'Permanent Incubator Slot' },
-  gold_10m:        { dropsRequired: 1_500_000, fullDrops: 3_000_000, label: '10,000,000 Gold Pack' },
+  gold_50m:        { dropsRequired: 1_500_000, fullDrops: 3_000_000, label: '50,000,000 Gold Pack' },
 };
 
 export async function POST(request: NextRequest) {
@@ -119,8 +119,8 @@ export async function POST(request: NextRequest) {
         : null,
       // For incubator_slot: permanent slot
       incubatorSlot: premiumType === 'incubator_slot' ? true : null,
-      // For gold_10m: gold amount to credit
-      goldAmount: premiumType === 'gold_10m' ? 10_000_000 : null,
+      // For gold_50m: gold amount to credit
+      goldAmount: premiumType === 'gold_50m' ? 50_000_000 : null,
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
