@@ -236,7 +236,7 @@ export default function ProfileTab() {
           <StatCard icon="⚡" label="Per Tap" value={`+${goldPerTap}`} />
           <StatCard icon="🏗️" label="Gold/Hr" value={formatNumber(goldPerHour)} />
           <StatCard icon="�" label="Trophies" value={`${state.trophies ?? 0}`} highlight />
-          <StatCard icon="�🏛️" label="Buildings" value={`${totalBuildings}`} />
+          <StatCard icon="�️" label="Buildings" value={`${totalBuildings}`} />
           <StatCard icon="⏱️" label="Played" value={`${hours}h ${minutes}m`} />
         </div>
 
@@ -386,7 +386,7 @@ export default function ProfileTab() {
                       {holds === null ? '—' : holds ? '✓ Holds' : '✗ Not held'}
                     </span>
                     {bal !== null && bal > 0 && (
-                      <span className="text-[8px] text-[#6b5a8a] font-mono">{bal.toLocaleString()}</span>
+                      <span className="text-[8px] text-[#6b5a8a] font-mono">{formatNumber(bal)}</span>
                     )}
                   </div>
                 </div>

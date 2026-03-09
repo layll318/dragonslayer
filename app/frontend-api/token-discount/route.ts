@@ -13,18 +13,18 @@ const TOKEN_CONFIG = {
   lynx: {
     currencyHex: '244C594E58000000000000000000000000000000',
     issuer: 'rsr8BspVLwDWgrYamEJE3mqZhKozfWLfkv',
-    minBalance: 1,              // hold any LYNX
+    minBalance: 850_000,        // Hold 850K+
     label: '$LYNX',
   },
   xrpnomics: {
     currencyHex: '5852504E4F4D4943530000000000000000000000',
     issuer: 'r38o5rKYgTUg5Dgu2pDsC1xkroMbpivGJj',
-    minBalance: 0.000001,       // hold any XRPNOMICS
+    minBalance: 0.1,            // Hold 0.1+
     label: 'XRPNOMICS',
   },
   dragonslayer: {
     issuer: 'rBRUGYxmu5Lr9L246JzybRoE7TaL9VznSh',
-    minBalance: 1,              // hold any DragonSlayer token
+    minBalance: 30_000_000_000, // Hold 30B+
     label: 'DragonSlayer',
   },
 } as const;
