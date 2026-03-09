@@ -539,6 +539,7 @@ function generateMerchantDeals(level: number, dateStr: string): MerchantDeal[] {
   const allMats: MaterialType[] = ['dragon_scale','fire_crystal','iron_ore','bone_shard','ancient_rune'];
   const pickMat = () => allMats[Math.floor(rng() * allMats.length)];
   const goldBase = Math.max(500, level * 200);
+  const rareMat = pickMat();
   return [
     {
       id: 'deal_bulk_mats', icon: '🎒', title: 'Bulk Material Sack',
@@ -551,9 +552,9 @@ function generateMerchantDeals(level: number, dateStr: string): MerchantDeal[] {
     },
     {
       id: 'deal_rare_mat', icon: '💎', title: 'Material Cache',
-      desc: `5× ${pickMat().replace(/_/g,' ')}`,
+      desc: `5× ${rareMat.replace(/_/g,' ')}`,
       goldCost: Math.floor(goldBase * 1.5), purchased: false, type: 'materials',
-      payload: { materials: [{ type: pickMat(), quantity: 5 }] },
+      payload: { materials: [{ type: rareMat, quantity: 5 }] },
     },
     {
       id: 'deal_uncommon_egg', icon: '🟢', title: 'Dragon Egg (Uncommon)',
@@ -746,7 +747,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         inventory: saved.inventory ?? [],
         materials: mergeMaterialsByType(saved.materials ?? []),
         activeExpedition: saved.activeExpedition ?? null,
-        lastExpeditionResult: null,
+        lastExpeditionResult: saved.lastExpeditionResult ?? null,
         totalDragonsSlain: saved.totalDragonsSlain ?? 0,
         totalExpeditions: saved.totalExpeditions ?? 0,
         expeditionsToday: isNewDay ? 0 : (saved.expeditionsToday ?? 0),
@@ -810,7 +811,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
                 if (serverAhead) {
                   const { tokenDiscount: _td, ...serverSaveWithoutDiscount } = serverSave as any;
                   return { ...prev, ...serverSaveWithoutDiscount, lastTick: Date.now(),
-                    playerId: data.player_id, walletAddress: saved.walletAddress, isSynced: true };
+                    playerId: data.player_id, walletAddress: saved.walletAddress,
+                    displayName: data.username ?? serverSaveWithoutDiscount.displayName ?? prev.displayName,
+                    isSynced: true };
                 }
                 return { ...prev, playerId: data.player_id, walletAddress: saved.walletAddress,
                 displayName: data.username ?? prev.displayName, isSynced: false };
@@ -1162,7 +1165,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         durationHours: hours,
         endsAt: now + durationMs,
       };
-      return { ...prev, activeExpedition, adsUsedThisExpedition: 0 };
+      return { ...prev, activeExpedition, adsUsedThisExpedition: 0, lastExpeditionResult: null };
     });
   }, []);
 
@@ -1595,10 +1598,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           if (tokensHeld >= 3) pct = 50;
           else if (tokensHeld >= 2) pct = 35;
           else if (tokensHeld >= 1) pct = 25;
-          // Set holder gift pending if they hold tokens and haven't claimed today
+          // Set holder gift pending if they hold tokens and haven't claimed today;
+          // clear it if they no longer hold any tokens.
           const today = getToday();
-          const newHolderGiftPending = pct > 0 && prev.holderGiftLastDate !== today
-            ? true : prev.holderGiftPending;
+          const newHolderGiftPending = pct === 0
+            ? false
+            : pct > 0 && prev.holderGiftLastDate !== today
+              ? true
+              : prev.holderGiftPending;
           return {
             ...prev,
             tokenDiscount: { lynx, lynxBalance, xrpnomics, xrpnomicsBalance, dragonslayer, dragonslayerBalance, pct, checkedAt: Date.now() },
@@ -1656,6 +1663,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           lastTick: Date.now(),
           playerId: data.player_id,
           walletAddress: address,
+          displayName: data.username ?? serverSaveWithoutDiscount.displayName ?? prev.displayName,
           isSynced: true,
         }));
       } else {

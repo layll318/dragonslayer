@@ -485,7 +485,7 @@ export default function ArenaTab() {
             style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.08)', color: unreadDefense ? '#f87171' : '#6b5a3a' }}>
             🛡️ Defense Log{unreadDefense && <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />}
           </button>
-        <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1.5">
             {[easyBot, hardBot, ...(state.walletAddress ? opponents : [])].map(opp => {
               const isSelected = selected?.player_id === opp.player_id;
               const ch = winChance(armyPower, formation, opp.defense_power);

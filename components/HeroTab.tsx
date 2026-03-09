@@ -120,7 +120,7 @@ export default function HeroTab({ onTabChange }: { onTabChange?: (tab: string) =
 
     // Haptic feedback
     if (isTWA) {
-      hapticFeedback(isCrit ? 'heavy' : comboCount >= 25 ? 'medium' : 'light');
+      hapticFeedback(isCrit ? 'heavy' : comboCount + 1 >= 25 ? 'medium' : 'light');
     }
 
     const rect = e.currentTarget.getBoundingClientRect();
@@ -379,7 +379,7 @@ export default function HeroTab({ onTabChange }: { onTabChange?: (tab: string) =
         })()}
 
         {/* ══════════════ GEAR POWER BAR ══════════════ */}
-        <div role="button" onClick={() => onTabChange?.('buildings')} className="dragon-panel px-3 py-2.5 cursor-pointer">
+        <div role="button" onClick={() => onTabChange?.('expedition')} className="dragon-panel px-3 py-2.5 cursor-pointer">
           <div className="flex items-center gap-3">
             <span className="text-sm">⚔️</span>
             <span className="text-[#e8d8a8] text-[12px] font-bold tracking-wide flex-shrink-0">Gear Power</span>

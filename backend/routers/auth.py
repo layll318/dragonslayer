@@ -1,6 +1,6 @@
 import logging
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional
 from database import get_pool
 
@@ -19,6 +19,14 @@ class WalletAuthRequest(BaseModel):
     wallet_address: str
     telegram_id: Optional[int] = None
     telegram_username: Optional[str] = None
+
+    @field_validator('wallet_address')
+    @classmethod
+    def wallet_address_must_be_valid_xrpl(cls, v: str) -> str:
+        v = v.strip()
+        if not v or not v.startswith('r') or not (25 <= len(v) <= 35):
+            raise ValueError('wallet_address must be a valid XRPL address (starts with r, 25-35 chars)')
+        return v
 
 
 class UsernameUpdateRequest(BaseModel):

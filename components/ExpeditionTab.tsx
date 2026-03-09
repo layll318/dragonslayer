@@ -136,7 +136,7 @@ export default function ExpeditionTab() {
 
   const [section, setSection] = useState<Section>('expedition');
   const [now, setNow] = useState(Date.now());
-  const [claimed, setClaimed] = useState(false);
+  const [claimed, setClaimed] = useState(() => !!state.lastExpeditionResult && !state.activeExpedition);
 
   // Live countdown
   useEffect(() => {
@@ -145,10 +145,12 @@ export default function ExpeditionTab() {
     return () => clearInterval(id);
   }, [state.activeExpedition]);
 
-  // Reset claimed flag when new expedition starts
+  // Sync claimed flag with expedition state
   useEffect(() => {
     if (state.activeExpedition) { setClaimed(false); }
-  }, [state.activeExpedition]);
+    else if (state.lastExpeditionResult && !claimed) { setClaimed(true); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.activeExpedition, state.lastExpeditionResult]);
 
   const exp = state.activeExpedition;
   const result = state.lastExpeditionResult;

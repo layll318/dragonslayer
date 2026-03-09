@@ -81,10 +81,15 @@ async def heartbeat(player_id: int):
     """Lightweight ping — updates last_active_at only. Called every 60 s from the client."""
     pool = get_pool()
     async with pool.acquire() as conn:
-        result = await conn.execute(
-            "UPDATE game_saves SET last_active_at = NOW() WHERE player_id = $1",
-            player_id,
-        )
-        if result == "UPDATE 0":
-            raise HTTPException(status_code=404, detail="No save found for player")
+        try:
+            result = await conn.execute(
+                "UPDATE game_saves SET last_active_at = NOW() WHERE player_id = $1",
+                player_id,
+            )
+            if result == "UPDATE 0":
+                raise HTTPException(status_code=404, detail="No save found for player")
+        except HTTPException:
+            raise
+        except Exception:
+            pass  # last_active_at column may not exist yet — silently ignore
     return {"ok": True}

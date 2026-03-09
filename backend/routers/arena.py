@@ -221,7 +221,7 @@ async def attack(req: AttackRequest):
         def_trophies = max(0, int(defender_save.get("trophies", 0)) - trophies_def_lost)
 
         # ── Build defender's defense log entry ───────────────────────────────
-        attacker_name = req.attacker_id  # will be enriched below
+        attacker_name: str = f"Hero #{req.attacker_id}"  # will be enriched below
         atk_player = await conn.fetchrow("SELECT username, wallet_address FROM players WHERE id=$1", req.attacker_id)
         if atk_player:
             wallet = atk_player["wallet_address"] or ""
