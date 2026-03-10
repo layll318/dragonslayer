@@ -927,6 +927,58 @@ function DungeonSelect({ onEnter, onBack }: { onEnter: (tier: DungeonTier) => vo
   );
 }
 
+// ─── Move definitions ────────────────────────────────────────────────────────
+
+interface DungeonMove {
+  id: string;
+  label: string;
+  emoji: string;
+  desc: string;
+  cooldownMs: number;
+  color: string;
+  border: string;
+  action: 'damage' | 'guard' | 'regen';
+  dmgMult: number;
+  isExploit?: boolean;
+}
+
+const DUNGEON_MOVES: DungeonMove[] = [
+  {
+    id: 'strike',
+    label: 'Strike',    emoji: '⚔️',
+    desc: '1× dmg · instant',
+    cooldownMs: 0,
+    color: '#f0c040', border: 'rgba(240,192,64,0.4)',
+    action: 'damage', dmgMult: 1.0,
+  },
+  {
+    id: 'heavy',
+    label: 'Heavy Blow', emoji: '💥',
+    desc: '2.5× dmg · 8s CD',
+    cooldownMs: 8000,
+    color: '#f87171', border: 'rgba(248,113,113,0.4)',
+    action: 'damage', dmgMult: 2.5,
+  },
+  {
+    id: 'guard',
+    label: 'Guard',      emoji: '🛡️',
+    desc: 'Block next hit · 10s CD',
+    cooldownMs: 10000,
+    color: '#60a5fa', border: 'rgba(96,165,250,0.4)',
+    action: 'guard', dmgMult: 0,
+  },
+  {
+    id: 'exploit',
+    label: 'Exploit',    emoji: '🎯',
+    desc: '3× dmg + weakness · 15s CD',
+    cooldownMs: 15000,
+    color: '#c084fc', border: 'rgba(192,132,252,0.4)',
+    action: 'damage', dmgMult: 3.0, isExploit: true,
+  },
+];
+
+// ─── Run state ────────────────────────────────────────────────────────────────
+
 interface DungeonRunState {
   room: number;
   enemyHp: number;
@@ -937,6 +989,8 @@ interface DungeonRunState {
   goldEarned: number;
   xpEarned: number;
   materials: { type: MaterialType; quantity: number }[];
+  guardActive: boolean;
+  lastAction: string;
 }
 
 function DungeonRunScreen({ tier, onComplete }: { tier: DungeonTier; onComplete: () => void }) {
@@ -949,10 +1003,19 @@ function DungeonRunScreen({ tier, onComplete }: { tier: DungeonTier; onComplete:
     room: 1, enemyHp: firstEnemy.hp, heroHp: maxHp,
     floats: [], phase: 'fighting', won: false,
     goldEarned: 0, xpEarned: 0, materials: [],
+    guardActive: false, lastAction: '',
   });
+
+  const [moveCooldowns, setMoveCooldowns] = useState<Record<string, number>>({});
+  const [, forceRender]  = useState(0);
 
   const floatId     = useRef(0);
   const resultFired = useRef(false);
+
+  useEffect(() => {
+    const id = setInterval(() => forceRender(n => n + 1), 500);
+    return () => clearInterval(id);
+  }, []);
 
   const pushFloat = useCallback((value: string, color: string) => {
     const id = floatId.current++;
@@ -965,6 +1028,10 @@ function DungeonRunScreen({ tier, onComplete }: { tier: DungeonTier; onComplete:
     const intervalId = setInterval(() => {
       setRun(prev => {
         if (prev.phase === 'done') return prev;
+        if (prev.guardActive) {
+          setTimeout(() => pushFloat('BLOCKED!', '#60a5fa'), 0);
+          return { ...prev, guardActive: false };
+        }
         const enemy = getDungeonEnemy(tier, prev.room);
         const dmg   = Math.max(1, Math.round(enemy.atk * (1 - reduction)));
         setTimeout(() => pushFloat(`-${dmg}`, '#f87171'), 0);
@@ -976,28 +1043,54 @@ function DungeonRunScreen({ tier, onComplete }: { tier: DungeonTier; onComplete:
     return () => clearInterval(intervalId);
   }, [run.phase, run.room, tier, reduction, pushFloat]);
 
-  const handleAttack = useCallback(() => {
+  const applyKill = useCallback((prev: DungeonRunState): DungeonRunState => {
+    const isBoss = prev.room === 6;
+    const mats: { type: MaterialType; quantity: number }[] = [...prev.materials];
+    if (isBoss) {
+      for (const d of (DUNGEON_BOSS_DROPS[tier] ?? [])) mats.push({ type: d.type, quantity: d.qty });
+      const randMat = DUNGEON_COMMON_MATS[Math.floor(Math.random() * DUNGEON_COMMON_MATS.length)];
+      mats.push({ type: randMat, quantity: 2 + Math.floor(Math.random() * 3) });
+      const goldBonus = Math.floor(goldPerHour * 0.5);
+      const xpBonus   = tier * 15 * Math.max(1, state.level);
+      return { ...prev, enemyHp: 0, phase: 'done', won: true, goldEarned: goldBonus, xpEarned: xpBonus, materials: mats };
+    }
+    const nextEnemy = getDungeonEnemy(tier, prev.room + 1);
+    return { ...prev, enemyHp: nextEnemy.hp, room: prev.room + 1, materials: mats, lastAction: '' };
+  }, [tier, goldPerHour, state.level]);
+
+  const handleMove = useCallback((move: DungeonMove) => {
+    const now = Date.now();
+    if ((moveCooldowns[move.id] ?? 0) > now) return;
+
+    if (move.cooldownMs > 0) {
+      setMoveCooldowns(cd => ({ ...cd, [move.id]: now + move.cooldownMs }));
+    }
+
+    if (move.action === 'guard') {
+      setRun(prev => {
+        if (prev.phase === 'done') return prev;
+        setTimeout(() => pushFloat('GUARD!', '#60a5fa'), 0);
+        return { ...prev, guardActive: true, lastAction: '🛡️ Guarding next hit…' };
+      });
+      return;
+    }
+
     setRun(prev => {
       if (prev.phase === 'done') return prev;
-      const isCrit    = hasRing && Math.random() < 0.10;
-      const dmg       = isCrit ? atk * 2 : atk;
-      setTimeout(() => pushFloat(`+${dmg}${isCrit ? '!!' : ''}`, isCrit ? '#f0c040' : '#4ade80'), 0);
+      const isCrit = hasRing && Math.random() < 0.10;
+      const raw    = Math.round(atk * move.dmgMult);
+      const dmg    = isCrit ? raw * 2 : raw;
+      const label  = move.isExploit
+        ? `+${dmg} EXPLOIT!`
+        : isCrit ? `+${dmg} CRIT!!` : `+${dmg}`;
+      const color  = move.isExploit ? '#c084fc' : isCrit ? '#f0c040' : '#4ade80';
+      setTimeout(() => pushFloat(label, color), 0);
       const newEnemyHp = prev.enemyHp - dmg;
-      if (newEnemyHp > 0) return { ...prev, enemyHp: newEnemyHp };
-      const isBoss = prev.room === 6;
-      const mats: { type: MaterialType; quantity: number }[] = [...prev.materials];
-      if (isBoss) {
-        for (const d of (DUNGEON_BOSS_DROPS[tier] ?? [])) mats.push({ type: d.type, quantity: d.qty });
-        const randMat = DUNGEON_COMMON_MATS[Math.floor(Math.random() * DUNGEON_COMMON_MATS.length)];
-        mats.push({ type: randMat, quantity: 2 + Math.floor(Math.random() * 3) });
-        const goldBonus = Math.floor(goldPerHour * 0.5);
-        const xpBonus   = tier * 15 * Math.max(1, state.level);
-        return { ...prev, enemyHp: 0, phase: 'done', won: true, goldEarned: goldBonus, xpEarned: xpBonus, materials: mats };
-      }
-      const nextEnemy = getDungeonEnemy(tier, prev.room + 1);
-      return { ...prev, enemyHp: nextEnemy.hp, room: prev.room + 1, materials: mats };
+      const action = `${move.emoji} ${move.label}${isCrit ? ' (CRIT)' : ''}`;
+      if (newEnemyHp > 0) return { ...prev, enemyHp: newEnemyHp, lastAction: action };
+      return applyKill({ ...prev, lastAction: action });
     });
-  }, [atk, hasRing, tier, pushFloat, goldPerHour, state.level]);
+  }, [moveCooldowns, atk, hasRing, pushFloat, applyKill]);
 
   useEffect(() => {
     if (run.phase !== 'done' || resultFired.current) return;
@@ -1010,6 +1103,7 @@ function DungeonRunScreen({ tier, onComplete }: { tier: DungeonTier; onComplete:
 
   const enemy  = getDungeonEnemy(tier, run.room);
   const isBoss = run.room === 6;
+  const now    = Date.now();
 
   if (run.phase === 'done') {
     return (
@@ -1080,8 +1174,11 @@ function DungeonRunScreen({ tier, onComplete }: { tier: DungeonTier; onComplete:
           <span className="text-[9px] font-bold text-[#f87171] shrink-0">{run.heroHp}/{maxHp}</span>
         </div>
       </div>
-      <div className="px-3 mt-3 flex flex-col gap-3">
-        <div className="dragon-panel px-4 py-5 relative overflow-hidden"
+
+      <div className="px-3 mt-3 flex flex-col gap-2">
+
+        {/* Enemy card */}
+        <div className="dragon-panel px-4 py-4 relative overflow-hidden"
           style={{ border: isBoss ? `2px solid ${dungeon.border}` : '1px solid rgba(255,255,255,0.1)' }}>
           {isBoss && (
             <div className="absolute top-2 right-2 px-2 py-0.5 rounded text-[8px] font-black"
@@ -1089,35 +1186,69 @@ function DungeonRunScreen({ tier, onComplete }: { tier: DungeonTier; onComplete:
               ⚠️ BOSS
             </div>
           )}
-          <div className="relative text-center mb-4" style={{ minHeight: 90 }}>
-            <p className="text-7xl leading-none mb-2"
+          <div className="relative text-center mb-3" style={{ minHeight: 80 }}>
+            <p className="text-6xl leading-none mb-1"
               style={{ filter: isBoss ? `drop-shadow(0 0 14px ${dungeon.color}88)` : 'none' }}>
               {enemy.emoji}
             </p>
-            <p className="font-cinzel font-bold text-base" style={{ color: isBoss ? dungeon.color : '#e8d8a8' }}>{enemy.name}</p>
-            <p className="text-[9px] text-[#4a3a2a] mt-0.5">Weakness: {enemy.weakness}</p>
+            <p className="font-cinzel font-bold text-sm" style={{ color: isBoss ? dungeon.color : '#e8d8a8' }}>{enemy.name}</p>
+            <p className="text-[9px] text-[#4a3a2a] mt-0.5">⚡ Weakness: <span className="text-[#c084fc] font-bold">{enemy.weakness}</span></p>
             {run.floats.map(f => <DungeonFloatNum key={f.id} id={f.id} value={f.value} color={f.color} />)}
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[9px] text-[#f87171] font-bold shrink-0">HP</span>
-            <div className="flex-1 h-3 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.07)' }}>
+            <div className="flex-1 h-2.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.07)' }}>
               <div className="h-full rounded-full transition-all duration-300"
                 style={{ width: `${enemyPct}%`, background: `linear-gradient(90deg, ${dungeon.color}88, ${dungeon.color})` }} />
             </div>
             <span className="text-[9px] font-bold text-[#f87171] shrink-0">{run.enemyHp}/{enemy.hp}</span>
           </div>
         </div>
-        <div className="dragon-panel px-3 py-2 flex justify-around text-center">
-          <div><p className="font-bold text-[#f0c040] text-sm">⚔️ {atk}</p><p className="text-[8px] text-[#6b5a3a]">Atk</p></div>
-          <div><p className="font-bold text-[#60a5fa] text-sm">🛡️ {Math.round(reduction * 100)}%</p><p className="text-[8px] text-[#6b5a3a]">Block</p></div>
-          <div><p className="font-bold text-[#4ade80] text-sm">❤️ {run.heroHp}</p><p className="text-[8px] text-[#6b5a3a]">HP</p></div>
-          {hasRing && <div><p className="font-bold text-[#c084fc] text-sm">💍 10%</p><p className="text-[8px] text-[#6b5a3a]">Crit</p></div>}
+
+        {/* Status line */}
+        <div className="flex items-center justify-between px-1">
+          <p className="text-[9px]" style={{ color: run.guardActive ? '#60a5fa' : '#4a3a2a' }}>
+            {run.guardActive ? '🛡️ Guard active — next hit blocked' : run.lastAction || '— Choose your move —'}
+          </p>
+          <div className="flex gap-2 text-[8px] text-[#6b5a3a]">
+            <span>⚔️ {atk}</span>
+            <span>🛡️ {Math.round(reduction * 100)}%</span>
+            {hasRing && <span>💍10%</span>}
+          </div>
         </div>
-        <button onClick={handleAttack}
-          className="action-btn w-full py-5 font-black tracking-widest active:scale-95 transition-transform"
-          style={{ fontSize: 20, letterSpacing: '0.1em' }}>
-          ⚔️ ATTACK
-        </button>
+
+        {/* Move grid */}
+        <div className="grid grid-cols-2 gap-2">
+          {DUNGEON_MOVES.map(move => {
+            const cdUntil  = moveCooldowns[move.id] ?? 0;
+            const onCd     = cdUntil > now;
+            const cdSec    = onCd ? Math.ceil((cdUntil - now) / 1000) : 0;
+            const isGuardOn = move.id === 'guard' && run.guardActive;
+            return (
+              <button
+                key={move.id}
+                onClick={() => handleMove(move)}
+                disabled={onCd}
+                className="flex flex-col items-center justify-center py-3 px-2 rounded-xl font-bold transition-all active:scale-95"
+                style={{
+                  background: onCd ? 'rgba(255,255,255,0.03)' : isGuardOn ? `${move.color}22` : `${move.color}18`,
+                  border: `1px solid ${onCd ? 'rgba(255,255,255,0.08)' : isGuardOn ? move.color : move.border}`,
+                  opacity: onCd ? 0.55 : 1,
+                  boxShadow: isGuardOn ? `0 0 10px ${move.color}44` : 'none',
+                }}
+              >
+                <span className="text-2xl mb-1">{move.emoji}</span>
+                <span className="text-[10px] font-black tracking-wide" style={{ color: onCd ? '#4a3a2a' : move.color }}>
+                  {move.label}
+                </span>
+                <span className="text-[8px] mt-0.5" style={{ color: '#6b5a3a' }}>
+                  {onCd ? `${cdSec}s` : move.desc}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
       </div>
     </div>
   );
