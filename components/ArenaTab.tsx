@@ -814,7 +814,7 @@ function DragonDenTab({ onSwitchToArena }: { onSwitchToArena: () => void }) {
   const calcScore = (gridState: Record<number, string>): ScoreDetail => {
     const placedCells = Object.keys(gridState).map(Number);
     const placedBuildingIds = Object.values(gridState);
-    const uniqueTypes = [...new Set(placedBuildingIds)];
+    const uniqueTypes = Array.from(new Set(placedBuildingIds));
     const troopSum = uniqueTypes.reduce((sum, bid) => {
       const info = BUILDING_TROOP_INFO[bid];
       const building = state.buildings.find(b => b.id === bid);
@@ -1103,7 +1103,7 @@ function DragonDenTab({ onSwitchToArena }: { onSwitchToArena: () => void }) {
                 </span>
               </div>
               <div className="flex flex-wrap gap-1">
-                {[...new Set(Object.values(grid))].map(bid => {
+                {Array.from(new Set(Object.values(grid))).map(bid => {
                   const info = BUILDING_TROOP_INFO[bid];
                   const bld = state.buildings.find(b => b.id === bid);
                   if (!info || !bld) return null;
