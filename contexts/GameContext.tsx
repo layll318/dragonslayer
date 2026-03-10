@@ -66,6 +66,7 @@ export interface HatchedDragon {
 export interface DefenseLogEntry {
   attackerName: string;
   trophiesLost: number;
+  trophiesWon: number;
   goldLost: number;
   result: 'win' | 'loss';
   ts: number;

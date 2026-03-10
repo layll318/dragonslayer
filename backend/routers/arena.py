@@ -199,6 +199,7 @@ async def attack(req: AttackRequest):
         trophies_won      = math.ceil(BASE_TROPHY_WIN  * gain_mult) if win  else 0
         trophies_atk_lost = BASE_TROPHY_LOSS                         if not win else 0
         trophies_def_lost = math.ceil(trophies_won / 4)              if win  else 0
+        trophies_def_won  = BASE_TROPHY_LOSS                         if not win else 0
 
         # ── Season soft-reset (apply on first attack of a new month) ────────
         current_month = today[:7]  # "YYYY-MM"
@@ -218,7 +219,7 @@ async def attack(req: AttackRequest):
 
         # ── New trophy totals ────────────────────────────────────────────────
         atk_trophies = max(0, int(attacker_save.get("trophies", 0)) + trophies_won - trophies_atk_lost)
-        def_trophies = max(0, int(defender_save.get("trophies", 0)) - trophies_def_lost)
+        def_trophies = max(0, int(defender_save.get("trophies", 0)) - trophies_def_lost + trophies_def_won)
 
         # ── Build defender's defense log entry ───────────────────────────────
         attacker_name: str = f"Hero #{req.attacker_id}"  # will be enriched below
@@ -236,6 +237,7 @@ async def attack(req: AttackRequest):
         defense_entry = {
             "attackerName": attacker_name,
             "trophiesLost": trophies_def_lost,
+            "trophiesWon": trophies_def_won,
             "goldLost": gold_stolen if win else 0,
             "result": "loss" if win else "win",
             "ts": int(datetime.now(timezone.utc).timestamp() * 1000),

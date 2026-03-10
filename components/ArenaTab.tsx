@@ -387,7 +387,7 @@ export default function ArenaTab() {
                   <p className="text-[8px] text-[#6b5a3a]">
                     {e.result === 'loss'
                       ? `${e.goldLost > 0 ? `-${formatNumber(e.goldLost)} gold` : 'no gold lost'}${e.trophiesLost > 0 ? ` · -${e.trophiesLost} 🏅 trophies` : ''}`
-                      : `Your walls held — no gold or trophies lost`
+                      : `Your walls held${(e.trophiesWon ?? 0) > 0 ? ` · +${e.trophiesWon} 🏅 trophies` : ' — no gold or trophies lost'}`
                     }
                   </p>
                 </div>
