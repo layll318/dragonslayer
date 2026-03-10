@@ -793,10 +793,17 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       if (saved.walletAddress) {
         const apiUrl2 = process.env.NEXT_PUBLIC_API_URL ?? '';
         if (apiUrl2) {
+          const tgUser2 = typeof window !== 'undefined'
+            ? (window as any).Telegram?.WebApp?.initDataUnsafe?.user
+            : null;
           fetch(`${apiUrl2}/api/auth/wallet`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ wallet_address: saved.walletAddress }),
+            body: JSON.stringify({
+              wallet_address: saved.walletAddress,
+              telegram_id: tgUser2?.id ?? undefined,
+              telegram_username: tgUser2?.username ?? tgUser2?.first_name ?? undefined,
+            }),
           })
             .then(r => r.json())
             .then(async data => {

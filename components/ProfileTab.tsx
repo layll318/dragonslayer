@@ -36,7 +36,7 @@ const TIER_ICONS = ['🧑‍🌾', '🛡️', '⚔️', '🐲', '👑'];
 const TIER_LEVELS = [1, 10, 25, 50, 80];
 
 export default function ProfileTab() {
-  const { state, goldPerHour, goldPerTap, getCharacterTier, connectWallet, disconnectWallet, resetArenaAttacks, setDisplayName, forceSave, refreshTokenDiscount } = useGame();
+  const { state, goldPerHour, goldPerTap, getCharacterTier, connectWallet, disconnectWallet, setDisplayName, forceSave, refreshTokenDiscount } = useGame();
   const { user, isTWA } = useTelegramWebApp();
 
   const [editingName, setEditingName] = useState(false);
@@ -67,7 +67,6 @@ export default function ProfileTab() {
   const [lbLastRefresh, setLbLastRefresh] = useState(0);
   const [lbSeasonMonth, setLbSeasonMonth] = useState<string>('');
 
-  const [showDebug, setShowDebug] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string>('');
   const [refreshingDiscount, setRefreshingDiscount] = useState(false);
@@ -86,76 +85,6 @@ export default function ProfileTab() {
     const id = setInterval(tick, 60_000);
     return () => clearInterval(id);
   }, []);
-  const [pingResult, setPingResult] = useState<string>('');
-  const [pinging, setPinging] = useState(false);
-  const [arenaResult, setArenaResult] = useState<string>('');
-  const [arenaLoading, setArenaLoading] = useState(false);
-  const [relinkResult, setRelinkResult] = useState<string>('');
-  const [relinking, setRelinking] = useState(false);
-
-  const API_URL = typeof process !== 'undefined' ? (process.env.NEXT_PUBLIC_API_URL ?? '') : '';
-
-  const testConnection = useCallback(async () => {
-    setPinging(true);
-    setPingResult('…');
-    try {
-      const t0 = Date.now();
-      const res = await fetch(`${API_URL}/health`, { cache: 'no-store' });
-      const ms = Date.now() - t0;
-      if (res.ok) {
-        const data = await res.json();
-        setPingResult(`✅ ${res.status} OK (${ms}ms) db=${data.db ?? '?'}`);
-      } else {
-        setPingResult(`⚠️ ${res.status} (${ms}ms)`);
-      }
-    } catch (e: any) {
-      setPingResult(`❌ ${e?.message ?? 'network error'}`);
-    }
-    setPinging(false);
-  }, [API_URL]);
-
-  const testArena = useCallback(async () => {
-    if (!state.playerId) { setArenaResult('❌ no playerId — not authed'); return; }
-    setArenaLoading(true);
-    setArenaResult('…');
-    try {
-      const t0 = Date.now();
-      const res = await fetch(`${API_URL}/api/arena/opponents?player_id=${state.playerId}`, { cache: 'no-store' });
-      const ms = Date.now() - t0;
-      const text = await res.text();
-      let detail = '';
-      try { detail = JSON.parse(text)?.detail ?? ''; } catch {}
-      setArenaResult(`${res.ok ? '✅' : '❌'} ${res.status} (${ms}ms)${detail ? ': ' + detail : ''} | raw: ${text.slice(0, 80)}`);
-    } catch (e: any) {
-      setArenaResult(`❌ ${e?.message ?? 'CORS/network'} — CORS not set on backend`);
-    }
-    setArenaLoading(false);
-  }, [API_URL, state.playerId]);
-
-  const relinkWallet = useCallback(async () => {
-    if (!state.walletAddress) { setRelinkResult('❌ no wallet connected'); return; }
-    setRelinking(true);
-    setRelinkResult('…');
-    try {
-      const t0 = Date.now();
-      const res = await fetch(`${API_URL}/api/auth/wallet`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ wallet_address: state.walletAddress, player_id: state.playerId ?? undefined }),
-      });
-      const ms = Date.now() - t0;
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setRelinkResult(`✅ ${res.status} (${ms}ms) → playerId=${data.player_id} tg=${data.telegram_id ?? 'null'} new=${data.is_new}`);
-      } else {
-        setRelinkResult(`⚠️ ${res.status} (${ms}ms): ${data.detail ?? JSON.stringify(data).slice(0,60)}`);
-      }
-    } catch (e: any) {
-      setRelinkResult(`❌ ${e?.message ?? 'CORS/network'}`);
-    }
-    setRelinking(false);
-  }, [API_URL, state.walletAddress, state.playerId]);
-
   const loadLeaderboard = useCallback(async () => {
     setLbLoading(true); setLbError(null);
     try {
@@ -461,118 +390,6 @@ export default function ProfileTab() {
             )}
           </div>
         )}
-
-        {/* ═══ DEBUG ═══ */}
-        <div className="dragon-panel p-3">
-          <button
-            onClick={() => setShowDebug(v => !v)}
-            className="w-full flex items-center justify-between text-[11px] font-mono text-[#8a7a5a] hover:text-[#a89878] transition-colors"
-          >
-            <span>🔧 DEBUG</span>
-            <span>{showDebug ? '▲ hide' : '▼ show'}</span>
-          </button>
-          {showDebug && (
-            <div className="mt-2 space-y-1.5">
-              <div className="p-2 rounded-lg bg-black/40 border border-white/5 space-y-1">
-                <p className="text-[12px] font-mono text-[#8a7a5a] break-all leading-relaxed">
-                  <span className="text-[#a89878]">API_URL: </span>{API_URL || '(empty — not set!)'}
-                </p>
-                <p className="text-[12px] font-mono text-[#8a7a5a] break-all leading-relaxed">
-                  <span className="text-[#a89878]">wallet: </span>{state.walletAddress ?? 'null'}
-                </p>
-                <p className="text-[12px] font-mono text-[#8a7a5a] leading-relaxed">
-                  <span className="text-[#a89878]">playerId: </span>{state.playerId ?? 'null'}
-                </p>
-                <p className="text-[12px] font-mono text-[#8a7a5a] leading-relaxed">
-                  <span className="text-[#a89878]">synced: </span>{String(state.isSynced)}
-                </p>
-                <p className="text-[12px] font-mono text-[#8a7a5a] leading-relaxed">
-                  <span className="text-[#a89878]">level: </span>{state.level}
-                </p>
-                <p className="text-[12px] font-mono text-[#8a7a5a] leading-relaxed">
-                  <span className="text-[#a89878]">gold: </span>{Math.floor(state.gold)}
-                </p>
-                <p className="text-[12px] font-mono text-[#8a7a5a] leading-relaxed">
-                  <span className="text-[#a89878]">arenaAttacksToday: </span>{state.arenaAttacksToday ?? 0}
-                </p>
-                <p className="text-[12px] font-mono text-[#8a7a5a] leading-relaxed">
-                  <span className="text-[#a89878]">arenaLastReset: </span>{state.arenaLastReset || 'not set'}
-                </p>
-                <p className="text-[12px] font-mono text-[#8a7a5a] leading-relaxed">
-                  <span className="text-[#a89878]">arenaPoints: </span>{state.arenaPoints ?? 0}
-                </p>
-                {state.tokenDiscount && (
-                  <>
-                    <p className="text-[12px] font-mono text-[#8a7a5a] leading-relaxed">
-                      <span className="text-[#a89878]">token.pct: </span>{state.tokenDiscount.pct}%
-                    </p>
-                    <p className="text-[12px] font-mono text-[#8a7a5a] leading-relaxed">
-                      <span className="text-[#a89878]">lynx: </span>{String(state.tokenDiscount.lynx)} <span className="text-[#6a5a3a]">(bal: {state.tokenDiscount.lynxBalance})</span>
-                    </p>
-                    <p className="text-[12px] font-mono text-[#8a7a5a] leading-relaxed">
-                      <span className="text-[#a89878]">xrpnomics: </span>{String(state.tokenDiscount.xrpnomics)} <span className="text-[#6a5a3a]">(bal: {state.tokenDiscount.xrpnomicsBalance})</span>
-                    </p>
-                    <p className="text-[12px] font-mono text-[#8a7a5a] leading-relaxed">
-                      <span className="text-[#a89878]">dragonslayer: </span>{String(state.tokenDiscount.dragonslayer)} <span className="text-[#6a5a3a]">(bal: {state.tokenDiscount.dragonslayerBalance})</span>
-                    </p>
-                  </>
-                )}
-                {isTWA && user && (
-                  <p className="text-[12px] font-mono text-[#8a7a5a] leading-relaxed">
-                    <span className="text-[#a89878]">tgId: </span>{user.id}
-                  </p>
-                )}
-              </div>
-              <button
-                onClick={testConnection}
-                disabled={pinging}
-                className="w-full py-1.5 rounded-lg text-[9px] font-bold transition-all active:scale-95"
-                style={{ border: '1px solid rgba(212,160,23,0.3)', color: '#d4a017', background: 'rgba(212,160,23,0.06)', opacity: pinging ? 0.6 : 1 }}
-              >
-                {pinging ? 'Testing…' : 'Test /health'}
-              </button>
-              {pingResult && (
-                <p className="text-[12px] font-mono text-[#8a7a5a] break-all px-1">{pingResult}</p>
-              )}
-              <button
-                onClick={testArena}
-                disabled={arenaLoading}
-                className="w-full py-1.5 rounded-lg text-[9px] font-bold transition-all active:scale-95"
-                style={{ border: '1px solid rgba(100,150,255,0.3)', color: '#7aabff', background: 'rgba(100,150,255,0.06)', opacity: arenaLoading ? 0.6 : 1 }}
-              >
-                {arenaLoading ? 'Testing…' : 'Test Arena Opponents'}
-              </button>
-              {arenaResult && (
-                <p className="text-[12px] font-mono text-[#8a7a5a] break-all px-1">{arenaResult}</p>
-              )}
-              <button
-                onClick={relinkWallet}
-                disabled={relinking}
-                className="w-full py-1.5 rounded-lg text-[9px] font-bold transition-all active:scale-95"
-                style={{ border: '1px solid rgba(100,220,100,0.3)', color: '#6ddc6d', background: 'rgba(100,220,100,0.06)', opacity: relinking ? 0.6 : 1 }}
-              >
-                {relinking ? 'Linking…' : 'Re-link Wallet → This Account'}
-              </button>
-              {relinkResult && (
-                <p className="text-[12px] font-mono text-[#8a7a5a] break-all px-1">{relinkResult}</p>
-              )}
-              <button
-                onClick={resetArenaAttacks}
-                className="w-full py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95"
-                style={{ border: '1px solid rgba(248,113,113,0.3)', color: '#f87171', background: 'rgba(248,113,113,0.06)' }}
-              >
-                🔄 Force Reset Arena Attacks
-              </button>
-              <button
-                onClick={() => { localStorage.clear(); window.location.reload(); }}
-                className="w-full py-1.5 rounded-lg text-[11px] font-bold transition-all active:scale-95"
-                style={{ border: '1px solid rgba(255,100,100,0.3)', color: '#ff6060', background: 'rgba(255,60,60,0.06)' }}
-              >
-                🗑️ Clear LocalStorage + Reload
-              </button>
-            </div>
-          )}
-        </div>
 
         {/* ═══ TIER PROGRESSION ═══ */}
         <div className="dragon-panel p-4">

@@ -141,7 +141,7 @@ export default function ArenaTab() {
       if (data.success) setOpponents(data.opponents);
       else setError(data.detail || 'Failed to load opponents');
     } catch (e: any) {
-      setError(`Network error: ${e?.message ?? 'CORS or unreachable'} — check console`);
+      setError(`Network error: ${e?.message ?? 'Could not reach server'}`);
     } finally {
       setLoading(false);
     }

@@ -34,9 +34,6 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
   const [uuid, setUuid] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showQr, setShowQr] = useState(false);
-  const [debugInfo, setDebugInfo] = useState<string>('');
-  const [pollCount, setPollCount] = useState(0);
-  const pollCountRef = useRef(0);       // ref so doPoll never needs pollCount as a dep
   const signedNoAcctRef = useRef(0);   // how many times signed=true but account=null
 
   // Refs so interval callbacks always have fresh values without recreating
@@ -68,21 +65,11 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
     try {
       const res = await fetch(`/frontend-api/wallet/payload?uuid=${id}&_t=${Date.now()}`, { cache: 'no-store' });
 
-      pollCountRef.current += 1;
-      setPollCount(pollCountRef.current);
-
       if (!res.ok) {
-        setDebugInfo(`HTTP ${res.status} from poll API`);
         return; // transient — keep trying
       }
 
       const data = await res.json();
-      const d = data._dbg || {};
-      setDebugInfo(
-        `#${pollCountRef.current} signed=${data.signed} acct=${data.account ?? 'null'} ` +
-        `resp.acct=${d.resp_account ?? '-'} resp.sgn=${d.resp_signer ?? '-'} ` +
-        `signers=${JSON.stringify(d.signers)} resolved=${data.resolved}`
-      );
 
       // Success: signed. Don't require "resolved" — Xaman can set signed=true
       // slightly before resolved=true, causing misses if we require both.
@@ -115,8 +102,7 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
         setPhase('error');
         setErrorMsg(data.cancelled ? 'Sign-in was cancelled.' : 'Request expired — please try again.');
       }
-    } catch (e: any) {
-      setDebugInfo(`fetch error: ${e?.message}`);
+    } catch {
       // Network error — keep trying until timeout fires
     }
   }, [clearTimers]);
@@ -248,7 +234,6 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
           ws.onmessage = (ev) => {
             try {
               const msg = JSON.parse(ev.data);
-              setDebugInfo(prev => `WS: ${JSON.stringify(msg).slice(0,80)} | ${prev}`);
               // Xaman pushes {signed:true} or {expired:true} etc.
               if (msg.signed === true) {
                 // Signed! Poll immediately to get account address.
@@ -263,7 +248,7 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
               }
             } catch { /* non-JSON message, ignore */ }
           };
-          ws.onerror = () => setDebugInfo(prev => `WS error | ${prev}`);
+          ws.onerror = () => {};
           ws.onclose = () => { if (wsRef.current === ws) wsRef.current = null; };
         } catch { /* WebSocket not available */ }
       }
@@ -332,7 +317,7 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
   }
 
   // ── 'waiting' phase ──
-  const mobile = isMobileDevice();
+  const mobile = isMobileDevice() || isTelegramWebApp();
   const inTelegram = isTelegramWebApp();
 
   return (
@@ -461,12 +446,6 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
           </div>
         )}
 
-        {inTelegram && (
-          <p className="text-[9px] text-[#4a3a2a] text-center mb-2">
-            Tap "Open Xaman App", approve in Xaman, then return here.
-          </p>
-        )}
-
         <div className="flex justify-end">
           <button
             onClick={cancel}
@@ -474,14 +453,6 @@ export default function XamanConnect({ onConnected }: XamanConnectProps) {
           >
             Cancel
           </button>
-        </div>
-
-        {/* DEBUG — visible in UI so you can screenshot & report */}
-        <div className="mt-2 p-2 rounded-lg bg-black/40 border border-white/5">
-          <p className="text-[8px] font-mono text-[#4a3a2a] break-all leading-relaxed">
-            polls: {pollCount} | uuid: {uuid?.slice(0,8) ?? 'none'}<br/>
-            {debugInfo || 'waiting…'}
-          </p>
         </div>
       </div>
     </div>
