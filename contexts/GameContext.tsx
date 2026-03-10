@@ -187,6 +187,7 @@ export interface GameState {
   merchantDeals: MerchantDeal[];
   merchantExpiresAt: number | null;
   merchantLastDate: string;
+  questFormulaVersion?: string;
   // Arena PvP
   arenaAttacksToday: number;
   arenaPoints: number;
@@ -587,7 +588,7 @@ function generateDailyQuests(level: number, gph = 0): DailyQuest[] {
       description: `Earn ${goldTarget.toLocaleString()} gold by tapping`,
       target: goldTarget,
       progress: 0,
-      reward: Math.max(Math.floor(goldTarget * 0.6), Math.floor(gph * 0.25)),
+      reward: Math.max(Math.floor(goldTarget * 0.6), Math.floor(gph * 1.0)),
       completed: false,
       claimed: false,
     },
@@ -597,7 +598,7 @@ function generateDailyQuests(level: number, gph = 0): DailyQuest[] {
       description: `Buy ${buildTarget} building${buildTarget > 1 ? 's' : ''}`,
       target: buildTarget,
       progress: 0,
-      reward: Math.max(Math.floor(level * 80 + 200), Math.floor(gph * 0.20)),
+      reward: Math.max(Math.floor(level * 80 + 200), Math.floor(gph * 0.75)),
       completed: false,
       claimed: false,
     },
@@ -607,7 +608,7 @@ function generateDailyQuests(level: number, gph = 0): DailyQuest[] {
       description: 'Complete 1 expedition',
       target: 1,
       progress: 0,
-      reward: Math.max(Math.floor(level * 50 + 150), Math.floor(gph * 0.15)),
+      reward: Math.max(Math.floor(level * 50 + 150), Math.floor(gph * 0.50)),
       completed: false,
       claimed: false,
     },
@@ -736,7 +737,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
       // Migrate daily quests — replace full_care with complete_expedition if needed
       const savedGph = migratedBuildings.reduce((sum, b) => sum + b.baseIncome * b.owned, 0);
-      const rawQuests = isNewDay
+      const QUEST_VERSION = 'v3';
+      const needsQuestRefresh = (saved as any).questFormulaVersion !== QUEST_VERSION;
+      const rawQuests = (isNewDay || needsQuestRefresh)
         ? generateDailyQuests(saved.level, savedGph)
         : (saved.dailyQuests || generateDailyQuests(saved.level, savedGph));
       const newQuests = rawQuests.map((q: DailyQuest) =>
@@ -774,9 +777,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         eggInventory: saved.eggInventory || [],
         incubator: (saved.incubator?.length ? saved.incubator : [{ egg: null, startedAt: null, endsAt: null }]),
         hatchedDragons: saved.hatchedDragons || [],
-        merchantDeals: saved.merchantDeals || [],
-        merchantExpiresAt: saved.merchantExpiresAt ?? null,
-        merchantLastDate: saved.merchantLastDate || '',
+        merchantDeals: needsQuestRefresh ? [] : (saved.merchantDeals || []),
+        merchantExpiresAt: needsQuestRefresh ? null : (saved.merchantExpiresAt ?? null),
+        merchantLastDate: needsQuestRefresh ? '' : (saved.merchantLastDate || ''),
+        questFormulaVersion: 'v3',
         arenaAttacksToday: saved.arenaAttacksToday || 0,
         arenaPoints: saved.arenaPoints || 0,
         arenaLastReset: saved.arenaLastReset || '',
