@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/arena", tags=["arena"])
 
 MAX_ATTACKS_PER_DAY = 5
-GOLD_STEAL_PCT = 0.10  # 10% of opponent's current gold
+GOLD_STEAL_PCT = 0.15  # 15% of opponent's current gold
 
 
 class AttackRequest(BaseModel):

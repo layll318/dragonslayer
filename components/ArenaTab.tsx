@@ -176,7 +176,7 @@ export default function ArenaTab() {
       const effAtk = Math.round(armyPower * fm.atkMod * rand);
       const effDef = Math.round(selected.defense_power * fm.defMod * (0.85 + Math.random() * 0.30));
       const win = isStarterBot ? true : (effAtk > effDef);
-      const goldStolen = win ? Math.floor(selected.idle_gold * 0.10) : 0;
+      const goldStolen = win ? Math.floor(selected.idle_gold * 0.15) : 0;
       const trophiesWon = win ? (isHardBot ? 8 : isStarterBot ? 1 : 3) : 0;
       const trophiesLost = !win && isHardBot ? 5 : 0;
       for (let i = 0; i < 3; i++) {
@@ -752,13 +752,13 @@ const DRAGON_TYPES = [
   },
 ];
 
-const BUILDING_TROOP_INFO: Record<string, { emoji: string; name: string }> = {
-  barracks:      { emoji: '🪖', name: 'Infantry'   },
-  archery_range: { emoji: '🏹', name: 'Archer'     },
-  stables:       { emoji: '🐴', name: 'Cavalry'    },
-  war_forge:     { emoji: '⚒️', name: 'Rune Knight' },
-  war_camp:      { emoji: '⛺', name: 'Regiment'   },
-  castle:        { emoji: '🏰', name: 'Elite Guard' },
+const BUILDING_TROOP_INFO: Record<string, { emoji: string; name: string; armyPower: number }> = {
+  barracks:      { emoji: '🪖', name: 'Infantry',    armyPower: 1  },
+  archery_range: { emoji: '🏹', name: 'Archer',      armyPower: 3  },
+  stables:       { emoji: '🐴', name: 'Cavalry',     armyPower: 6  },
+  war_forge:     { emoji: '⚒️', name: 'Rune Knight', armyPower: 12 },
+  war_camp:      { emoji: '⛺', name: 'Regiment',    armyPower: 25 },
+  castle:        { emoji: '🏰', name: 'Elite Guard', armyPower: 50 },
 };
 const BUILDING_ORDER = ['barracks', 'archery_range', 'stables', 'war_forge', 'war_camp', 'castle'];
 
@@ -775,8 +775,19 @@ interface DenResult {
   rewards: DungeonRewards;
 }
 
+interface ScoreDetail {
+  score: number;
+  troopSum: number;
+  heroBonus: number;
+  placementMult: number;
+  hasWeakness: boolean;
+  weaknessMult: number;
+  adjacencyBonus: number;
+  distanceBonus: number;
+}
+
 function DragonDenTab({ onSwitchToArena }: { onSwitchToArena: () => void }) {
-  const { state, armyPower, recordDungeonRaid } = useGame();
+  const { state, recordDungeonRaid } = useGame();
   const [grid, setGrid] = useState<Record<number, string>>({});
   const [selectedTroop, setSelectedTroop] = useState<string | null>(null);
   const [denResult, setDenResult] = useState<DenResult | null>(null);
@@ -789,7 +800,7 @@ function DragonDenTab({ onSwitchToArena }: { onSwitchToArena: () => void }) {
   const onCooldown = !isNewDay && attemptsLeft < 5 && Date.now() < (state.dungeonCooldownUntil ?? 0);
 
   const dungeonTier = Math.floor(state.level / 5) + 1;
-  const dragonHp = 100 + dungeonTier * 40;
+  const dragonHp = dungeonTier * 15;
 
   const dayIndex = Math.floor(Date.now() / 86400000);
   const dragon = DRAGON_TYPES[dayIndex % 4];
@@ -800,23 +811,17 @@ function DragonDenTab({ onSwitchToArena }: { onSwitchToArena: () => void }) {
 
   const gph = state.buildings.reduce((sum, b) => sum + b.baseIncome * b.owned, 0);
 
-  const handleCellTap = (cellIdx: number) => {
-    if (dragon.occupies.includes(cellIdx)) return;
-    if (selectedTroop) {
-      setGrid(prev => ({ ...prev, [cellIdx]: selectedTroop }));
-      setSelectedTroop(null);
-    } else if (grid[cellIdx]) {
-      setGrid(prev => { const n = { ...prev }; delete n[cellIdx]; return n; });
-    }
-  };
-
-  const handleTroopSelect = (buildingId: string) => {
-    setSelectedTroop(prev => prev === buildingId ? null : buildingId);
-  };
-
-  const calcScore = (gridState: Record<number, string>) => {
+  const calcScore = (gridState: Record<number, string>): ScoreDetail => {
     const placedCells = Object.keys(gridState).map(Number);
     const placedBuildingIds = Object.values(gridState);
+    const uniqueTypes = [...new Set(placedBuildingIds)];
+    const troopSum = uniqueTypes.reduce((sum, bid) => {
+      const info = BUILDING_TROOP_INFO[bid];
+      const building = state.buildings.find(b => b.id === bid);
+      if (!info || !building) return sum;
+      return sum + info.armyPower * building.owned;
+    }, 0);
+    const heroBonus = state.level * 3;
     let adjacencyBonus = 0;
     for (let i = 0; i < placedCells.length; i++) {
       for (let j = i + 1; j < placedCells.length; j++) {
@@ -832,14 +837,36 @@ function DragonDenTab({ onSwitchToArena }: { onSwitchToArena: () => void }) {
     const placementMult = 1.0 + adjacencyBonus + distanceBonus;
     const hasWeakness = placedBuildingIds.includes(dragon.weaknessBuildingId);
     const weaknessMult = hasWeakness ? 1.35 : 0.8;
-    return Math.round(armyPower * placementMult * weaknessMult);
+    const score = Math.round((troopSum + heroBonus) * placementMult * weaknessMult);
+    return { score, troopSum, heroBonus, placementMult, hasWeakness, weaknessMult, adjacencyBonus, distanceBonus };
+  };
+
+  const handleCellTap = (cellIdx: number) => {
+    if (dragon.occupies.includes(cellIdx)) return;
+    if (selectedTroop) {
+      setGrid(prev => {
+        const n = { ...prev };
+        for (const k of Object.keys(n)) {
+          if (n[parseInt(k)] === selectedTroop) delete n[parseInt(k)];
+        }
+        n[cellIdx] = selectedTroop;
+        return n;
+      });
+      setSelectedTroop(null);
+    } else if (grid[cellIdx]) {
+      setGrid(prev => { const n = { ...prev }; delete n[cellIdx]; return n; });
+    }
+  };
+
+  const handleTroopSelect = (buildingId: string) => {
+    setSelectedTroop(prev => prev === buildingId ? null : buildingId);
   };
 
   const handleRaid = async () => {
     if (attemptsLeft <= 0 || onCooldown || raiding || Object.keys(grid).length === 0) return;
     setRaiding(true);
     await new Promise(r => setTimeout(r, 1800));
-    const score = calcScore(grid);
+    const { score } = calcScore(grid);
     let outcome: 'victory' | 'partial' | 'defeat';
     if (score >= dragonHp) outcome = 'victory';
     else if (score >= dragonHp * 0.6) outcome = 'partial';
@@ -856,12 +883,15 @@ function DragonDenTab({ onSwitchToArena }: { onSwitchToArena: () => void }) {
     setSelectedTroop(null);
   };
 
+  const placedCount = Object.keys(grid).length;
+  const scoreDetail = placedCount > 0 ? calcScore(grid) : null;
+
   if (raiding) {
     return (
       <div className="fixed inset-0 z-50 flex flex-col items-center justify-center"
-        style={{ background: 'linear-gradient(180deg,#0c0804 0%,#1a0804 100%)' }}>
+        style={{ background: 'linear-gradient(180deg,#0c0804 0%,#200804 100%)' }}>
         <div className="text-center">
-          <p className="text-6xl mb-4" style={{ animation: 'float 1s ease-in-out infinite' }}>{dragon.emoji}</p>
+          <p className="text-8xl mb-6" style={{ filter: 'drop-shadow(0 0 24px rgba(239,68,68,0.8))', animation: 'float 1s ease-in-out infinite' }}>{dragon.emoji}</p>
           <p className="font-cinzel text-[#f0c040] font-black text-xl tracking-widest">🗡️ RAIDING 🗡️</p>
           <p className="text-[#6b5a3a] text-sm mt-2">Your forces charge the dungeon…</p>
         </div>
@@ -879,7 +909,7 @@ function DragonDenTab({ onSwitchToArena }: { onSwitchToArena: () => void }) {
         <DenHeader attemptsLeft={attemptsLeft} dungeonTier={dungeonTier} onSwitchToArena={onSwitchToArena} />
         <div className="px-3 mt-4 flex flex-col gap-3">
           <div className="dragon-panel px-4 py-6 text-center">
-            <p className="text-5xl mb-3">{outcomeEmoji}</p>
+            <p className="text-6xl mb-3">{outcomeEmoji}</p>
             <p className="font-cinzel font-black text-2xl tracking-wider mb-1" style={{ color: outcomeColor }}>{outcomeLabel}</p>
             <p className="text-[#6b5a3a] text-xs mb-4">{dragon.name} — Score {score} vs {dragonHp} HP</p>
             {rewards.goldEarned > 0 && (
@@ -893,9 +923,15 @@ function DragonDenTab({ onSwitchToArena }: { onSwitchToArena: () => void }) {
             )}
             {rewards.materials.length > 0 && (
               <div className="flex flex-wrap justify-center gap-1 mb-2">
-                {rewards.materials.slice(0, 4).map((m, i) => (
+                {rewards.materials.map((m, i) => (
                   <span key={i} className="px-2 py-0.5 rounded text-[9px] font-bold"
-                    style={{ background: 'rgba(212,160,23,0.12)', border: '1px solid rgba(212,160,23,0.25)', color: '#f0c040' }}>
+                    style={{
+                      background: (m.type === 'lynx_fang' || m.type === 'nomic_core')
+                        ? 'rgba(192,132,252,0.15)' : 'rgba(212,160,23,0.12)',
+                      border: (m.type === 'lynx_fang' || m.type === 'nomic_core')
+                        ? '1px solid rgba(192,132,252,0.4)' : '1px solid rgba(212,160,23,0.25)',
+                      color: (m.type === 'lynx_fang' || m.type === 'nomic_core') ? '#c084fc' : '#f0c040',
+                    }}>
                     +{m.quantity}× {MATERIAL_LABELS[m.type]}
                   </span>
                 ))}
@@ -924,31 +960,37 @@ function DragonDenTab({ onSwitchToArena }: { onSwitchToArena: () => void }) {
     );
   }
 
-  const placedCount = Object.keys(grid).length;
-  const estScore = placedCount > 0 ? calcScore(grid) : null;
-
   return (
     <div className="flex flex-col flex-1 pb-4 overflow-y-auto relative z-10 page-fade">
       <DenHeader attemptsLeft={attemptsLeft} dungeonTier={dungeonTier} onSwitchToArena={onSwitchToArena} />
       <div className="px-3 mt-2 flex flex-col gap-3">
 
-        {/* Dragon info */}
-        <div className="dragon-panel px-3 py-3">
-          <div className="flex items-center gap-3 mb-2">
-            <span className="text-4xl">{dragon.emoji}</span>
-            <div className="flex-1 min-w-0">
-              <p className="font-cinzel font-bold text-[#f0c040] text-sm">{dragon.name}</p>
-              <p className="text-[#6b5a3a] text-[10px] leading-snug">{dragon.desc}</p>
-            </div>
-            <div className="text-right flex-shrink-0">
-              <p className="font-cinzel font-bold text-[#f87171] text-sm">{dragonHp} HP</p>
-              <p className="text-[8px] text-[#6b5a3a]">Tier {dungeonTier}</p>
+        {/* Dragon info card */}
+        <div className="dragon-panel px-4 py-4">
+          <div className="flex items-center gap-4 mb-3">
+            <span className="text-5xl flex-shrink-0"
+              style={{ filter: 'drop-shadow(0 0 16px rgba(239,68,68,0.6))' }}>{dragon.emoji}</span>
+            <div className="flex-1">
+              <p className="font-cinzel font-bold text-[#f87171] text-base leading-tight">{dragon.name}</p>
+              <p className="text-[#6b5a3a] text-[10px] leading-snug mt-0.5">{dragon.desc}</p>
+              <p className="text-[8px] text-[#4a3a2a] mt-0.5 uppercase tracking-wider">Tier {dungeonTier}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg"
-            style={{ background: 'rgba(240,192,64,0.08)', border: '1px solid rgba(240,192,64,0.2)' }}>
-            <span className="text-sm">💡</span>
-            <p className="text-[#f0c040] text-[10px]">Weakness: {dragon.weaknessLabel} — {dragon.hint}</p>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-[10px] text-[#f87171] font-bold font-cinzel tracking-wider">HP</span>
+            <div className="flex-1 h-3 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.07)' }}>
+              <div className="h-full rounded-full"
+                style={{ width: '100%', background: 'linear-gradient(90deg,#f87171,#ef4444)', boxShadow: '0 0 6px rgba(239,68,68,0.5)' }} />
+            </div>
+            <span className="font-cinzel font-bold text-[#f87171] text-sm">{dragonHp}</span>
+          </div>
+          <div className="rounded-xl px-3 py-2.5 flex items-center gap-3"
+            style={{ background: 'rgba(240,192,64,0.12)', border: '1px solid rgba(240,192,64,0.45)' }}>
+            <span className="text-xl flex-shrink-0">⚡</span>
+            <div>
+              <p className="text-[#f0c040] font-bold text-[11px] leading-tight">Weakness: {dragon.weaknessLabel}</p>
+              <p className="text-[#a07a30] text-[9px] mt-0.5">{dragon.hint}</p>
+            </div>
           </div>
         </div>
 
@@ -962,84 +1004,197 @@ function DragonDenTab({ onSwitchToArena }: { onSwitchToArena: () => void }) {
           <DenCooldownBanner cooldownUntil={state.dungeonCooldownUntil} />
         )}
 
-        {/* 4×4 tactical grid */}
+        {/* 4×4 tactical board */}
         <div className="dragon-panel px-3 py-3">
-          <p className="font-cinzel font-bold text-[#e8d8a8] text-[10px] tracking-wider mb-1">TACTICAL GRID</p>
-          <p className="text-[#4a3a2a] text-[9px] mb-2">
+          <p className="font-cinzel font-bold text-[#e8d8a8] text-[11px] tracking-wider mb-1">TACTICAL BOARD</p>
+          <p className="text-[#4a3a2a] text-[9px] mb-2.5">
             {selectedTroop
-              ? `Tap a cell to place ${BUILDING_TROOP_INFO[selectedTroop]?.emoji ?? ''} ${BUILDING_TROOP_INFO[selectedTroop]?.name ?? ''}`
-              : 'Select a troop below, then tap a grid cell to place it. Tap a placed troop to remove.'}
+              ? `Tap a square to deploy ${BUILDING_TROOP_INFO[selectedTroop]?.emoji} ${BUILDING_TROOP_INFO[selectedTroop]?.name} — tap again to move`
+              : 'Pick a troop below · tap the board to place · adjacent troops get a bonus'}
           </p>
-          <div className="grid grid-cols-4 gap-1 mx-auto" style={{ maxWidth: 248 }}>
+          <div className="grid grid-cols-4 gap-1.5 mx-auto" style={{ maxWidth: 320 }}>
             {Array.from({ length: 16 }).map((_, cellIdx) => {
               const isDragonCell = dragon.occupies.includes(cellIdx);
               const troopId = grid[cellIdx];
               const troop = troopId ? BUILDING_TROOP_INFO[troopId] : null;
+              const row = Math.floor(cellIdx / 4);
+              const col = cellIdx % 4;
+              const isCheckerLight = (row + col) % 2 === 0;
+              const hasAdjacentTroop = !!troop && Object.keys(grid).map(Number)
+                .some(other => other !== cellIdx && !!grid[other] && areAdjacentCells(cellIdx, other));
+              const building = troop ? state.buildings.find(b => b.id === troopId) : null;
               return (
                 <button
                   key={cellIdx}
                   onClick={() => handleCellTap(cellIdx)}
                   disabled={isDragonCell}
-                  className="rounded-lg flex items-center justify-center text-xl transition-all"
+                  className="relative flex flex-col items-center justify-center rounded-lg transition-all"
                   style={{
-                    minHeight: 54,
+                    minHeight: 72,
                     background: isDragonCell
-                      ? 'rgba(239,68,68,0.18)'
+                      ? 'rgba(180,20,20,0.45)'
                       : troop
-                        ? 'rgba(212,160,23,0.15)'
-                        : selectedTroop
-                          ? 'rgba(96,165,250,0.06)'
-                          : 'rgba(255,255,255,0.03)',
+                        ? 'rgba(180,120,10,0.25)'
+                        : isCheckerLight
+                          ? 'rgba(38,20,6,0.9)'
+                          : 'rgba(14,7,2,0.95)',
                     border: isDragonCell
-                      ? '1px solid rgba(239,68,68,0.45)'
+                      ? '2px solid rgba(239,68,68,0.75)'
                       : troop
-                        ? '1px solid rgba(212,160,23,0.4)'
+                        ? `2px solid ${hasAdjacentTroop ? '#4ade80' : 'rgba(212,160,23,0.65)'}`
                         : selectedTroop
-                          ? '1px dashed rgba(96,165,250,0.3)'
-                          : '1px solid rgba(255,255,255,0.06)',
+                          ? '2px dashed rgba(96,165,250,0.45)'
+                          : '1px solid rgba(255,255,255,0.07)',
+                    boxShadow: isDragonCell
+                      ? '0 0 14px rgba(239,68,68,0.4) inset'
+                      : hasAdjacentTroop
+                        ? '0 0 12px rgba(74,222,128,0.4)'
+                        : troop
+                          ? '0 0 8px rgba(212,160,23,0.3)'
+                          : 'none',
                   }}
                 >
-                  {isDragonCell ? dragon.emoji : troop ? troop.emoji : ''}
+                  {isDragonCell ? (
+                    <>
+                      <span className="text-2xl leading-none"
+                        style={{ filter: 'drop-shadow(0 0 6px rgba(239,68,68,0.9))' }}>{dragon.emoji}</span>
+                      <span className="text-[7px] text-red-400 font-bold mt-0.5 tracking-wider">OCCUPIED</span>
+                    </>
+                  ) : troop ? (
+                    <>
+                      <span className="text-2xl leading-none">{troop.emoji}</span>
+                      {building && (
+                        <span className="text-[9px] font-bold text-[#f0c040] mt-0.5">×{building.owned}</span>
+                      )}
+                    </>
+                  ) : selectedTroop ? (
+                    <span className="text-2xl leading-none opacity-20">
+                      {BUILDING_TROOP_INFO[selectedTroop]?.emoji}
+                    </span>
+                  ) : null}
                 </button>
               );
             })}
           </div>
         </div>
 
+        {/* Battle power bar + breakdown */}
+        {scoreDetail !== null && (() => {
+          const pct = Math.min(100, Math.round(scoreDetail.score / dragonHp * 100));
+          const barColor = pct >= 100 ? '#4ade80' : pct >= 60 ? '#f0c040' : '#f87171';
+          const outcomeWord = pct >= 100 ? 'VICTORY' : pct >= 60 ? 'PARTIAL' : 'DEFEAT';
+          return (
+            <div className="dragon-panel px-3 py-3">
+              <div className="flex justify-between text-[10px] mb-1.5">
+                <span className="font-cinzel font-bold text-[#e8d8a8]">YOUR POWER</span>
+                <span className="font-cinzel font-bold text-[#f87171]">DRAGON HP {dragonHp}</span>
+              </div>
+              <div className="relative h-5 rounded-full overflow-hidden"
+                style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                <div className="h-full rounded-full transition-all duration-500"
+                  style={{ width: `${pct}%`, background: `linear-gradient(90deg,${barColor}77,${barColor})`, boxShadow: `0 0 8px ${barColor}55` }} />
+              </div>
+              <div className="flex justify-between mt-1.5 mb-2">
+                <span className="font-cinzel font-bold text-lg" style={{ color: barColor }}>
+                  {scoreDetail.score}
+                </span>
+                <span className="font-cinzel font-bold text-sm self-end" style={{ color: barColor }}>
+                  {outcomeWord}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {[...new Set(Object.values(grid))].map(bid => {
+                  const info = BUILDING_TROOP_INFO[bid];
+                  const bld = state.buildings.find(b => b.id === bid);
+                  if (!info || !bld) return null;
+                  const contrib = info.armyPower * bld.owned;
+                  return (
+                    <span key={bid} className="px-1.5 py-0.5 rounded-md text-[9px] font-bold"
+                      style={{ background: 'rgba(212,160,23,0.12)', border: '1px solid rgba(212,160,23,0.3)', color: '#f0c040' }}>
+                      {info.emoji}×{bld.owned}=+{contrib}
+                    </span>
+                  );
+                })}
+                <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold"
+                  style={{ background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.3)', color: '#60a5fa' }}>
+                  🦸Lv{state.level}+{state.level * 3}
+                </span>
+                <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold"
+                  style={{
+                    background: scoreDetail.hasWeakness ? 'rgba(74,222,128,0.1)' : 'rgba(239,68,68,0.1)',
+                    border: `1px solid ${scoreDetail.hasWeakness ? 'rgba(74,222,128,0.3)' : 'rgba(239,68,68,0.3)'}`,
+                    color: scoreDetail.hasWeakness ? '#4ade80' : '#f87171',
+                  }}>
+                  {scoreDetail.hasWeakness ? '⚡×1.35' : '⚠️×0.8 no weakness'}
+                </span>
+                {scoreDetail.adjacencyBonus > 0 && (
+                  <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold"
+                    style={{ background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.25)', color: '#4ade80' }}>
+                    🔗+{Math.round(scoreDetail.adjacencyBonus * 100)}% adj
+                  </span>
+                )}
+                {scoreDetail.distanceBonus > 0 && (
+                  <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold"
+                    style={{ background: 'rgba(96,165,250,0.08)', border: '1px solid rgba(96,165,250,0.25)', color: '#60a5fa' }}>
+                    📏+10% range
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Troop roster */}
         <div className="dragon-panel px-3 py-3">
-          <p className="font-cinzel font-bold text-[#e8d8a8] text-[10px] tracking-wider mb-2">YOUR TROOPS</p>
+          <p className="font-cinzel font-bold text-[#e8d8a8] text-[11px] tracking-wider mb-2.5">YOUR TROOPS</p>
           {availableTroops.length === 0 ? (
-            <p className="text-[#4a3a2a] text-[10px] text-center py-2">Build barracks and other units first</p>
+            <p className="text-[#4a3a2a] text-[10px] text-center py-3">Build Barracks and other units to deploy troops</p>
           ) : (
-            <div className="flex flex-wrap gap-1.5">
+            <div className="grid grid-cols-3 gap-2">
               {availableTroops.map(bid => {
                 const info = BUILDING_TROOP_INFO[bid];
                 const isSelected = selectedTroop === bid;
                 const isWeakness = bid === dragon.weaknessBuildingId;
+                const building = state.buildings.find(b => b.id === bid);
+                const isPlaced = Object.values(grid).includes(bid);
+                const contribution = building ? info.armyPower * building.owned : 0;
                 return (
                   <button
                     key={bid}
                     onClick={() => handleTroopSelect(bid)}
-                    className="flex flex-col items-center px-3 py-2 rounded-lg transition-all"
+                    className="relative flex flex-col items-center py-3 px-1 rounded-xl transition-all"
                     style={{
                       background: isSelected
                         ? 'rgba(96,165,250,0.15)'
                         : isWeakness
                           ? 'rgba(240,192,64,0.1)'
-                          : 'rgba(255,255,255,0.03)',
+                          : 'rgba(255,255,255,0.04)',
                       border: isSelected
-                        ? '1px solid rgba(96,165,250,0.6)'
+                        ? '2px solid rgba(96,165,250,0.65)'
                         : isWeakness
-                          ? '1px solid rgba(240,192,64,0.4)'
-                          : '1px solid rgba(255,255,255,0.08)',
+                          ? '2px solid rgba(240,192,64,0.6)'
+                          : '1px solid rgba(255,255,255,0.1)',
+                      boxShadow: isWeakness ? '0 0 14px rgba(240,192,64,0.2)' : 'none',
                     }}
                   >
-                    <span className="text-xl mb-0.5">{info.emoji}</span>
-                    <span className="text-[8px] font-bold" style={{ color: isSelected ? '#60a5fa' : isWeakness ? '#f0c040' : '#8a7a5a' }}>
+                    {isPlaced && (
+                      <span className="absolute top-1 right-1.5 text-[9px] font-bold text-[#4ade80]">✓</span>
+                    )}
+                    <span className="text-3xl mb-1">{info.emoji}</span>
+                    <span className="text-[9px] font-bold leading-tight"
+                      style={{ color: isSelected ? '#60a5fa' : isWeakness ? '#f0c040' : '#8a7a5a' }}>
                       {info.name}
                     </span>
-                    {isWeakness && <span className="text-[7px] text-[#f0c040] mt-0.5">★ EFFECTIVE</span>}
+                    <span className="text-[8px] mt-0.5"
+                      style={{ color: isWeakness ? '#f0c040aa' : '#6b5a3a' }}>
+                      +{contribution} pwr
+                    </span>
+                    {isWeakness && (
+                      <span className="mt-1.5 px-2 py-0.5 rounded text-[7px] font-black tracking-wide"
+                        style={{ background: 'rgba(240,192,64,0.2)', color: '#f0c040', border: '1px solid rgba(240,192,64,0.45)' }}>
+                        ⚡ BEST
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -1047,50 +1202,29 @@ function DragonDenTab({ onSwitchToArena }: { onSwitchToArena: () => void }) {
           )}
         </div>
 
-        {/* Score preview */}
-        {estScore !== null && (
-          <div className="dragon-panel px-3 py-2 flex items-center justify-between">
-            <div>
-              <p className="text-[10px] text-[#6b5a3a]">Est. Score</p>
-              <p className="font-cinzel font-bold text-[#f0c040] text-sm">{estScore}</p>
-            </div>
-            <div className="text-center">
-              <p className="text-[10px] text-[#6b5a3a]">Dragon HP</p>
-              <p className="font-cinzel font-bold text-[#f87171] text-sm">{dragonHp}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-[10px] text-[#6b5a3a]">Outcome</p>
-              <p className="font-cinzel font-bold text-sm"
-                style={{ color: estScore >= dragonHp ? '#4ade80' : estScore >= dragonHp * 0.6 ? '#f0c040' : '#f87171' }}>
-                {estScore >= dragonHp ? 'Victory' : estScore >= dragonHp * 0.6 ? 'Partial' : 'Defeat'}
-              </p>
-            </div>
-          </div>
-        )}
-
         {/* Raid button */}
         <button
           onClick={handleRaid}
           disabled={attemptsLeft <= 0 || onCooldown || placedCount === 0}
-          className="action-btn w-full py-3 text-sm font-black tracking-wide"
+          className="action-btn w-full py-3.5 text-sm font-black tracking-wide"
           style={{ opacity: (attemptsLeft <= 0 || onCooldown || placedCount === 0) ? 0.4 : 1 }}
         >
-          🐉 RAID — {attemptsLeft} {attemptsLeft === 1 ? 'raid' : 'raids'} left today
+          🐉 RAID THE DUNGEON — {attemptsLeft} {attemptsLeft === 1 ? 'raid' : 'raids'} left
         </button>
 
-        {/* Stats */}
-        <div className="dragon-panel px-3 py-2">
+        {/* Stats footer */}
+        <div className="dragon-panel px-3 py-3">
           <div className="flex justify-around text-center">
             <div>
-              <p className="font-cinzel font-bold text-[#f0c040]">{state.dungeonTotalVictories ?? 0}</p>
+              <p className="font-cinzel font-bold text-[#f0c040] text-base">{state.dungeonTotalVictories ?? 0}</p>
               <p className="text-[9px] text-[#6b5a3a]">Total Victories</p>
             </div>
             <div>
-              <p className="font-cinzel font-bold text-[#60a5fa]">{dungeonTier}</p>
+              <p className="font-cinzel font-bold text-[#60a5fa] text-base">{dungeonTier}</p>
               <p className="text-[9px] text-[#6b5a3a]">Dungeon Tier</p>
             </div>
             <div>
-              <p className="font-cinzel font-bold text-[#4ade80]">{attemptsLeft}/5</p>
+              <p className="font-cinzel font-bold text-[#4ade80] text-base">{attemptsLeft}/5</p>
               <p className="text-[9px] text-[#6b5a3a]">Raids Left</p>
             </div>
           </div>

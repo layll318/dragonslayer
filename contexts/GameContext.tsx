@@ -496,6 +496,11 @@ function calcExpeditionYield(
   const materials: Material[] = allTypes.map(type => ({
     type, quantity: Math.floor(Math.random() * maxQty) + 1,
   }));
+  // Legendary mats only from 12h expeditions
+  if (hours === 12) {
+    materials.push({ type: 'lynx_fang',  quantity: 1 + Math.floor(Math.random() * 3) });
+    materials.push({ type: 'nomic_core', quantity: 1 + Math.floor(Math.random() * 3) });
+  }
 
   return { dragonsSlain, goldEarned, materials };
 }
@@ -552,12 +557,14 @@ export function computeDungeonRewards(
   level: number,
   dungeonTier: number,
 ): DungeonRewards {
-  const allMats: MaterialType[] = ['dragon_scale', 'fire_crystal', 'iron_ore', 'bone_shard', 'ancient_rune'];
+  const commonMats: MaterialType[] = ['dragon_scale', 'fire_crystal', 'iron_ore', 'bone_shard', 'ancient_rune'];
   if (outcome === 'victory') {
-    const goldEarned = Math.max(500, Math.floor(gph * 0.5));
+    const goldEarned = Math.max(2000, Math.floor(gph * 2));
     const xpEarned = 20 * level;
     const matQty = 3 + Math.floor(Math.random() * 3);
-    const materials = allMats.map(type => ({ type, quantity: matQty }));
+    const materials: { type: MaterialType; quantity: number }[] = commonMats.map(type => ({ type, quantity: matQty }));
+    materials.push({ type: 'lynx_fang',  quantity: 1 + Math.floor(Math.random() * 2) });
+    materials.push({ type: 'nomic_core', quantity: 1 + Math.floor(Math.random() * 2) });
     let egg: DragonEgg | null = null;
     if (Math.random() < 0.08) {
       const rarity: EggRarity = dungeonTier >= 4 ? 'rare' : dungeonTier >= 2 ? 'uncommon' : 'common';
@@ -567,11 +574,15 @@ export function computeDungeonRewards(
     }
     return { goldEarned, xpEarned, materials, egg };
   } else if (outcome === 'partial') {
-    const goldEarned = Math.max(200, Math.floor(gph * 0.2));
+    const goldEarned = Math.max(800, Math.floor(gph * 0.8));
     const xpEarned = 5 * level;
     const matQty = 1 + Math.floor(Math.random() * 2);
-    const shuffled = [...allMats].sort(() => Math.random() - 0.5).slice(0, 2 + Math.floor(Math.random() * 2));
-    const materials = shuffled.map(type => ({ type, quantity: matQty }));
+    const shuffled = [...commonMats].sort(() => Math.random() - 0.5).slice(0, 2 + Math.floor(Math.random() * 2));
+    const materials: { type: MaterialType; quantity: number }[] = shuffled.map(type => ({ type, quantity: matQty }));
+    if (Math.random() < 0.4) {
+      const legType: MaterialType = Math.random() < 0.5 ? 'lynx_fang' : 'nomic_core';
+      materials.push({ type: legType, quantity: 1 });
+    }
     return { goldEarned, xpEarned, materials, egg: null };
   } else {
     return { goldEarned: 0, xpEarned: Math.max(1, level), materials: [], egg: null };
