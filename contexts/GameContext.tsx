@@ -1649,6 +1649,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const connectWallet = useCallback(async (address: string) => {
     if (!address) return;
+    // Capture previous wallet BEFORE any state change
+    const previousWallet = stateRef.current.walletAddress;
+    const isSameWallet   = previousWallet === address;
     setState(prev => ({ ...prev, walletAddress: address, isSynced: false }));
     try {
       // Wallet address IS the identity — no player_id sent.
@@ -1674,43 +1677,68 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       const serverSave = saveData?.save_json && Object.keys(saveData.save_json).length > 0
         ? saveData.save_json : null;
 
-      const local = stateRef.current;
-      const serverLevel = Number(serverSave?.level ?? 0);
-      const localLevel  = Number(local.level ?? 0);
-      const serverGold  = Number(serverSave?.totalGoldEarned ?? 0);
-      const localGold   = Number(local.totalGoldEarned ?? 0);
-      const serverAhead = serverSave && (
-        serverLevel > localLevel ||
-        (serverLevel === localLevel && serverGold > localGold)
-      );
-
-      if (serverAhead) {
-        // Server save is better — load it (preserve displayName from auth response)
-        // Strip tokenDiscount from serverSave — it will be re-verified fresh below
-        const { tokenDiscount: _td, ...serverSaveWithoutDiscount } = serverSave as any;
-        setState(prev => ({
-          ...prev,
-          ...serverSaveWithoutDiscount,
-          lastTick: Date.now(),
-          playerId: data.player_id,
-          walletAddress: address,
-          displayName: data.username ?? serverSaveWithoutDiscount.displayName ?? prev.displayName,
-          isSynced: true,
-        }));
+      if (!isSameWallet) {
+        // ── DIFFERENT WALLET ─────────────────────────────────────────────────
+        // NEVER copy the current wallet's local data to a different wallet.
+        // Always use that wallet's own server save, or start completely fresh.
+        if (serverSave) {
+          const { tokenDiscount: _td, ...serverSaveClean } = serverSave as any;
+          setState(() => ({
+            ...serverSaveClean,
+            lastTick: Date.now(),
+            playerId: data.player_id,
+            walletAddress: address,
+            displayName: data.username ?? serverSaveClean.displayName ?? '',
+            isSynced: true,
+          }));
+        } else {
+          // Brand-new wallet — start a completely fresh account
+          setState(() => ({
+            ...createInitialState(),
+            playerId: data.player_id,
+            walletAddress: address,
+            displayName: data.username ?? '',
+            isSynced: true,
+          }));
+        }
       } else {
-        // Local save is better — update identity and push local up
-        setState(prev => ({
-          ...prev,
-          playerId: data.player_id,
-          walletAddress: address,
-          displayName: data.username ?? stateRef.current.displayName,
-          isSynced: true,
-        }));
-        await fetch(`${API_URL}/api/save/${data.player_id}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ save_json: local }),
-        }).catch(() => {});
+        // ── SAME WALLET (reconnect / auto-reconnect) ─────────────────────────
+        const local = stateRef.current;
+        const serverLevel = Number(serverSave?.level ?? 0);
+        const localLevel  = Number(local.level ?? 0);
+        const serverGold  = Number(serverSave?.totalGoldEarned ?? 0);
+        const localGold   = Number(local.totalGoldEarned ?? 0);
+        const serverAhead = serverSave && (
+          serverLevel > localLevel ||
+          (serverLevel === localLevel && serverGold > localGold)
+        );
+        if (serverAhead) {
+          // Server is ahead (e.g. progress on another device) — load it
+          const { tokenDiscount: _td, ...serverSaveWithoutDiscount } = serverSave as any;
+          setState(prev => ({
+            ...prev,
+            ...serverSaveWithoutDiscount,
+            lastTick: Date.now(),
+            playerId: data.player_id,
+            walletAddress: address,
+            displayName: data.username ?? serverSaveWithoutDiscount.displayName ?? prev.displayName,
+            isSynced: true,
+          }));
+        } else {
+          // Local is ahead (offline progress) — keep it and push up
+          setState(prev => ({
+            ...prev,
+            playerId: data.player_id,
+            walletAddress: address,
+            displayName: data.username ?? stateRef.current.displayName,
+            isSynced: true,
+          }));
+          await fetch(`${API_URL}/api/save/${data.player_id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ save_json: local }),
+          }).catch(() => {});
+        }
       }
     } catch {
       // API unavailable — wallet already stored locally above
