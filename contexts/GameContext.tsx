@@ -218,6 +218,7 @@ export interface GameState {
   dungeonLastRaidDate: string;
   dungeonCooldownUntil: number;
   dungeonTotalVictories: number;
+  dungeonBestCompletion: Record<string, number>;
 }
 
 interface GameContextType {
@@ -256,6 +257,7 @@ interface GameContextType {
   recordPvpBattle: (win: boolean, goldStolen: number, newTrophies: number) => void;
   markDefenseLogSeen: () => void;
   recordDungeonRaid: (outcome: 'victory' | 'partial' | 'defeat', rewards: DungeonRewards) => void;
+  recordDungeonRun: (tier: number, roomsCleared: number, won: boolean, goldEarned: number, xpEarned: number, materials: { type: MaterialType; quantity: number }[], tokensHeld: number) => void;
   resetArenaAttacks: () => void;
   claimHolderGift: () => void;
   CRAFTING_RECIPES: CraftingRecipe[];
@@ -776,6 +778,7 @@ function createInitialState(): GameState {
     dungeonLastRaidDate: '',
     dungeonCooldownUntil: 0,
     dungeonTotalVictories: 0,
+    dungeonBestCompletion: {},
   };
 }
 
@@ -876,6 +879,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         dungeonLastRaidDate: saved.dungeonLastRaidDate ?? '',
         dungeonCooldownUntil: saved.dungeonCooldownUntil ?? 0,
         dungeonTotalVictories: saved.dungeonTotalVictories ?? 0,
+        dungeonBestCompletion: saved.dungeonBestCompletion ?? {},
       });
 
       // Auto-reconnect: wallet already in localStorage — re-establish identity via wallet path
@@ -1679,6 +1683,43 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     });
   }, [addXp]);
 
+  const recordDungeonRun = useCallback((
+    tier: number,
+    roomsCleared: number,
+    won: boolean,
+    goldEarned: number,
+    xpEarned: number,
+    materials: { type: MaterialType; quantity: number }[],
+    tokensHeld: number,
+  ) => {
+    setState(prev => {
+      const COOLDOWN_MAP: Record<number, number> = { 0: 60, 1: 45, 2: 30 };
+      const cooldownMin = tokensHeld >= 3 ? 15 : (COOLDOWN_MAP[tokensHeld] ?? 60);
+      const cooldownMs = cooldownMin * 60 * 1000;
+      const newMaterials = [...prev.materials];
+      for (const drop of materials) {
+        const existing = newMaterials.find(m => m.type === drop.type);
+        if (existing) existing.quantity += drop.quantity;
+        else newMaterials.push({ ...drop });
+      }
+      const xpUpdate = addXp(xpEarned, prev);
+      const tierKey = String(tier);
+      const prevBest = prev.dungeonBestCompletion?.[tierKey] ?? 0;
+      const newBest = Math.max(prevBest, roomsCleared);
+      const goldLost = !won ? Math.floor(prev.gold * 0.10) : 0;
+      return {
+        ...prev,
+        ...xpUpdate,
+        gold: Math.max(0, prev.gold - goldLost + goldEarned),
+        totalGoldEarned: prev.totalGoldEarned + goldEarned,
+        materials: newMaterials,
+        dungeonCooldownUntil: Date.now() + cooldownMs,
+        dungeonTotalVictories: (prev.dungeonTotalVictories ?? 0) + (won ? 1 : 0),
+        dungeonBestCompletion: { ...(prev.dungeonBestCompletion ?? {}), [tierKey]: newBest },
+      };
+    });
+  }, [addXp]);
+
   const resetArenaAttacks = useCallback(() => {
     setState(prev => ({ ...prev, arenaAttacksToday: 0, arenaLastReset: getToday() }));
   }, []);
@@ -1944,6 +1985,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         recordPvpBattle,
         markDefenseLogSeen,
         recordDungeonRaid,
+        recordDungeonRun,
         resetArenaAttacks,
         claimHolderGift,
         goldPerTap,
