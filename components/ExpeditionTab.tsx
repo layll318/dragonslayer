@@ -18,6 +18,7 @@ import {
   DragonBonusType,
   DragonEgg,
   EggRarity,
+  getEffectiveCraftingCost,
 } from '@/contexts/GameContext';
 import { formatNumber } from '@/utils/format';
 
@@ -114,6 +115,7 @@ export default function ExpeditionTab() {
     claimHatchedEgg,
     gearMultiplier,
     armyPower,
+    goldPerHour,
     CRAFTING_RECIPES,
     ITEM_UNLOCK_LEVELS: unlockLevels,
   } = useGame();
@@ -524,7 +526,8 @@ export default function ExpeditionTab() {
               {nextRecipe ? (() => {
                 const color = RARITY_COLORS[nextRecipe.rarity];
                 const isUpgrade = !!nextRecipe.upgradesFrom;
-                const canAffordGold = state.gold >= nextRecipe.goldCost;
+                const effectiveCraftCost = getEffectiveCraftingCost(nextRecipe, goldPerHour);
+                const canAffordGold = state.gold >= effectiveCraftCost;
                 const matsMet = nextRecipe.materials.every(req => {
                   const held = state.materials.find(m => m.type === req.type);
                   return held && held.quantity >= req.quantity;
@@ -611,7 +614,7 @@ export default function ExpeditionTab() {
                     <div className="flex items-center gap-1">
                       <span className="coin-icon" style={{ width: 8, height: 8 }} />
                       <span className={`text-[9px] font-bold ${canAffordGold ? 'text-[#b09a60]' : 'text-red-400'}`}>
-                        {formatNumber(nextRecipe.goldCost)} gold
+                        {formatNumber(effectiveCraftCost)} gold
                       </span>
                     </div>
                   </div>

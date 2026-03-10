@@ -26,14 +26,14 @@ function getStreakEggRarity(streak: number): EggRarity {
 }
 
 export default function HolderGiftModal() {
-  const { state, claimHolderGift } = useGame();
+  const { state, claimHolderGift, goldPerHour } = useGame();
 
   if (!state.holderGiftPending) return null;
   if (!state.tokenDiscount || state.tokenDiscount.pct === 0) return null;
   if (state.loginBonusPending) return null; // let login bonus show first
 
   const streak     = Math.min(Math.max(1, (state.holderGiftStreak || 0) + 1), 30);
-  const goldBonus  = 1000 + streak * 300;
+  const goldBonus  = Math.max(1000 + streak * 300, Math.floor(goldPerHour * streak * 0.1));
   const eggRarity  = getStreakEggRarity(streak);
   const matQty     = 1 + Math.floor(streak / 5);
   const eggColor   = RARITY_COLOR[eggRarity];

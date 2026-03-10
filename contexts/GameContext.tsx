@@ -240,6 +240,7 @@ interface GameContextType {
   getBuildingCost: (building: Building) => number;
   canAfford: (cost: number) => boolean;
   getCharacterTier: () => number;
+  getEffectiveCraftingCost: (recipe: CraftingRecipe, gph: number) => number;
   recordBotBattle: (win: boolean, goldStolen: number, botTier?: 'easy' | 'hard') => void;
   recordPvpBattle: (win: boolean, goldStolen: number, newTrophies: number) => void;
   markDefenseLogSeen: () => void;
@@ -388,6 +389,11 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
   },
 ];
 
+const RARITY_GPH_MULT: Record<string, number> = { common: 0.03, uncommon: 0.05, rare: 0.12, epic: 0.25, legendary: 0.40 };
+export function getEffectiveCraftingCost(recipe: CraftingRecipe, gph: number): number {
+  return Math.max(recipe.goldCost, Math.floor(gph * (RARITY_GPH_MULT[recipe.rarity] ?? 0.03)));
+}
+
 const MAX_INVENTORY = 20;
 
 const EMPTY_EQUIPMENT: EquipmentSlots = { weapon: null, shield: null, helm: null, armor: null, ring: null };
@@ -533,13 +539,13 @@ function getToday(): string {
   return new Date().toISOString().split('T')[0];
 }
 
-function generateMerchantDeals(level: number, dateStr: string): MerchantDeal[] {
+function generateMerchantDeals(level: number, dateStr: string, gph = 0): MerchantDeal[] {
   // Seeded pseudo-random from date string so deals are consistent within a day
   let seed = dateStr.split('').reduce((s, c) => s + c.charCodeAt(0), 0) + level;
   const rng = () => { seed = (seed * 1664525 + 1013904223) & 0xffffffff; return Math.abs(seed) / 0x7fffffff; };
   const allMats: MaterialType[] = ['dragon_scale','fire_crystal','iron_ore','bone_shard','ancient_rune'];
   const pickMat = () => allMats[Math.floor(rng() * allMats.length)];
-  const goldBase = Math.max(500, level * 200);
+  const goldBase = Math.max(500, gph > 0 ? Math.floor(gph * 0.5) : level * 200);
   const rareMat = pickMat();
   return [
     {
@@ -572,8 +578,8 @@ function generateMerchantDeals(level: number, dateStr: string): MerchantDeal[] {
   ];
 }
 
-function generateDailyQuests(level: number): DailyQuest[] {
-  const goldTarget = Math.max(300, level * 150);
+function generateDailyQuests(level: number, gph = 0): DailyQuest[] {
+  const goldTarget = Math.max(1000, level * 300);
   const buildTarget = Math.max(1, Math.min(3, Math.floor(level / 3) + 1));
   return [
     {
@@ -582,7 +588,7 @@ function generateDailyQuests(level: number): DailyQuest[] {
       description: `Earn ${goldTarget.toLocaleString()} gold by tapping`,
       target: goldTarget,
       progress: 0,
-      reward: Math.floor(goldTarget * 0.6),
+      reward: Math.max(Math.floor(goldTarget * 0.6), Math.floor(gph * 0.25)),
       completed: false,
       claimed: false,
     },
@@ -592,7 +598,7 @@ function generateDailyQuests(level: number): DailyQuest[] {
       description: `Buy ${buildTarget} building${buildTarget > 1 ? 's' : ''}`,
       target: buildTarget,
       progress: 0,
-      reward: Math.floor(level * 80 + 200),
+      reward: Math.max(Math.floor(level * 80 + 200), Math.floor(gph * 0.20)),
       completed: false,
       claimed: false,
     },
@@ -602,7 +608,7 @@ function generateDailyQuests(level: number): DailyQuest[] {
       description: 'Complete 1 expedition',
       target: 1,
       progress: 0,
-      reward: Math.floor(level * 50 + 150),
+      reward: Math.max(Math.floor(level * 50 + 150), Math.floor(gph * 0.15)),
       completed: false,
       claimed: false,
     },
@@ -730,9 +736,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       const newStreak = isNewDay ? (saved.loginStreak || 0) + 1 : (saved.loginStreak || 0);
 
       // Migrate daily quests — replace full_care with complete_expedition if needed
+      const savedGph = migratedBuildings.reduce((sum, b) => sum + b.baseIncome * b.owned, 0);
       const rawQuests = isNewDay
-        ? generateDailyQuests(saved.level)
-        : (saved.dailyQuests || generateDailyQuests(saved.level));
+        ? generateDailyQuests(saved.level, savedGph)
+        : (saved.dailyQuests || generateDailyQuests(saved.level, savedGph));
       const newQuests = rawQuests.map((q: DailyQuest) =>
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (q as any).type === 'full_care'
@@ -941,7 +948,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const today = getToday();
     setState((prev) => {
       if (prev.merchantLastDate === today && prev.merchantDeals.length > 0) return prev;
-      const deals = generateMerchantDeals(prev.level, today);
+      const gph = prev.buildings.reduce((sum, b) => sum + b.baseIncome * b.owned, 0);
+      const deals = generateMerchantDeals(prev.level, today, gph);
       const expiresAt = new Date(today + 'T23:59:59').getTime();
       return { ...prev, merchantDeals: deals, merchantExpiresAt: expiresAt, merchantLastDate: today };
     });
@@ -1375,7 +1383,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const craftItem = useCallback((recipeId: string) => {
     setState((prev) => {
       const recipe = CRAFTING_RECIPES.find(r => r.id === recipeId);
-      if (!recipe || prev.gold < recipe.goldCost) return prev;
+      if (!recipe) return prev;
+      const gph = prev.buildings.reduce((sum, b) => sum + b.baseIncome * b.owned, 0);
+      const effectiveGoldCost = getEffectiveCraftingCost(recipe, gph);
+      if (prev.gold < effectiveGoldCost) return prev;
 
       // Check materials
       for (const req of recipe.materials) {
@@ -1425,7 +1436,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       newInventory = [...newInventory, newItem].slice(-MAX_INVENTORY);
       return {
         ...prev,
-        gold: prev.gold - recipe.goldCost,
+        gold: prev.gold - effectiveGoldCost,
         materials: newMaterials,
         inventory: newInventory,
         equipment: newEquipment,
@@ -1456,7 +1467,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       const today = getToday();
       const isNewDay = prev.questDate !== today;
       const newBoughtToday = (isNewDay ? 0 : prev.buildingsBoughtToday) + qty;
-      const dailyQuests = (isNewDay ? generateDailyQuests(prev.level) : prev.dailyQuests).map(q => {
+      const gph = prev.buildings.reduce((sum, b) => sum + b.baseIncome * b.owned, 0);
+      const dailyQuests = (isNewDay ? generateDailyQuests(prev.level, gph) : prev.dailyQuests).map(q => {
         if (q.type === 'buy_buildings' && !q.completed) {
           const progress = Math.min(newBoughtToday, q.target);
           return { ...q, progress, completed: progress >= q.target };
@@ -1481,8 +1493,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const claimLoginBonus = useCallback(() => {
     setState((prev) => {
       if (!prev.loginBonusPending) return prev;
+      const gph = prev.buildings.reduce((s, b) => s + b.baseIncome * b.owned, 0);
       const streakIdx = Math.min((prev.loginStreak - 1), LOGIN_REWARDS.length - 1);
-      const bonus = LOGIN_REWARDS[Math.max(0, streakIdx)];
+      const flatBonus = LOGIN_REWARDS[Math.max(0, streakIdx)];
+      const bonus = Math.max(flatBonus, Math.floor(gph * (0.5 + Math.max(0, streakIdx) * 0.25)));
       return {
         ...prev,
         gold: prev.gold + bonus,
@@ -1553,8 +1567,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       if (!prev.tokenDiscount || prev.tokenDiscount.pct === 0) return prev;
       const today = getToday();
       const streak = Math.min(Math.max(1, (prev.holderGiftStreak || 0) + 1), 30);
-      // Gold scales with streak: day 1 = 1300, day 30 = 10000
-      const goldBonus = 1000 + streak * 300;
+      // Gold scales with streak and building income
+      const gph = prev.buildings.reduce((s, b) => s + b.baseIncome * b.owned, 0);
+      const goldBonus = Math.max(1000 + streak * 300, Math.floor(gph * streak * 0.1));
       // Egg rarity scales with streak
       const eggRarity: EggRarity =
         streak >= 25 ? 'legendary' : streak >= 15 ? 'rare' : streak >= 7 ? 'uncommon' : 'common';
@@ -1787,6 +1802,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         getBuildingCost,
         canAfford,
         getCharacterTier,
+        getEffectiveCraftingCost,
         CRAFTING_RECIPES,
         ITEM_UNLOCK_LEVELS,
       }}
