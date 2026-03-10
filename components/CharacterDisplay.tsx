@@ -1,8 +1,48 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import Image from 'next/image';
 import { useGame, calcGearMultiplier } from '@/contexts/GameContext';
+
+function NftItemOverlay({
+  src,
+  alt,
+  fallbackLabel,
+  style,
+}: {
+  src: string;
+  alt: string;
+  fallbackLabel: string;
+  style?: React.CSSProperties;
+}) {
+  const [imgError, setImgError] = useState(false);
+  if (imgError) {
+    return (
+      <div
+        className="flex items-center justify-center rounded-lg text-center"
+        style={{
+          width: '100%', height: '100%',
+          background: 'rgba(240,192,64,0.12)',
+          border: '1px solid rgba(240,192,64,0.45)',
+          boxShadow: '0 0 14px rgba(240,192,64,0.5)',
+          ...style,
+        }}
+      >
+        <span className="font-cinzel font-bold text-[#f0c040] text-[8px] leading-tight px-1">
+          {fallbackLabel}
+        </span>
+      </div>
+    );
+  }
+  return (
+    <img
+      src={src}
+      alt={alt}
+      style={{ width: '100%', height: '100%', objectFit: 'contain', ...style }}
+      onError={() => setImgError(true)}
+    />
+  );
+}
 
 const TIER_IMAGES = [
   '/images/slayer1.png',
@@ -39,6 +79,11 @@ export default function CharacterDisplay() {
   const colors = EMBER_COLORS[tier - 1];
   const floatAnim = moodState === 'happy' ? 'float 3s ease-in-out infinite' : undefined;
 
+  const equippedWeapon = state.equipment.weapon;
+  const equippedShield = state.equipment.shield;
+  const hasLynxSword   = equippedWeapon?.name === 'Lynx Sword';
+  const hasNomicShield = equippedShield?.name === 'Nomic Shield';
+
   return (
     <div className="relative flex-1 w-full flex flex-col items-center justify-center" style={{ paddingBottom: 48 }}>
 
@@ -74,7 +119,7 @@ export default function CharacterDisplay() {
         borderRadius: '50%',
       }} />
 
-      {/* Character image */}
+      {/* Character image + NFT weapon overlays */}
       <div
         className="relative z-10"
         style={{
@@ -98,6 +143,48 @@ export default function CharacterDisplay() {
         {moodState === 'sad' && (
           <div className="absolute inset-0 rounded pointer-events-none"
             style={{ background: 'rgba(0,0,80,0.2)', mixBlendMode: 'multiply' }} />
+        )}
+
+        {/* Nomic Shield — left of character */}
+        {hasNomicShield && (
+          <div
+            className="absolute pointer-events-none z-20"
+            style={{
+              left: -68,
+              bottom: 60,
+              width: 72,
+              height: 100,
+              filter: 'drop-shadow(0 0 10px rgba(240,192,64,0.85)) drop-shadow(0 0 4px rgba(240,192,64,0.6))',
+              animation: floatAnim,
+            }}
+          >
+            <NftItemOverlay
+              src="/images/nomicsshield.png"
+              alt="Nomic Shield"
+              fallbackLabel="🛡️ Nomic Shield"
+            />
+          </div>
+        )}
+
+        {/* Lynx Sword — right of character */}
+        {hasLynxSword && (
+          <div
+            className="absolute pointer-events-none z-20"
+            style={{
+              right: -60,
+              bottom: 55,
+              width: 60,
+              height: 140,
+              filter: 'drop-shadow(0 0 10px rgba(240,192,64,0.85)) drop-shadow(0 0 4px rgba(240,192,64,0.6))',
+              animation: floatAnim,
+            }}
+          >
+            <NftItemOverlay
+              src="/images/lynxsword.png"
+              alt="Lynx Sword"
+              fallbackLabel="⚔️ Lynx Sword"
+            />
+          </div>
         )}
       </div>
 

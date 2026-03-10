@@ -6,7 +6,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 // TYPES
 // ============================================================
 
-export type MaterialType = 'dragon_scale' | 'fire_crystal' | 'iron_ore' | 'bone_shard' | 'ancient_rune';
+export type MaterialType = 'dragon_scale' | 'fire_crystal' | 'iron_ore' | 'bone_shard' | 'ancient_rune' | 'lynx_fang' | 'nomic_core';
 export type EggRarity = 'common' | 'uncommon' | 'rare' | 'legendary';
 export type DragonBonusType = 'tap_gold_pct' | 'army_power_flat' | 'material_drop_pct' | 'expedition_time_pct';
 
@@ -276,6 +276,8 @@ export const MATERIAL_LABELS: Record<MaterialType, string> = {
   iron_ore:      '⚙️ Iron Ore',
   bone_shard:    '🦴 Bone Shard',
   ancient_rune:  '✨ Ancient Rune',
+  lynx_fang:     '🐾 Lynx Fang',
+  nomic_core:    '🔮 Nomic Core',
 };
 
 // ── Upgrade chains: T1(common) → T2(uncommon) → T3(rare) → T4(epic) ──────────
@@ -386,6 +388,26 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
     id: 'ancient_sigil', itemType: 'ring', name: 'Ancient Sigil', rarity: 'epic', power: 22, goldCost: 4500,
     upgradesFrom: { itemType: 'ring', rarity: 'rare' },
     materials: [{ type: 'ancient_rune', quantity: 4 }, { type: 'fire_crystal', quantity: 3 }],
+  },
+
+  // ── LEGENDARY NFT FORGE ─────────────────────────────────────────────────────
+  // These are standalone NFT items — not part of the T1-T4 upgrade chain.
+  // Minted on XRPL by admin; materials burn immediately on request.
+  {
+    id: 'lynx_sword', itemType: 'weapon', name: 'Lynx Sword', rarity: 'legendary', power: 60, goldCost: 50000,
+    materials: [
+      { type: 'lynx_fang',    quantity: 5 },
+      { type: 'dragon_scale', quantity: 8 },
+      { type: 'ancient_rune', quantity: 5 },
+    ],
+  },
+  {
+    id: 'nomic_shield', itemType: 'shield', name: 'Nomic Shield', rarity: 'legendary', power: 50, goldCost: 50000,
+    materials: [
+      { type: 'nomic_core',   quantity: 5 },
+      { type: 'dragon_scale', quantity: 8 },
+      { type: 'ancient_rune', quantity: 5 },
+    ],
   },
 ];
 

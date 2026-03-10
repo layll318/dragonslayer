@@ -439,11 +439,12 @@ export default function ExpeditionTab() {
   }
 
   const renderCraft = () => {
-    // Group recipes by slot in display order
+    // Group recipes by slot in display order — exclude legendary NFT items from normal chain
     const bySlot: Record<string, CraftingRecipe[]> = {};
     for (const slot of SLOT_ORDER) {
-      bySlot[slot] = CRAFTING_RECIPES.filter(r => r.itemType === slot);
+      bySlot[slot] = CRAFTING_RECIPES.filter(r => r.itemType === slot && r.rarity !== 'legendary');
     }
+    const legendaryRecipes = CRAFTING_RECIPES.filter(r => r.rarity === 'legendary');
 
     return (
       <div className="flex flex-col gap-3">
@@ -624,11 +625,78 @@ export default function ExpeditionTab() {
             </div>
           );
         })}
+
+        {/* ── LEGENDARY NFT FORGE ────────────────────────────────────────────── */}
+        {legendaryRecipes.length > 0 && (
+          <div className="dragon-panel p-3" style={{ border: '1px solid rgba(240,192,64,0.35)', background: 'rgba(240,192,64,0.04)' }}>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-base">✨</span>
+              <p className="font-cinzel font-bold text-[#f0c040] text-[11px] tracking-wider">LEGENDARY NFT FORGE</p>
+            </div>
+            <p className="text-[9px] text-[#6b5a3a] mb-3">
+              Legendary weapons minted as XRPL NFTs. Collect <span className="text-[#f0c040]">Lynx Fang</span> &amp; <span className="text-[#f0c040]">Nomic Core</span> from 12h expeditions — token holders get 5× better drop rates.
+            </p>
+            <div className="flex flex-col gap-2">
+              {legendaryRecipes.map(recipe => {
+                const legendColor = '#f0c040';
+                const owned = hasItem(recipe.itemType as ItemType, recipe.rarity as ItemRarity);
+                const canAffordGold = state.gold >= recipe.goldCost;
+                const matsMet = recipe.materials.every(req => {
+                  const held = state.materials.find(m => m.type === req.type);
+                  return held && held.quantity >= req.quantity;
+                });
+                const canCraft = canAffordGold && matsMet && !owned;
+                return (
+                  <div key={recipe.id} className="rounded-lg p-2.5 border" style={{ background: 'rgba(240,192,64,0.06)', borderColor: 'rgba(240,192,64,0.28)' }}>
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-cinzel font-bold text-[11px]" style={{ color: legendColor }}>{recipe.name}</span>
+                          <span className="text-[7px] font-bold uppercase px-1 py-0.5 rounded" style={{ background: 'rgba(240,192,64,0.2)', color: legendColor }}>LEGENDARY NFT</span>
+                        </div>
+                        <p className="text-[9px] text-[#9a8a6a] mt-0.5">⚡ {recipe.power} power · XRPL NFT · Tradeable</p>
+                      </div>
+                      {owned ? (
+                        <span className="text-[9px] font-bold text-[#4ade80] flex-shrink-0">✓ Forged</span>
+                      ) : (
+                        <button
+                          onClick={() => craftItem(recipe.id)}
+                          disabled={!canCraft}
+                          className="action-btn px-3 py-1.5 text-[9px] flex-shrink-0"
+                          style={canCraft ? { background: 'linear-gradient(135deg,#b8860b,#f0c040)', boxShadow: '0 0 12px rgba(240,192,64,0.4)' } : { opacity: 0.4, cursor: 'not-allowed' }}
+                        >
+                          ⚒ REQUEST FORGE
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-1 mb-1.5">
+                      {recipe.materials.map((req, i) => {
+                        const held = state.materials.find(m => m.type === req.type);
+                        const have = held?.quantity ?? 0;
+                        const ok = have >= req.quantity;
+                        return (
+                          <span key={i} className="text-[8px] px-1.5 py-0.5 rounded-full" style={{ background: ok ? 'rgba(74,222,128,0.12)' : 'rgba(255,60,60,0.1)', color: ok ? '#4ade80' : '#f87171' }}>
+                            {MATERIAL_LABELS[req.type as MaterialType]} ×{req.quantity}
+                            <span className="opacity-60"> ({have}/{req.quantity})</span>
+                          </span>
+                        );
+                      })}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="coin-icon" style={{ width: 8, height: 8 }} />
+                      <span className={`text-[9px] font-bold ${canAffordGold ? 'text-[#b09a60]' : 'text-red-400'}`}>
+                        {formatNumber(recipe.goldCost)} gold
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     );
   };
-
-  // ── SECTION: MATERIALS ───────────────────────────────────────────────────
 
   const renderMaterials = () => {
 
