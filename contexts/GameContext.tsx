@@ -240,7 +240,6 @@ interface GameContextType {
   getBuildingCost: (building: Building) => number;
   canAfford: (cost: number) => boolean;
   getCharacterTier: () => number;
-  getEffectiveCraftingCost: (recipe: CraftingRecipe, gph: number) => number;
   recordBotBattle: (win: boolean, goldStolen: number, botTier?: 'easy' | 'hard') => void;
   recordPvpBattle: (win: boolean, goldStolen: number, newTrophies: number) => void;
   markDefenseLogSeen: () => void;
@@ -1383,10 +1382,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const craftItem = useCallback((recipeId: string) => {
     setState((prev) => {
       const recipe = CRAFTING_RECIPES.find(r => r.id === recipeId);
-      if (!recipe) return prev;
-      const gph = prev.buildings.reduce((sum, b) => sum + b.baseIncome * b.owned, 0);
-      const effectiveGoldCost = getEffectiveCraftingCost(recipe, gph);
-      if (prev.gold < effectiveGoldCost) return prev;
+      if (!recipe || prev.gold < recipe.goldCost) return prev;
 
       // Check materials
       for (const req of recipe.materials) {
@@ -1436,7 +1432,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       newInventory = [...newInventory, newItem].slice(-MAX_INVENTORY);
       return {
         ...prev,
-        gold: prev.gold - effectiveGoldCost,
+        gold: prev.gold - recipe.goldCost,
         materials: newMaterials,
         inventory: newInventory,
         equipment: newEquipment,
@@ -1802,7 +1798,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         getBuildingCost,
         canAfford,
         getCharacterTier,
-        getEffectiveCraftingCost,
         CRAFTING_RECIPES,
         ITEM_UNLOCK_LEVELS,
       }}

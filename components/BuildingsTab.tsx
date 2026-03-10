@@ -226,7 +226,7 @@ export default function BuildingsTab() {
       }
       if (data.materialCredits) addMaterials(data.materialCredits);
       if (data.incubatorSlot) addIncubatorSlot();
-      if (data.goldAmount) addGold(data.goldAmount);
+      if (data.goldAmount) addGold(Math.max(data.goldAmount, Math.floor(goldPerHour * 24)));
       used.push(hash);
       localStorage.setItem(USED_PREMIUM_KEY, JSON.stringify(used));
       const dest = data.eggRarity ? 'Dragon Den (Stash tab)' : data.incubatorSlot ? 'your incubator' : data.goldAmount ? 'your treasury' : 'Materials';
