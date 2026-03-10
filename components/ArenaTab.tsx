@@ -61,7 +61,7 @@ function winChance(myAtk: number, formation: Formation, theirDef: number): numbe
 function makeBotOpponent(armyPower: number, level: number): Opponent {
   const defPwr = Math.max(1, Math.round(armyPower * (0.8 + Math.random() * 0.5)));
   const atkPwr = Math.max(1, Math.round(armyPower * (0.7 + Math.random() * 0.6)));
-  const gold = level * 500 + Math.floor(Math.random() * level * 300);
+  const gold = level * 1500 + Math.floor(Math.random() * level * 800);
   return {
     player_id: 0,
     name: 'Shadow Raider 🤖',
@@ -120,8 +120,17 @@ export default function ArenaTab() {
     ...makeBotOpponent(Math.round(armyPower * 2), state.level + 3),
     player_id: -2,
     name: 'Iron Warlord ⚔️🤖',
-    idle_gold: Math.round(armyPower * 150),
+    idle_gold: Math.max(3000, Math.round(armyPower * 350)),
   }), [armyPower, state.level]);
+  const starterBot = useMemo((): Opponent => ({
+    player_id: -3,
+    name: 'Goblin Scout 🟢',
+    level: 1,
+    attack_power: 1,
+    defense_power: 0,
+    idle_gold: Math.max(2000, state.level * 1000),
+    buildings: [],
+  }), [state.level]);
 
   const defenseLog: DefenseLogEntry[] = state.defenseLog ?? [];
   const unreadDefense = defenseLog.some(e => e.ts > (state.defenseLogSeen ?? 0));
@@ -154,9 +163,10 @@ export default function ArenaTab() {
     if (!selected || attacking || attacksLeft <= 0) return;
 
     // ── Bot battle (client-side) ────────────────────────────────────────────
+    const isStarterBot = selected.player_id === -3;
     const isEasyBot = selected.player_id === -1;
     const isHardBot = selected.player_id === -2;
-    if (isEasyBot || isHardBot) {
+    if (isStarterBot || isEasyBot || isHardBot) {
       const botTier = isHardBot ? 'hard' : 'easy';
       setAttacking(true);
       setRoundIdx(0);
@@ -165,9 +175,9 @@ export default function ArenaTab() {
       const rand = 0.85 + Math.random() * 0.30;
       const effAtk = Math.round(armyPower * fm.atkMod * rand);
       const effDef = Math.round(selected.defense_power * fm.defMod * (0.85 + Math.random() * 0.30));
-      const win = effAtk > effDef;
-      const goldStolen = win ? Math.floor(selected.idle_gold * 0.04) : 0;
-      const trophiesWon = win ? (isHardBot ? 8 : 3) : 0;
+      const win = isStarterBot ? true : (effAtk > effDef);
+      const goldStolen = win ? Math.floor(selected.idle_gold * 0.10) : 0;
+      const trophiesWon = win ? (isHardBot ? 8 : isStarterBot ? 1 : 3) : 0;
       const trophiesLost = !win && isHardBot ? 5 : 0;
       for (let i = 0; i < 3; i++) {
         setRoundIdx(i);
@@ -508,13 +518,14 @@ export default function ArenaTab() {
             🛡️ Defense Log{unreadDefense && <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />}
           </button>
           <div className="flex flex-col gap-1.5">
-            {[easyBot, hardBot, ...(state.walletAddress ? opponents : [])].map(opp => {
+            {[starterBot, easyBot, hardBot, ...(state.walletAddress ? opponents : [])].map(opp => {
               const isSelected = selected?.player_id === opp.player_id;
               const ch = winChance(armyPower, formation, opp.defense_power);
               const isBot = opp.player_id < 0;
               const isHardBot = opp.player_id === -2;
+              const isStarterBotCard = opp.player_id === -3;
               const trophyPreview = isBot
-                ? (isHardBot ? '🏅+8 / -5' : '🏅+3')
+                ? (isHardBot ? '🏅+8 / -5' : isStarterBotCard ? '🏅+1' : '🏅+3')
                 : `🏅+${Math.ceil(25 * Math.max(0.25, Math.min(2.0, 1 - ((state.level) - opp.level) * 0.04)))} / -8`;
               return (
                 <button
@@ -527,12 +538,12 @@ export default function ArenaTab() {
                   }}
                 >
                   <div className="w-8 h-8 rounded-lg flex items-center justify-center text-sm flex-shrink-0"
-                    style={{ background: isHardBot ? 'rgba(239,68,68,0.15)' : isBot ? 'rgba(124,58,237,0.15)' : 'rgba(212,160,23,0.08)', border: `1px solid ${isHardBot ? 'rgba(239,68,68,0.35)' : isBot ? 'rgba(124,58,237,0.3)' : 'rgba(212,160,23,0.2)'}` }}>
+                    style={{ background: isHardBot ? 'rgba(239,68,68,0.15)' : isStarterBotCard ? 'rgba(74,222,128,0.12)' : isBot ? 'rgba(124,58,237,0.15)' : 'rgba(212,160,23,0.08)', border: `1px solid ${isHardBot ? 'rgba(239,68,68,0.35)' : isStarterBotCard ? 'rgba(74,222,128,0.35)' : isBot ? 'rgba(124,58,237,0.3)' : 'rgba(212,160,23,0.2)'}` }}>
                     {isBot ? '🤖' : `Lv${opp.level}`}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1 mb-0.5">
-                      <p className="text-[10px] font-bold truncate" style={{ color: isHardBot ? '#f87171' : isBot ? '#c084fc' : '#e8d8a8' }}>{opp.name}</p>
+                      <p className="text-[10px] font-bold truncate" style={{ color: isHardBot ? '#f87171' : isStarterBotCard ? '#4ade80' : isBot ? '#c084fc' : '#e8d8a8' }}>{opp.name}</p>
                       {!isBot && (
                         <span
                           className="flex-shrink-0 px-1 py-0 rounded text-[7px] font-bold leading-4"
@@ -550,10 +561,10 @@ export default function ArenaTab() {
                   <div className="text-right flex-shrink-0">
                     <p className="text-[9px] font-bold"
                       style={{ color: ch >= 60 ? '#4ade80' : ch >= 40 ? '#f0c040' : '#f87171' }}>
-                      {ch}% win
+                      {isStarterBotCard ? '✅ Easy' : `${ch}% win`}
                     </p>
                     <p className="text-[8px] text-[#6b5a3a]">{trophyPreview}</p>
-                    <p className="text-[8px] text-[#6b5a3a]">💰{formatNumber(Math.floor(opp.idle_gold * 0.04))}</p>
+                    <p className="text-[8px] text-[#6b5a3a]">💰{formatNumber(Math.floor(opp.idle_gold * 0.10))}</p>
                   </div>
                 </button>
               );
