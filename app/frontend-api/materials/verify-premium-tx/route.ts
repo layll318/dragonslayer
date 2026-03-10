@@ -119,8 +119,8 @@ export async function POST(request: NextRequest) {
         : null,
       // For incubator_slot: permanent slot
       incubatorSlot: premiumType === 'incubator_slot' ? true : null,
-      // For gold_50m: gold amount to credit
-      goldAmount: premiumType === 'gold_50m' ? 50_000_000 : null,
+      // For gold_50m: sentinel — actual amount computed client-side from goldPerHour*24
+      goldAmount: premiumType === 'gold_50m' ? 1 : null,
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
