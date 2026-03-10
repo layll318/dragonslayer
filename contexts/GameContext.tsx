@@ -111,6 +111,13 @@ export interface ExpeditionResult {
   droppedEgg?: DragonEgg;
 }
 
+export interface DungeonRewards {
+  goldEarned: number;
+  xpEarned: number;
+  materials: { type: MaterialType; quantity: number }[];
+  egg: DragonEgg | null;
+}
+
 export interface CraftingRecipe {
   id: string;
   itemType: ItemType;
@@ -207,6 +214,10 @@ export interface GameState {
   displayName: string | null;
   // Token discount
   tokenDiscount: TokenDiscount | null;
+  dungeonAttemptsToday: number;
+  dungeonLastRaidDate: string;
+  dungeonCooldownUntil: number;
+  dungeonTotalVictories: number;
 }
 
 interface GameContextType {
@@ -244,6 +255,7 @@ interface GameContextType {
   recordBotBattle: (win: boolean, goldStolen: number, botTier?: 'easy' | 'hard') => void;
   recordPvpBattle: (win: boolean, goldStolen: number, newTrophies: number) => void;
   markDefenseLogSeen: () => void;
+  recordDungeonRaid: (outcome: 'victory' | 'partial' | 'defeat', rewards: DungeonRewards) => void;
   resetArenaAttacks: () => void;
   claimHolderGift: () => void;
   CRAFTING_RECIPES: CraftingRecipe[];
@@ -534,6 +546,38 @@ export function calcDiminishingBonus(dragons: HatchedDragon[], bonusType: Dragon
   return vals.reduce((total, v, i) => total + v * Math.pow(0.75, i), 0);
 }
 
+export function computeDungeonRewards(
+  outcome: 'victory' | 'partial' | 'defeat',
+  gph: number,
+  level: number,
+  dungeonTier: number,
+): DungeonRewards {
+  const allMats: MaterialType[] = ['dragon_scale', 'fire_crystal', 'iron_ore', 'bone_shard', 'ancient_rune'];
+  if (outcome === 'victory') {
+    const goldEarned = Math.max(500, Math.floor(gph * 0.5));
+    const xpEarned = 20 * level;
+    const matQty = 3 + Math.floor(Math.random() * 3);
+    const materials = allMats.map(type => ({ type, quantity: matQty }));
+    let egg: DragonEgg | null = null;
+    if (Math.random() < 0.08) {
+      const rarity: EggRarity = dungeonTier >= 4 ? 'rare' : dungeonTier >= 2 ? 'uncommon' : 'common';
+      const variants = EGG_VARIANTS[rarity];
+      const variant = variants[Math.floor(Math.random() * variants.length)];
+      egg = { id: `dungeon-egg-${Date.now()}`, rarity, ...variant };
+    }
+    return { goldEarned, xpEarned, materials, egg };
+  } else if (outcome === 'partial') {
+    const goldEarned = Math.max(200, Math.floor(gph * 0.2));
+    const xpEarned = 5 * level;
+    const matQty = 1 + Math.floor(Math.random() * 2);
+    const shuffled = [...allMats].sort(() => Math.random() - 0.5).slice(0, 2 + Math.floor(Math.random() * 2));
+    const materials = shuffled.map(type => ({ type, quantity: matQty }));
+    return { goldEarned, xpEarned, materials, egg: null };
+  } else {
+    return { goldEarned: 0, xpEarned: Math.max(1, level), materials: [], egg: null };
+  }
+}
+
 function generateEgg(hours: 4 | 8 | 12): DragonEgg | null {
   const roll = Math.random();
   let rarity: EggRarity | null = null;
@@ -717,6 +761,10 @@ function createInitialState(): GameState {
     isSynced: false,
     displayName: null,
     tokenDiscount: null,
+    dungeonAttemptsToday: 0,
+    dungeonLastRaidDate: '',
+    dungeonCooldownUntil: 0,
+    dungeonTotalVictories: 0,
   };
 }
 
@@ -813,6 +861,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         walletAddress: saved.walletAddress ?? null,
         isSynced: saved.isSynced ?? false,
         tokenDiscount: saved.tokenDiscount ?? null,
+        dungeonAttemptsToday: isNewDay ? 0 : (saved.dungeonAttemptsToday ?? 0),
+        dungeonLastRaidDate: saved.dungeonLastRaidDate ?? '',
+        dungeonCooldownUntil: saved.dungeonCooldownUntil ?? 0,
+        dungeonTotalVictories: saved.dungeonTotalVictories ?? 0,
       });
 
       // Auto-reconnect: wallet already in localStorage — re-establish identity via wallet path
@@ -1586,6 +1638,36 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setState(prev => ({ ...prev, defenseLogSeen: Date.now() }));
   }, []);
 
+  const recordDungeonRaid = useCallback((outcome: 'victory' | 'partial' | 'defeat', rewards: DungeonRewards) => {
+    setState(prev => {
+      const today = getToday();
+      const isNewDay = (prev.dungeonLastRaidDate ?? '').slice(0, 10) !== today;
+      const attemptsToday = isNewDay ? 0 : (prev.dungeonAttemptsToday ?? 0);
+      if (attemptsToday >= 5) return prev;
+      const COOLDOWN_MS = 2 * 3600 * 1000;
+      const newMaterials = [...prev.materials];
+      for (const drop of rewards.materials) {
+        const existing = newMaterials.find(m => m.type === drop.type);
+        if (existing) existing.quantity += drop.quantity;
+        else newMaterials.push({ ...drop });
+      }
+      const newEggInventory = rewards.egg ? [...prev.eggInventory, rewards.egg] : prev.eggInventory;
+      const xpUpdate = addXp(rewards.xpEarned, prev);
+      return {
+        ...prev,
+        ...xpUpdate,
+        gold: prev.gold + rewards.goldEarned,
+        totalGoldEarned: prev.totalGoldEarned + rewards.goldEarned,
+        materials: newMaterials,
+        eggInventory: newEggInventory,
+        dungeonAttemptsToday: attemptsToday + 1,
+        dungeonLastRaidDate: today,
+        dungeonCooldownUntil: Date.now() + COOLDOWN_MS,
+        dungeonTotalVictories: (prev.dungeonTotalVictories ?? 0) + (outcome === 'victory' ? 1 : 0),
+      };
+    });
+  }, [addXp]);
+
   const resetArenaAttacks = useCallback(() => {
     setState(prev => ({ ...prev, arenaAttacksToday: 0, arenaLastReset: getToday() }));
   }, []);
@@ -1850,6 +1932,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         recordBotBattle,
         recordPvpBattle,
         markDefenseLogSeen,
+        recordDungeonRaid,
         resetArenaAttacks,
         claimHolderGift,
         goldPerTap,

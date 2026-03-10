@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useGame, calcDefensePower, DefenseLogEntry } from '@/contexts/GameContext';
+import { useGame, calcDefensePower, DefenseLogEntry, computeDungeonRewards, DungeonRewards, MATERIAL_LABELS } from '@/contexts/GameContext';
 import { formatNumber } from '@/utils/format';
 
 const API_URL = typeof process !== 'undefined' ? (process.env.NEXT_PUBLIC_API_URL ?? '') : '';
@@ -109,6 +109,7 @@ export default function ArenaTab() {
   const [result, setResult] = useState<BattleResult | null>(null);
   const [error, setError] = useState('');
   const [view, setView] = useState<ArenaView>('battle');
+  const [mainTab, setMainTab] = useState<'arena' | 'dungeon'>('arena');
 
   const today = new Date().toISOString().split('T')[0];
   const effectiveAttacksToday = state.arenaLastReset === today ? (state.arenaAttacksToday ?? 0) : 0;
@@ -241,6 +242,10 @@ export default function ArenaTab() {
     loadOpponents();
   };
 
+
+  if (mainTab === 'dungeon') {
+    return <DragonDenTab onSwitchToArena={() => setMainTab('arena')} />;
+  }
 
   // ── Battle animation ────────────────────────────────────────────────────────
   if (attacking && selected) {
@@ -406,6 +411,23 @@ export default function ArenaTab() {
   return (
     <div className="flex flex-col flex-1 pb-4 overflow-y-auto relative z-10 page-fade">
       <ArenaHeader attacksLeft={attacksLeft} arenaPoints={state.arenaPoints ?? 0} trophies={state.trophies ?? 0} />
+
+      {/* Sub-tab toggle */}
+      <div className="flex gap-1.5 px-3 pt-2">
+        <button
+          className="flex-1 py-1.5 rounded-lg text-center text-[10px] font-bold"
+          style={{ background: 'rgba(212,160,23,0.15)', border: '1px solid rgba(212,160,23,0.5)', color: '#f0c040' }}
+        >
+          ⚔️ Arena
+        </button>
+        <button
+          onClick={() => setMainTab('dungeon')}
+          className="flex-1 py-1.5 rounded-lg text-center text-[10px] font-bold transition-all"
+          style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.08)', color: '#6b5a3a' }}
+        >
+          🐉 Dragon Den
+        </button>
+      </div>
 
       <div className="px-3 mt-2 flex flex-col gap-3">
 
@@ -682,6 +704,441 @@ function ArenaHeader({ attacksLeft, arenaPoints, trophies }: { attacksLeft: numb
           }
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Dragon Den ────────────────────────────────────────────────────────────────
+
+const DRAGON_TYPES = [
+  {
+    id: 'fire_drake', emoji: '🔴', name: 'Fire Drake',
+    occupies: [0, 3, 12, 15],
+    weaknessBuildingId: 'stables', weaknessLabel: '🐴 Cavalry',
+    hint: 'Cavalry flanks corner dragons',
+    desc: 'Nests in the corners — cavalry can flank it',
+  },
+  {
+    id: 'frost_wyrm', emoji: '🔵', name: 'Frost Wyrm',
+    occupies: [5, 6, 9, 10],
+    weaknessBuildingId: 'barracks', weaknessLabel: '🪖 Infantry',
+    hint: 'Face it head-on with infantry',
+    desc: 'Holds the center — infantry must charge directly',
+  },
+  {
+    id: 'stone_golem', emoji: '🟤', name: 'Stone Golem',
+    occupies: [12, 13, 14, 15],
+    weaknessBuildingId: 'archery_range', weaknessLabel: '🏹 Archers',
+    hint: 'Hit from maximum range',
+    desc: 'Guards the bottom row — archers strike from distance',
+  },
+  {
+    id: 'storm_serpent', emoji: '⚡', name: 'Storm Serpent',
+    occupies: [0, 5, 10, 15],
+    weaknessBuildingId: 'war_forge', weaknessLabel: '⚒️ Rune Knights',
+    hint: 'Spread your force across the grid',
+    desc: 'Strikes diagonally — rune knights counter its magic',
+  },
+];
+
+const BUILDING_TROOP_INFO: Record<string, { emoji: string; name: string }> = {
+  barracks:      { emoji: '🪖', name: 'Infantry'   },
+  archery_range: { emoji: '🏹', name: 'Archer'     },
+  stables:       { emoji: '🐴', name: 'Cavalry'    },
+  war_forge:     { emoji: '⚒️', name: 'Rune Knight' },
+  war_camp:      { emoji: '⛺', name: 'Regiment'   },
+  castle:        { emoji: '🏰', name: 'Elite Guard' },
+};
+const BUILDING_ORDER = ['barracks', 'archery_range', 'stables', 'war_forge', 'war_camp', 'castle'];
+
+function areAdjacentCells(a: number, b: number): boolean {
+  const rowA = Math.floor(a / 4), colA = a % 4;
+  const rowB = Math.floor(b / 4), colB = b % 4;
+  return (Math.abs(rowA - rowB) + Math.abs(colA - colB)) === 1;
+}
+
+interface DenResult {
+  outcome: 'victory' | 'partial' | 'defeat';
+  score: number;
+  dragonHp: number;
+  rewards: DungeonRewards;
+}
+
+function DragonDenTab({ onSwitchToArena }: { onSwitchToArena: () => void }) {
+  const { state, armyPower, recordDungeonRaid } = useGame();
+  const [grid, setGrid] = useState<Record<number, string>>({});
+  const [selectedTroop, setSelectedTroop] = useState<string | null>(null);
+  const [denResult, setDenResult] = useState<DenResult | null>(null);
+  const [raiding, setRaiding] = useState(false);
+
+  const today = new Date().toISOString().split('T')[0];
+  const isNewDay = (state.dungeonLastRaidDate ?? '').slice(0, 10) !== today;
+  const attemptsToday = isNewDay ? 0 : (state.dungeonAttemptsToday ?? 0);
+  const attemptsLeft = Math.max(0, 5 - attemptsToday);
+  const onCooldown = !isNewDay && attemptsLeft < 5 && Date.now() < (state.dungeonCooldownUntil ?? 0);
+
+  const dungeonTier = Math.floor(state.level / 5) + 1;
+  const dragonHp = 100 + dungeonTier * 40;
+
+  const dayIndex = Math.floor(Date.now() / 86400000);
+  const dragon = DRAGON_TYPES[dayIndex % 4];
+
+  const availableTroops = BUILDING_ORDER
+    .filter(id => (state.buildings.find(b => b.id === id)?.owned ?? 0) > 0)
+    .slice(0, 6);
+
+  const gph = state.buildings.reduce((sum, b) => sum + b.baseIncome * b.owned, 0);
+
+  const handleCellTap = (cellIdx: number) => {
+    if (dragon.occupies.includes(cellIdx)) return;
+    if (selectedTroop) {
+      setGrid(prev => ({ ...prev, [cellIdx]: selectedTroop }));
+      setSelectedTroop(null);
+    } else if (grid[cellIdx]) {
+      setGrid(prev => { const n = { ...prev }; delete n[cellIdx]; return n; });
+    }
+  };
+
+  const handleTroopSelect = (buildingId: string) => {
+    setSelectedTroop(prev => prev === buildingId ? null : buildingId);
+  };
+
+  const calcScore = (gridState: Record<number, string>) => {
+    const placedCells = Object.keys(gridState).map(Number);
+    const placedBuildingIds = Object.values(gridState);
+    let adjacencyBonus = 0;
+    for (let i = 0; i < placedCells.length; i++) {
+      for (let j = i + 1; j < placedCells.length; j++) {
+        if (areAdjacentCells(placedCells[i], placedCells[j])) adjacencyBonus += 0.05;
+      }
+    }
+    adjacencyBonus = Math.min(adjacencyBonus, 0.30);
+    const avgDragonRow = dragon.occupies.reduce((a, c) => a + Math.floor(c / 4), 0) / dragon.occupies.length;
+    const avgTroopRow = placedCells.length > 0
+      ? placedCells.reduce((a, c) => a + Math.floor(c / 4), 0) / placedCells.length
+      : 0;
+    const distanceBonus = Math.abs(avgTroopRow - avgDragonRow) >= 2 ? 0.10 : 0;
+    const placementMult = 1.0 + adjacencyBonus + distanceBonus;
+    const hasWeakness = placedBuildingIds.includes(dragon.weaknessBuildingId);
+    const weaknessMult = hasWeakness ? 1.35 : 0.8;
+    return Math.round(armyPower * placementMult * weaknessMult);
+  };
+
+  const handleRaid = async () => {
+    if (attemptsLeft <= 0 || onCooldown || raiding || Object.keys(grid).length === 0) return;
+    setRaiding(true);
+    await new Promise(r => setTimeout(r, 1800));
+    const score = calcScore(grid);
+    let outcome: 'victory' | 'partial' | 'defeat';
+    if (score >= dragonHp) outcome = 'victory';
+    else if (score >= dragonHp * 0.6) outcome = 'partial';
+    else outcome = 'defeat';
+    const rewards = computeDungeonRewards(outcome, gph, state.level, dungeonTier);
+    recordDungeonRaid(outcome, rewards);
+    setDenResult({ outcome, score, dragonHp, rewards });
+    setRaiding(false);
+  };
+
+  const handleNextRaid = () => {
+    setDenResult(null);
+    setGrid({});
+    setSelectedTroop(null);
+  };
+
+  if (raiding) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center"
+        style={{ background: 'linear-gradient(180deg,#0c0804 0%,#1a0804 100%)' }}>
+        <div className="text-center">
+          <p className="text-6xl mb-4" style={{ animation: 'float 1s ease-in-out infinite' }}>{dragon.emoji}</p>
+          <p className="font-cinzel text-[#f0c040] font-black text-xl tracking-widest">🗡️ RAIDING 🗡️</p>
+          <p className="text-[#6b5a3a] text-sm mt-2">Your forces charge the dungeon…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (denResult) {
+    const { outcome, score, rewards } = denResult;
+    const outcomeEmoji = outcome === 'victory' ? '🏆' : outcome === 'partial' ? '⚡' : '💀';
+    const outcomeColor = outcome === 'victory' ? '#4ade80' : outcome === 'partial' ? '#f0c040' : '#f87171';
+    const outcomeLabel = outcome === 'victory' ? 'VICTORY!' : outcome === 'partial' ? 'PARTIAL WIN' : 'DEFEATED';
+    return (
+      <div className="flex flex-col flex-1 pb-4 overflow-y-auto relative z-10 page-fade">
+        <DenHeader attemptsLeft={attemptsLeft} dungeonTier={dungeonTier} onSwitchToArena={onSwitchToArena} />
+        <div className="px-3 mt-4 flex flex-col gap-3">
+          <div className="dragon-panel px-4 py-6 text-center">
+            <p className="text-5xl mb-3">{outcomeEmoji}</p>
+            <p className="font-cinzel font-black text-2xl tracking-wider mb-1" style={{ color: outcomeColor }}>{outcomeLabel}</p>
+            <p className="text-[#6b5a3a] text-xs mb-4">{dragon.name} — Score {score} vs {dragonHp} HP</p>
+            {rewards.goldEarned > 0 && (
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <span className="coin-icon" style={{ width: 18, height: 18 }} />
+                <span className="font-cinzel text-[#f0c040] font-bold text-lg">+{formatNumber(rewards.goldEarned)} gold</span>
+              </div>
+            )}
+            {rewards.xpEarned > 0 && (
+              <p className="text-[#60a5fa] font-bold text-sm mb-2">✨ +{rewards.xpEarned} XP</p>
+            )}
+            {rewards.materials.length > 0 && (
+              <div className="flex flex-wrap justify-center gap-1 mb-2">
+                {rewards.materials.slice(0, 4).map((m, i) => (
+                  <span key={i} className="px-2 py-0.5 rounded text-[9px] font-bold"
+                    style={{ background: 'rgba(212,160,23,0.12)', border: '1px solid rgba(212,160,23,0.25)', color: '#f0c040' }}>
+                    +{m.quantity}× {MATERIAL_LABELS[m.type]}
+                  </span>
+                ))}
+              </div>
+            )}
+            {rewards.egg && (
+              <p className="text-[#c084fc] font-bold text-sm mb-3">🥚 +1 {rewards.egg.rarity} egg dropped!</p>
+            )}
+          </div>
+          {attemptsLeft > 1 && !onCooldown ? (
+            <button onClick={handleNextRaid} className="action-btn w-full py-3 text-sm font-black">
+              🐉 Next Raid ({attemptsLeft - 1} left)
+            </button>
+          ) : (
+            <div className="dragon-panel px-3 py-3 text-center">
+              <p className="text-[#6b5a3a] text-xs">
+                {attemptsLeft <= 1 ? 'No raids left today — resets at midnight UTC' : 'Cooldown active — next raid in 2h'}
+              </p>
+            </div>
+          )}
+          <button onClick={onSwitchToArena} className="text-[10px] text-[#6b5a3a] underline text-center mt-1">
+            ← Back to Arena
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const placedCount = Object.keys(grid).length;
+  const estScore = placedCount > 0 ? calcScore(grid) : null;
+
+  return (
+    <div className="flex flex-col flex-1 pb-4 overflow-y-auto relative z-10 page-fade">
+      <DenHeader attemptsLeft={attemptsLeft} dungeonTier={dungeonTier} onSwitchToArena={onSwitchToArena} />
+      <div className="px-3 mt-2 flex flex-col gap-3">
+
+        {/* Dragon info */}
+        <div className="dragon-panel px-3 py-3">
+          <div className="flex items-center gap-3 mb-2">
+            <span className="text-4xl">{dragon.emoji}</span>
+            <div className="flex-1 min-w-0">
+              <p className="font-cinzel font-bold text-[#f0c040] text-sm">{dragon.name}</p>
+              <p className="text-[#6b5a3a] text-[10px] leading-snug">{dragon.desc}</p>
+            </div>
+            <div className="text-right flex-shrink-0">
+              <p className="font-cinzel font-bold text-[#f87171] text-sm">{dragonHp} HP</p>
+              <p className="text-[8px] text-[#6b5a3a]">Tier {dungeonTier}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg"
+            style={{ background: 'rgba(240,192,64,0.08)', border: '1px solid rgba(240,192,64,0.2)' }}>
+            <span className="text-sm">💡</span>
+            <p className="text-[#f0c040] text-[10px]">Weakness: {dragon.weaknessLabel} — {dragon.hint}</p>
+          </div>
+        </div>
+
+        {attemptsLeft <= 0 && (
+          <div className="dragon-panel px-3 py-3 text-center">
+            <p className="text-[#f87171] font-bold text-sm">🐉 No raids remaining today</p>
+            <p className="text-[#6b5a3a] text-[10px] mt-1">Resets at midnight UTC</p>
+          </div>
+        )}
+        {onCooldown && attemptsLeft > 0 && (
+          <DenCooldownBanner cooldownUntil={state.dungeonCooldownUntil} />
+        )}
+
+        {/* 4×4 tactical grid */}
+        <div className="dragon-panel px-3 py-3">
+          <p className="font-cinzel font-bold text-[#e8d8a8] text-[10px] tracking-wider mb-1">TACTICAL GRID</p>
+          <p className="text-[#4a3a2a] text-[9px] mb-2">
+            {selectedTroop
+              ? `Tap a cell to place ${BUILDING_TROOP_INFO[selectedTroop]?.emoji ?? ''} ${BUILDING_TROOP_INFO[selectedTroop]?.name ?? ''}`
+              : 'Select a troop below, then tap a grid cell to place it. Tap a placed troop to remove.'}
+          </p>
+          <div className="grid grid-cols-4 gap-1 mx-auto" style={{ maxWidth: 248 }}>
+            {Array.from({ length: 16 }).map((_, cellIdx) => {
+              const isDragonCell = dragon.occupies.includes(cellIdx);
+              const troopId = grid[cellIdx];
+              const troop = troopId ? BUILDING_TROOP_INFO[troopId] : null;
+              return (
+                <button
+                  key={cellIdx}
+                  onClick={() => handleCellTap(cellIdx)}
+                  disabled={isDragonCell}
+                  className="rounded-lg flex items-center justify-center text-xl transition-all"
+                  style={{
+                    minHeight: 54,
+                    background: isDragonCell
+                      ? 'rgba(239,68,68,0.18)'
+                      : troop
+                        ? 'rgba(212,160,23,0.15)'
+                        : selectedTroop
+                          ? 'rgba(96,165,250,0.06)'
+                          : 'rgba(255,255,255,0.03)',
+                    border: isDragonCell
+                      ? '1px solid rgba(239,68,68,0.45)'
+                      : troop
+                        ? '1px solid rgba(212,160,23,0.4)'
+                        : selectedTroop
+                          ? '1px dashed rgba(96,165,250,0.3)'
+                          : '1px solid rgba(255,255,255,0.06)',
+                  }}
+                >
+                  {isDragonCell ? dragon.emoji : troop ? troop.emoji : ''}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Troop roster */}
+        <div className="dragon-panel px-3 py-3">
+          <p className="font-cinzel font-bold text-[#e8d8a8] text-[10px] tracking-wider mb-2">YOUR TROOPS</p>
+          {availableTroops.length === 0 ? (
+            <p className="text-[#4a3a2a] text-[10px] text-center py-2">Build barracks and other units first</p>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {availableTroops.map(bid => {
+                const info = BUILDING_TROOP_INFO[bid];
+                const isSelected = selectedTroop === bid;
+                const isWeakness = bid === dragon.weaknessBuildingId;
+                return (
+                  <button
+                    key={bid}
+                    onClick={() => handleTroopSelect(bid)}
+                    className="flex flex-col items-center px-3 py-2 rounded-lg transition-all"
+                    style={{
+                      background: isSelected
+                        ? 'rgba(96,165,250,0.15)'
+                        : isWeakness
+                          ? 'rgba(240,192,64,0.1)'
+                          : 'rgba(255,255,255,0.03)',
+                      border: isSelected
+                        ? '1px solid rgba(96,165,250,0.6)'
+                        : isWeakness
+                          ? '1px solid rgba(240,192,64,0.4)'
+                          : '1px solid rgba(255,255,255,0.08)',
+                    }}
+                  >
+                    <span className="text-xl mb-0.5">{info.emoji}</span>
+                    <span className="text-[8px] font-bold" style={{ color: isSelected ? '#60a5fa' : isWeakness ? '#f0c040' : '#8a7a5a' }}>
+                      {info.name}
+                    </span>
+                    {isWeakness && <span className="text-[7px] text-[#f0c040] mt-0.5">★ EFFECTIVE</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Score preview */}
+        {estScore !== null && (
+          <div className="dragon-panel px-3 py-2 flex items-center justify-between">
+            <div>
+              <p className="text-[10px] text-[#6b5a3a]">Est. Score</p>
+              <p className="font-cinzel font-bold text-[#f0c040] text-sm">{estScore}</p>
+            </div>
+            <div className="text-center">
+              <p className="text-[10px] text-[#6b5a3a]">Dragon HP</p>
+              <p className="font-cinzel font-bold text-[#f87171] text-sm">{dragonHp}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] text-[#6b5a3a]">Outcome</p>
+              <p className="font-cinzel font-bold text-sm"
+                style={{ color: estScore >= dragonHp ? '#4ade80' : estScore >= dragonHp * 0.6 ? '#f0c040' : '#f87171' }}>
+                {estScore >= dragonHp ? 'Victory' : estScore >= dragonHp * 0.6 ? 'Partial' : 'Defeat'}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Raid button */}
+        <button
+          onClick={handleRaid}
+          disabled={attemptsLeft <= 0 || onCooldown || placedCount === 0}
+          className="action-btn w-full py-3 text-sm font-black tracking-wide"
+          style={{ opacity: (attemptsLeft <= 0 || onCooldown || placedCount === 0) ? 0.4 : 1 }}
+        >
+          🐉 RAID — {attemptsLeft} {attemptsLeft === 1 ? 'raid' : 'raids'} left today
+        </button>
+
+        {/* Stats */}
+        <div className="dragon-panel px-3 py-2">
+          <div className="flex justify-around text-center">
+            <div>
+              <p className="font-cinzel font-bold text-[#f0c040]">{state.dungeonTotalVictories ?? 0}</p>
+              <p className="text-[9px] text-[#6b5a3a]">Total Victories</p>
+            </div>
+            <div>
+              <p className="font-cinzel font-bold text-[#60a5fa]">{dungeonTier}</p>
+              <p className="text-[9px] text-[#6b5a3a]">Dungeon Tier</p>
+            </div>
+            <div>
+              <p className="font-cinzel font-bold text-[#4ade80]">{attemptsLeft}/5</p>
+              <p className="text-[9px] text-[#6b5a3a]">Raids Left</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
+function DenHeader({ attemptsLeft, dungeonTier, onSwitchToArena }: {
+  attemptsLeft: number; dungeonTier: number; onSwitchToArena: () => void;
+}) {
+  return (
+    <div className="top-bar sticky top-0 z-30 px-4 py-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="gold-shimmer font-cinzel font-bold text-lg tracking-wide">🐉 Dragon Den</h2>
+          <p className="text-[#6b5a3a] text-[10px] mt-0.5 uppercase tracking-wider">Dungeon Raids · Tier {dungeonTier}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="text-right">
+            <p className="font-cinzel text-[#f0c040] font-bold text-base">{attemptsLeft}/5</p>
+            <p className="text-[9px] text-[#6b5a3a]">raids left</p>
+          </div>
+          <button
+            onClick={onSwitchToArena}
+            className="px-2 py-1 rounded-lg text-[9px] font-bold"
+            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.12)', color: '#6b5a3a' }}
+          >
+            ⚔️ Arena
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DenCooldownBanner({ cooldownUntil }: { cooldownUntil: number }) {
+  const [label, setLabel] = useState('');
+  useEffect(() => {
+    const update = () => {
+      const diff = Math.max(0, cooldownUntil - Date.now());
+      if (diff <= 0) { setLabel('Ready!'); return; }
+      const h = Math.floor(diff / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+      setLabel(h > 0 ? `${h}h ${m.toString().padStart(2, '0')}m` : `${m}m ${s.toString().padStart(2, '0')}s`);
+    };
+    update();
+    const id = setInterval(update, 1000);
+    return () => clearInterval(id);
+  }, [cooldownUntil]);
+  return (
+    <div className="dragon-panel px-3 py-3 text-center">
+      <p className="text-[#f87171] font-bold text-sm">⏳ Raid cooldown active</p>
+      <p className="text-[#6b5a3a] text-[10px] mt-1">
+        Next raid available in <span className="text-[#f0c040] font-mono font-bold">{label}</span>
+      </p>
     </div>
   );
 }
