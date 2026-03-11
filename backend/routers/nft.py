@@ -9,8 +9,10 @@ PLACEHOLDER_IMAGE = "https://placehold.co/600x600/1a0e00/f0c040?text=DragonSlaye
 BASE_URL = "https://dragonslayer-production.up.railway.app"
 
 ITEM_IMAGE_MAP = {
-    "Lynx Sword":   f"{BASE_URL}/images/swordlvl4.png",
-    "Nomic Shield": f"{BASE_URL}/images/shieldlvl4.png",
+    "Lynx Sword":   f"{BASE_URL}/images/lynxsword.png",
+    "Nomic Shield": f"{BASE_URL}/images/nomicsshield.png",
+    "Dragon Fang":  f"{BASE_URL}/images/swordlvl4.png",
+    "Aegis":        f"{BASE_URL}/images/shieldlvl4.png",
 }
 
 
@@ -58,7 +60,7 @@ async def get_nft_item_metadata(player_id: int, item_id: str):
 
     return {
         "name": name,
-        "description": f"Legendary DragonSlayer {item_type} · Power {power} · Minted on XRPL",
+        "description": f"{rarity.title()} DragonSlayer {item_type} · Power {power} · Minted on XRPL",
         "image": image,
         "external_url": f"{BASE_URL}/profile/{player_id}",
         "attributes": [
@@ -66,6 +68,7 @@ async def get_nft_item_metadata(player_id: int, item_id: str):
             {"trait_type": "Type",      "value": item_type.title()},
             {"trait_type": "Power",     "value": power},
             {"trait_type": "Game",      "value": "DragonSlayer"},
+            {"trait_type": "Item Name", "value": name},
         ],
     }
 

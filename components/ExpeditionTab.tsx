@@ -237,6 +237,9 @@ export default function ExpeditionTab() {
           wallet: state.walletAddress,
           itemId: item.id,
           itemName: item.name,
+          itemRarity: item.rarity,
+          itemPower: item.power,
+          itemType: item.itemType,
           playerId: state.playerId,
         }),
       });
@@ -519,7 +522,7 @@ export default function ExpeditionTab() {
                         item={item}
                         isEquipped
                         onUnequip={() => unequipItem(slot)}
-                        showMintBtn={item.rarity === 'legendary'}
+                        showMintBtn={item.rarity === 'legendary' || (item.rarity === 'epic' && (item.itemType === 'weapon' || item.itemType === 'shield'))}
                         onMint={() => startMint(item)}
                         mintPhase={mintItemId === item.id ? mintPhase : 'idle'}
                         onClearNft={item.nftTokenId ? () => clearItemNftTokenId(item.id) : undefined}
@@ -549,7 +552,7 @@ export default function ExpeditionTab() {
                 key={item.id}
                 item={item}
                 onEquip={() => equipItem(item.id)}
-                showMintBtn={item.rarity === 'legendary'}
+                showMintBtn={item.rarity === 'legendary' || (item.rarity === 'epic' && (item.itemType === 'weapon' || item.itemType === 'shield'))}
                 onMint={() => startMint(item)}
                 mintPhase={mintItemId === item.id ? mintPhase : 'idle'}
                 onClearNft={item.nftTokenId ? () => clearItemNftTokenId(item.id) : undefined}
@@ -694,13 +697,42 @@ export default function ExpeditionTab() {
                       boxShadow: isLegendary ? '0 0 10px rgba(240,192,64,0.12)' : undefined,
                     }}
                   >
-                    {isLegendary && (
-                      <div className="flex items-center gap-1.5 mb-2">
-                        <span className="text-sm">✨</span>
-                        <span className="font-cinzel font-bold text-[10px] tracking-wider" style={{ color }}>LEGENDARY NFT UPGRADE</span>
-                        <span className="text-[7px] font-bold px-1 py-0.5 rounded" style={{ background: 'rgba(240,192,64,0.2)', color }}>XRPL NFT</span>
-                      </div>
-                    )}
+                    {isLegendary && (() => {
+                      const epicItem = findOwnedItem(nextRecipe.upgradesFrom!.itemType as ItemType, 'epic');
+                      const isMintingEpic = epicItem ? mintItemId === epicItem.id && (mintPhase === 'loading' || mintPhase === 'waiting') : false;
+                      return (
+                        <>
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-sm">⚔️</span>
+                              <span className="font-cinzel font-bold text-[10px] tracking-wider text-[#a0c4ff]">MINT EPIC AS NFT</span>
+                            </div>
+                            {epicItem && !epicItem.nftTokenId ? (
+                              <button
+                                onClick={() => startMint(epicItem)}
+                                disabled={isMintingEpic}
+                                className="text-[8px] font-bold px-2 py-1 rounded transition-all active:scale-95 whitespace-nowrap"
+                                style={{
+                                  background: isMintingEpic ? 'rgba(100,149,237,0.15)' : 'linear-gradient(135deg,#3a6fbc,#6499ef)',
+                                  color: isMintingEpic ? '#a0c4ff' : '#fff',
+                                }}
+                              >
+                                {isMintingEpic ? '⏳…' : `✨ Mint ${epicItem.name}`}
+                              </button>
+                            ) : epicItem?.nftTokenId ? (
+                              <span className="text-[8px] font-bold px-2 py-0.5 rounded" style={{ background: 'rgba(100,149,237,0.2)', color: '#a0c4ff' }}>✨ Minted</span>
+                            ) : null}
+                          </div>
+                          <div className="border-t border-[rgba(240,192,64,0.15)] pt-2 mb-2">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-sm">✨</span>
+                              <span className="font-cinzel font-bold text-[10px] tracking-wider" style={{ color }}>LEGENDARY NFT UPGRADE</span>
+                              <span className="text-[7px] font-bold px-1 py-0.5 rounded" style={{ background: 'rgba(240,192,64,0.2)', color }}>XRPL NFT</span>
+                            </div>
+                          </div>
+                        </>
+                      );
+                    })()}
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <div>
                         <div className="flex items-center gap-1.5">

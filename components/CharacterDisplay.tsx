@@ -83,8 +83,8 @@ export default function CharacterDisplay() {
   const equippedShield = state.equipment.shield;
   const showSword  = equippedWeapon?.rarity === 'epic' || equippedWeapon?.rarity === 'legendary';
   const showShield = equippedShield?.rarity === 'epic' || equippedShield?.rarity === 'legendary';
-  const swordImg  = equippedWeapon?.rarity === 'legendary' ? '/images/lynxsword.png'   : '/images/swordlvl4.png';
-  const shieldImg = equippedShield?.rarity === 'legendary' ? '/images/nomicsshield.png' : '/images/shieldlvl4.png';
+  const swordImg  = '/images/lynxsword.png';
+  const shieldImg = '/images/nomicsshield.png';
 
   return (
     <div className="relative flex-1 w-full flex flex-col items-center justify-center" style={{ paddingBottom: 48 }}>
@@ -161,13 +161,13 @@ export default function CharacterDisplay() {
           <div
             className="absolute pointer-events-none z-20"
             style={{
-              left: 4,
-              bottom: 60,
-              width: 72,
-              height: 100,
+              left: 0,
+              bottom: 50,
+              width: 90,
+              height: 120,
               filter: equippedShield?.rarity === 'legendary'
-                ? 'drop-shadow(0 0 10px rgba(240,192,64,0.85)) drop-shadow(0 0 4px rgba(240,192,64,0.6))'
-                : 'drop-shadow(0 0 8px rgba(100,149,237,0.7)) drop-shadow(0 0 3px rgba(100,149,237,0.5))',
+                ? 'drop-shadow(0 0 14px rgba(240,192,64,0.9)) drop-shadow(0 0 6px rgba(240,192,64,0.7))'
+                : 'drop-shadow(0 0 10px rgba(100,149,237,0.8)) drop-shadow(0 0 4px rgba(150,180,255,0.6))',
               animation: floatAnim,
             }}
           >
@@ -192,13 +192,13 @@ export default function CharacterDisplay() {
           <div
             className="absolute pointer-events-none z-20"
             style={{
-              right: 4,
-              bottom: 55,
-              width: 60,
-              height: 140,
+              right: 0,
+              bottom: 40,
+              width: 70,
+              height: 160,
               filter: equippedWeapon?.rarity === 'legendary'
-                ? 'drop-shadow(0 0 10px rgba(240,192,64,0.85)) drop-shadow(0 0 4px rgba(240,192,64,0.6))'
-                : 'drop-shadow(0 0 8px rgba(100,149,237,0.7)) drop-shadow(0 0 3px rgba(100,149,237,0.5))',
+                ? 'drop-shadow(0 0 14px rgba(240,192,64,0.9)) drop-shadow(0 0 6px rgba(240,192,64,0.7))'
+                : 'drop-shadow(0 0 10px rgba(100,149,237,0.8)) drop-shadow(0 0 4px rgba(150,180,255,0.6))',
               animation: floatAnim,
             }}
           >

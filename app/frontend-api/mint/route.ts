@@ -17,10 +17,13 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json().catch(() => ({}));
-    const { wallet, itemId, itemName, playerId } = body as {
+    const { wallet, itemId, itemName, itemRarity, itemPower, itemType, playerId } = body as {
       wallet?: string;
       itemId?: string;
       itemName?: string;
+      itemRarity?: string;
+      itemPower?: number;
+      itemType?: string;
       playerId?: number | string;
     };
 
@@ -32,6 +35,14 @@ export async function POST(request: NextRequest) {
     const cleanOrigin = origin.replace(/\/$/, '').split('/').slice(0, 3).join('/');
     const metaUrl = `${cleanOrigin}/api/nft/item/${playerId ?? 0}/${itemId}`;
     const uriHex = toHex(metaUrl);
+
+    const rarityLabel = itemRarity ? itemRarity.charAt(0).toUpperCase() + itemRarity.slice(1) : '';
+    const instruction = [
+      `Mint "${itemName}" as an XRPL NFT`,
+      rarityLabel && `Rarity: ${rarityLabel}`,
+      itemType && `Type: ${itemType.charAt(0).toUpperCase() + itemType.slice(1)}`,
+      itemPower != null && `Power: ${itemPower}`,
+    ].filter(Boolean).join(' · ');
 
     const res = await fetch(`${XAMAN_BASE}/payload`, {
       method: 'POST',
@@ -49,9 +60,7 @@ export async function POST(request: NextRequest) {
           ...(wallet ? { Account: wallet } : {}),
         },
         options: { submit: true },
-        custom_meta: {
-          instruction: `Mint "${itemName}" as an XRPL NFT to your wallet`,
-        },
+        custom_meta: { instruction },
       }),
     });
 
