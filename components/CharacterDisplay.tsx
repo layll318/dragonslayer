@@ -81,8 +81,10 @@ export default function CharacterDisplay() {
 
   const equippedWeapon = state.equipment.weapon;
   const equippedShield = state.equipment.shield;
-  const hasLynxSword   = equippedWeapon?.name === 'Lynx Sword';
-  const hasNomicShield = equippedShield?.name === 'Nomic Shield';
+  const showSword  = equippedWeapon?.rarity === 'epic' || equippedWeapon?.rarity === 'legendary';
+  const showShield = equippedShield?.rarity === 'epic' || equippedShield?.rarity === 'legendary';
+  const swordImg  = equippedWeapon?.rarity === 'legendary' ? '/images/lynxsword.png'   : '/images/swordlvl4.png';
+  const shieldImg = equippedShield?.rarity === 'legendary' ? '/images/nomicsshield.png' : '/images/shieldlvl4.png';
 
   return (
     <div className="relative flex-1 w-full flex flex-col items-center justify-center" style={{ paddingBottom: 48 }}>
@@ -154,8 +156,8 @@ export default function CharacterDisplay() {
           )}
         </div>
 
-        {/* Nomic Shield — left edge of container */}
-        {hasNomicShield && (
+        {/* Shield overlay — epic (Aegis) or legendary (Nomic Shield) */}
+        {showShield && (
           <div
             className="absolute pointer-events-none z-20"
             style={{
@@ -163,14 +165,16 @@ export default function CharacterDisplay() {
               bottom: 60,
               width: 72,
               height: 100,
-              filter: 'drop-shadow(0 0 10px rgba(240,192,64,0.85)) drop-shadow(0 0 4px rgba(240,192,64,0.6))',
+              filter: equippedShield?.rarity === 'legendary'
+                ? 'drop-shadow(0 0 10px rgba(240,192,64,0.85)) drop-shadow(0 0 4px rgba(240,192,64,0.6))'
+                : 'drop-shadow(0 0 8px rgba(100,149,237,0.7)) drop-shadow(0 0 3px rgba(100,149,237,0.5))',
               animation: floatAnim,
             }}
           >
             <NftItemOverlay
-              src="/images/shieldlvl4.png"
-              alt="Nomic Shield"
-              fallbackLabel="🛡️ Nomic Shield"
+              src={shieldImg}
+              alt={equippedShield?.name ?? 'Shield'}
+              fallbackLabel="🛡️ Shield"
             />
             {equippedShield?.nftTokenId && (
               <span
@@ -183,8 +187,8 @@ export default function CharacterDisplay() {
           </div>
         )}
 
-        {/* Lynx Sword — right edge of container */}
-        {hasLynxSword && (
+        {/* Sword overlay — epic (Dragon Fang) or legendary (Lynx Sword) */}
+        {showSword && (
           <div
             className="absolute pointer-events-none z-20"
             style={{
@@ -192,14 +196,16 @@ export default function CharacterDisplay() {
               bottom: 55,
               width: 60,
               height: 140,
-              filter: 'drop-shadow(0 0 10px rgba(240,192,64,0.85)) drop-shadow(0 0 4px rgba(240,192,64,0.6))',
+              filter: equippedWeapon?.rarity === 'legendary'
+                ? 'drop-shadow(0 0 10px rgba(240,192,64,0.85)) drop-shadow(0 0 4px rgba(240,192,64,0.6))'
+                : 'drop-shadow(0 0 8px rgba(100,149,237,0.7)) drop-shadow(0 0 3px rgba(100,149,237,0.5))',
               animation: floatAnim,
             }}
           >
             <NftItemOverlay
-              src="/images/swordlvl4.png"
-              alt="Lynx Sword"
-              fallbackLabel="⚔️ Lynx Sword"
+              src={swordImg}
+              alt={equippedWeapon?.name ?? 'Weapon'}
+              fallbackLabel="⚔️ Weapon"
             />
             {equippedWeapon?.nftTokenId && (
               <span

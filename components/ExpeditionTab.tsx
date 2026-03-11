@@ -791,9 +791,9 @@ export default function ExpeditionTab() {
                   ? mintItemId === ownedLegendary.id && (mintPhase === 'loading' || mintPhase === 'waiting')
                   : false;
                 const itemImg = ownedLegendary?.name === 'Lynx Sword'
-                  ? '/images/swordlvl4.png'
+                  ? '/images/lynxsword.png'
                   : ownedLegendary?.name === 'Nomic Shield'
-                  ? '/images/shieldlvl4.png'
+                  ? '/images/nomicsshield.png'
                   : null;
                 return (
                   <div className="py-2">
