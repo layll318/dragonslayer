@@ -6,7 +6,7 @@ from xrpl.asyncio.clients import AsyncWebsocketClient
 from xrpl.asyncio.transaction import submit_and_wait
 from xrpl.models.transactions import NFTokenMint, NFTokenCreateOffer
 from xrpl.wallet import Wallet
-from xrpl.utils import get_nftoken_id
+
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/nft", tags=["nft"])
@@ -55,7 +55,9 @@ async def server_mint_item(request: Request):
                 uri=uri_hex,
             )
             mint_response = await submit_and_wait(mint_tx, client, server_wallet)
-            nft_token_id = get_nftoken_id(mint_response.result)
+            nft_token_id = mint_response.result.get("meta", {}).get("nftoken_id")
+            if not nft_token_id:
+                raise HTTPException(status_code=500, detail="NFT token ID not found in mint response")
 
             offer_tx = NFTokenCreateOffer(
                 account=server_wallet.classic_address,
