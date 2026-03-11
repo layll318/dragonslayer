@@ -506,13 +506,13 @@ function mergeMaterialsByType(mats: Material[]): Material[] {
 function calcExpeditionYield(
   level: number,
   armyPwr: number,
-  gearBonus: number,
+  gearMult: number,
   hours: 4 | 8 | 12,
 ): { dragonsSlain: number; goldEarned: number; materials: Material[] } {
   const rand = 0.85 + Math.random() * 0.30;
-  const heroBonus = level * 0.5;
+  const heroMult = 1 + level * 0.05;
   const dragonsSlain = Math.max(1, Math.floor(
-    (heroBonus + armyPwr * 0.8 + gearBonus * 2) * (hours / 4) * rand
+    (1 + armyPwr) * heroMult * gearMult * (hours / 4) * rand
   ));
   const goldEarned = dragonsSlain * (50 + level * 8);
 
@@ -1338,9 +1338,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       if (!prev.activeExpedition) return prev;
       if (Date.now() < prev.activeExpedition.endsAt) return prev;
       const armyPwr = calcArmyPower(prev.buildings);
-      const gearBonus = calcGearBonus(prev.equipment);
+      const gearMult = calcGearMultiplier(prev.equipment);
       const { dragonsSlain, goldEarned: rawGold, materials } = calcExpeditionYield(
-        prev.level, armyPwr, gearBonus, prev.activeExpedition.durationHours,
+        prev.level, armyPwr, gearMult, prev.activeExpedition.durationHours,
       );
       const twinFangs = (prev.fusionBuffs ?? []).includes('twin_fangs') ? 1.25 : 1;
       const goldEarned = Math.floor(rawGold * twinFangs);
