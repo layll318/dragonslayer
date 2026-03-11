@@ -2,7 +2,7 @@ import logging
 import os
 from fastapi import APIRouter, HTTPException, Request
 from database import get_pool
-from xrpl.asyncio.clients import AsyncWebsocketClient
+from xrpl.asyncio.clients import AsyncJsonRpcClient
 from xrpl.asyncio.transaction import submit_and_wait
 from xrpl.models.transactions import NFTokenMint, NFTokenCreateOffer
 from xrpl.wallet import Wallet
@@ -13,7 +13,7 @@ router = APIRouter(prefix="/api/nft", tags=["nft"])
 
 PLACEHOLDER_IMAGE = "https://placehold.co/600x600/1a0e00/f0c040?text=DragonSlayer"
 BASE_URL = "https://dragonslayer-production.up.railway.app"
-XRPL_NODE = os.environ.get("XRPL_NODE", "wss://xrplcluster.com")
+XRPL_NODE = os.environ.get("XRPL_NODE", "https://s1.ripple.com:51234/")
 XRPL_WALLET_SEED = os.environ.get("XRPL_WALLET_SEED", "")
 
 ITEM_IMAGE_MAP = {
@@ -47,38 +47,38 @@ async def server_mint_item(request: Request):
     server_wallet = Wallet.from_seed(XRPL_WALLET_SEED)
 
     try:
-        async with AsyncWebsocketClient(XRPL_NODE) as client:
-            mint_tx = NFTokenMint(
-                account=server_wallet.classic_address,
-                nftoken_taxon=0,
-                flags=8,
-                uri=uri_hex,
-            )
-            mint_response = await submit_and_wait(mint_tx, client, server_wallet)
-            nft_token_id = mint_response.result.get("meta", {}).get("nftoken_id")
-            if not nft_token_id:
-                raise HTTPException(status_code=500, detail="NFT token ID not found in mint response")
+        client = AsyncJsonRpcClient(XRPL_NODE)
+        mint_tx = NFTokenMint(
+            account=server_wallet.classic_address,
+            nftoken_taxon=0,
+            flags=8,
+            uri=uri_hex,
+        )
+        mint_response = await submit_and_wait(mint_tx, client, server_wallet)
+        nft_token_id = mint_response.result.get("meta", {}).get("nftoken_id")
+        if not nft_token_id:
+            raise HTTPException(status_code=500, detail="NFT token ID not found in mint response")
 
-            offer_tx = NFTokenCreateOffer(
-                account=server_wallet.classic_address,
-                nftoken_id=nft_token_id,
-                amount="0",
-                destination=player_wallet,
-                flags=1,
-            )
-            offer_response = await submit_and_wait(offer_tx, client, server_wallet)
+        offer_tx = NFTokenCreateOffer(
+            account=server_wallet.classic_address,
+            nftoken_id=nft_token_id,
+            amount="0",
+            destination=player_wallet,
+            flags=1,
+        )
+        offer_response = await submit_and_wait(offer_tx, client, server_wallet)
 
-            offer_index = None
-            for node in offer_response.result.get("meta", {}).get("AffectedNodes", []):
-                created = node.get("CreatedNode", {})
-                if created.get("LedgerEntryType") == "NFTokenOffer":
-                    offer_index = created.get("LedgerIndex")
-                    break
+        offer_index = None
+        for node in offer_response.result.get("meta", {}).get("AffectedNodes", []):
+            created = node.get("CreatedNode", {})
+            if created.get("LedgerEntryType") == "NFTokenOffer":
+                offer_index = created.get("LedgerIndex")
+                break
 
-            if not offer_index:
-                raise HTTPException(status_code=500, detail="Failed to get offer index")
+        if not offer_index:
+            raise HTTPException(status_code=500, detail="Failed to get offer index")
 
-            return {"nft_token_id": nft_token_id, "offer_index": offer_index}
+        return {"nft_token_id": nft_token_id, "offer_index": offer_index}
     except HTTPException:
         raise
     except Exception as e:
