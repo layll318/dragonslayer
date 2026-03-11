@@ -31,9 +31,16 @@ export async function GET(
   const data = await res.json();
   const meta     = data.meta     ?? {};
   const response = data.response ?? {};
+  const payload  = data.payload  ?? {};
 
-  // Xaman returns the minted NFTokenID in response.nftoken_id after on-chain dispatch
-  const tokenId: string | null = response.nftoken_id ?? null;
+  // nft_token_id was stored in custom_meta.blob during server-mint step
+  let tokenId: string | null = response.nftoken_id ?? null;
+  if (!tokenId) {
+    try {
+      const blob = payload.custom_meta?.blob;
+      if (blob) tokenId = JSON.parse(blob).nft_token_id ?? null;
+    } catch { /* ignore parse errors */ }
+  }
 
   console.log(`[mint/status] uuid=${uuid} signed=${meta.signed} cancelled=${meta.cancelled} expired=${meta.expired} tokenId=${tokenId}`);
 

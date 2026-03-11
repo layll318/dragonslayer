@@ -5,10 +5,7 @@ export const dynamic = 'force-dynamic';
 const XAMAN_API_KEY    = process.env.XAMAN_API_KEY    || '';
 const XAMAN_API_SECRET = process.env.XAMAN_API_SECRET || '';
 const XAMAN_BASE       = 'https://xumm.app/api/v1/platform';
-
-function toHex(str: string): string {
-  return Buffer.from(str, 'utf8').toString('hex').toUpperCase();
-}
+const BACKEND_URL      = process.env.NEXT_PUBLIC_API_URL || 'https://dragonslayer-production.up.railway.app';
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,18 +24,27 @@ export async function POST(request: NextRequest) {
       playerId?: number | string;
     };
 
-    if (!itemId || !itemName) {
-      return NextResponse.json({ error: 'Missing itemId or itemName' }, { status: 400 });
+    if (!itemId || !itemName || !wallet || !playerId) {
+      return NextResponse.json({ error: 'Missing wallet, itemId, itemName, or playerId' }, { status: 400 });
     }
 
-    const origin = request.headers.get('origin') || 'https://dragonslayer-production.up.railway.app';
-    const cleanOrigin = origin.replace(/\/$/, '').split('/').slice(0, 3).join('/');
-    const metaUrl = `${cleanOrigin}/api/nft/item/${playerId ?? 0}/${itemId}`;
-    const uriHex = toHex(metaUrl);
+    // ── Step 1: Server mints NFT + creates 0-XRP sell offer to player ──────
+    const mintRes = await fetch(`${BACKEND_URL}/api/nft/mint-item`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ player_id: playerId, item_id: itemId, player_wallet: wallet }),
+    });
+    if (!mintRes.ok) {
+      const err = await mintRes.text();
+      console.error('Backend mint-item error:', err);
+      return NextResponse.json({ error: 'Server minting failed — check XRPL_WALLET_SEED' }, { status: 500 });
+    }
+    const { nft_token_id, offer_index } = await mintRes.json() as { nft_token_id: string; offer_index: string };
 
+    // ── Step 2: Xaman — player signs NFTokenAcceptOffer to claim ───────────
     const rarityLabel = itemRarity ? itemRarity.charAt(0).toUpperCase() + itemRarity.slice(1) : '';
     const instruction = [
-      `Mint "${itemName}" as an XRPL NFT`,
+      `Claim "${itemName}" NFT to your wallet`,
       rarityLabel && `Rarity: ${rarityLabel}`,
       itemType && `Type: ${itemType.charAt(0).toUpperCase() + itemType.slice(1)}`,
       itemPower != null && `Power: ${itemPower}`,
@@ -53,21 +59,22 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         txjson: {
-          TransactionType: 'NFTokenMint',
-          NFTokenTaxon: 0,
-          Flags: 8, // tfTransferable
-          URI: uriHex,
-          ...(wallet ? { Account: wallet } : {}),
+          TransactionType: 'NFTokenAcceptOffer',
+          NFTokenSellOffer: offer_index,
+          Account: wallet,
         },
         options: { submit: true },
-        custom_meta: { instruction },
+        custom_meta: {
+          instruction,
+          blob: JSON.stringify({ nft_token_id }),
+        },
       }),
     });
 
     if (!res.ok) {
       const err = await res.text();
-      console.error('Xaman mint create error:', err);
-      return NextResponse.json({ error: 'Xaman rejected the mint request' }, { status: res.status });
+      console.error('Xaman AcceptOffer create error:', err);
+      return NextResponse.json({ error: 'Xaman rejected the claim request' }, { status: res.status });
     }
 
     const data = await res.json();

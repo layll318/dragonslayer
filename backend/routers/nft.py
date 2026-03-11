@@ -1,12 +1,20 @@
 import logging
-from fastapi import APIRouter, HTTPException
+import os
+from fastapi import APIRouter, HTTPException, Request
 from database import get_pool
+from xrpl.asyncio.clients import AsyncWebsocketClient
+from xrpl.asyncio.transaction import submit_and_wait
+from xrpl.models.transactions import NFTokenMint, NFTokenCreateOffer
+from xrpl.wallet import Wallet
+from xrpl.utils import get_nftoken_id
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/nft", tags=["nft"])
 
 PLACEHOLDER_IMAGE = "https://placehold.co/600x600/1a0e00/f0c040?text=DragonSlayer"
 BASE_URL = "https://dragonslayer-production.up.railway.app"
+XRPL_NODE = os.environ.get("XRPL_NODE", "wss://xrplcluster.com")
+XRPL_WALLET_SEED = os.environ.get("XRPL_WALLET_SEED", "")
 
 ITEM_IMAGE_MAP = {
     "Lynx Sword":   f"{BASE_URL}/images/lynxsword.png",
@@ -14,6 +22,66 @@ ITEM_IMAGE_MAP = {
     "Dragon Fang":  f"{BASE_URL}/images/swordlvl4.png",
     "Aegis":        f"{BASE_URL}/images/shieldlvl4.png",
 }
+
+
+@router.post("/mint-item")
+async def server_mint_item(request: Request):
+    """
+    Server mints an NFT from the game wallet, then creates a 0-XRP sell offer
+    to the player's wallet. The player accepts the offer via Xaman to claim.
+    """
+    body = await request.json()
+    player_id = body.get("player_id")
+    item_id = body.get("item_id")
+    player_wallet = body.get("player_wallet")
+
+    if not player_id or not item_id or not player_wallet:
+        raise HTTPException(status_code=400, detail="Missing player_id, item_id, or player_wallet")
+
+    if not XRPL_WALLET_SEED:
+        raise HTTPException(status_code=500, detail="XRPL_WALLET_SEED not configured on server")
+
+    meta_url = f"{BASE_URL}/api/nft/item/{player_id}/{item_id}"
+    uri_hex = meta_url.encode("utf-8").hex().upper()
+
+    server_wallet = Wallet.from_seed(XRPL_WALLET_SEED)
+
+    try:
+        async with AsyncWebsocketClient(XRPL_NODE) as client:
+            mint_tx = NFTokenMint(
+                account=server_wallet.classic_address,
+                nftoken_taxon=0,
+                flags=8,
+                uri=uri_hex,
+            )
+            mint_response = await submit_and_wait(mint_tx, client, server_wallet)
+            nft_token_id = get_nftoken_id(mint_response.result)
+
+            offer_tx = NFTokenCreateOffer(
+                account=server_wallet.classic_address,
+                nftoken_id=nft_token_id,
+                amount="0",
+                destination=player_wallet,
+                flags=1,
+            )
+            offer_response = await submit_and_wait(offer_tx, client, server_wallet)
+
+            offer_index = None
+            for node in offer_response.result.get("meta", {}).get("AffectedNodes", []):
+                created = node.get("CreatedNode", {})
+                if created.get("LedgerEntryType") == "NFTokenOffer":
+                    offer_index = created.get("LedgerIndex")
+                    break
+
+            if not offer_index:
+                raise HTTPException(status_code=500, detail="Failed to get offer index")
+
+            return {"nft_token_id": nft_token_id, "offer_index": offer_index}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("server_mint_item error")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/item/{player_id}/{item_id}")

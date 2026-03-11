@@ -1189,7 +1189,7 @@ export default function ExpeditionTab() {
 
       {/* ── Mint modal overlay ── */}
       {mintPhase !== 'idle' && mintItemId && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-end justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div
             className="rounded-2xl p-5 w-full max-w-sm shadow-2xl mb-2"
             style={{
@@ -1200,16 +1200,16 @@ export default function ExpeditionTab() {
             <div className="text-center mb-4">
               <div className="flex items-center justify-center gap-2 mb-1">
                 <span className="text-xl">✨</span>
-                <h2 className="text-lg font-bold text-[#f0c040] font-cinzel">Mint NFT</h2>
+                <h2 className="text-lg font-bold text-[#f0c040] font-cinzel">Claim NFT</h2>
               </div>
               {mintPhase === 'loading' && (
-                <p className="text-[#6b5a3a] text-xs">Creating Xaman request…</p>
+                <p className="text-[#6b5a3a] text-xs">Minting on-chain… please wait…</p>
               )}
               {mintPhase === 'waiting' && (
-                <p className="text-[#6b5a3a] text-xs">Waiting for approval in Xaman…</p>
+                <p className="text-[#6b5a3a] text-xs">Open Xaman to claim your NFT.</p>
               )}
               {mintPhase === 'success' && (
-                <p className="text-[#4ade80] text-xs font-bold">✅ NFT minted successfully!</p>
+                <p className="text-[#4ade80] text-xs font-bold">✅ NFT claimed! It's yours.</p>
               )}
               {mintPhase === 'error' && (
                 <p className="text-red-400 text-xs">{mintError || 'Mint failed'}</p>
@@ -1233,7 +1233,7 @@ export default function ExpeditionTab() {
                     style={{ background: 'linear-gradient(135deg,#b8860b,#f0c040)', color: '#1a0e00' }}
                   >
                     <img src="https://xumm.app/assets/icons/favicon-196x196.png" alt="" className="w-4 h-4 rounded" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                    Open Xaman to Mint
+                    Open Xaman to Claim
                   </button>
                 )}
                 {mintUuid && (
@@ -1242,7 +1242,7 @@ export default function ExpeditionTab() {
                     className="w-full py-2.5 rounded-xl text-xs font-bold active:scale-95 transition-all"
                     style={{ border: '2px solid rgba(212,160,23,0.7)', color: '#f0c040', background: 'rgba(212,160,23,0.1)' }}
                   >
-                    ✓ Approved in Xaman? Check now
+                    ✓ Claimed in Xaman? Check now
                   </button>
                 )}
                 {mintQr && (

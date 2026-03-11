@@ -6,3 +6,4 @@ pydantic-settings==2.5.2
 python-dotenv==1.0.1
 python-telegram-bot==20.7
 aiohttp==3.10.5
+xrpl-py==2.7.0
