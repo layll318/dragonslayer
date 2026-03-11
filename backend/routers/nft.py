@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 from fastapi import APIRouter, HTTPException, Request
@@ -10,6 +11,15 @@ from xrpl.wallet import Wallet
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/nft", tags=["nft"])
+
+
+def _to_dict(val) -> dict:
+    """Safely convert an asyncpg JSONB value (string or dict) to a plain dict."""
+    if val is None:
+        return {}
+    if isinstance(val, str):
+        return json.loads(val)
+    return dict(val)
 
 PLACEHOLDER_IMAGE = "https://placehold.co/600x600/1a0e00/f0c040?text=DragonSlayer"
 BACKEND_URL  = os.environ.get("BACKEND_URL",  "https://backend-production-7363.up.railway.app")
@@ -127,7 +137,7 @@ async def get_nft_item_metadata(player_id: int, item_id: str):
 
         item = None
         if save and save["save_json"]:
-            s = save["save_json"]
+            s = _to_dict(save["save_json"])
             for inv_item in (s.get("inventory") or []):
                 if _matches(inv_item):
                     item = inv_item
@@ -219,7 +229,7 @@ async def get_nft_metadata(token_id: str):
                 "attributes": [{"trait_type": "Level", "value": 1}],
             }
 
-        s = save["save_json"]
+        s = _to_dict(save["save_json"])
         level = s.get("level", 1)
         total_dragons = s.get("totalDragonsSlain", 0)
         total_gold = s.get("totalGoldEarned", 0)
