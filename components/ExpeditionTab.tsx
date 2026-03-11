@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   useGame,
   EquipmentSlots,
@@ -45,13 +45,19 @@ const SLOT_ORDER: (keyof EquipmentSlots)[] = ['weapon', 'shield', 'helm', 'armor
 
 // ─── sub-components ─────────────────────────────────────────────────────────
 
-function ItemCard({ item, onEquip, onUnequip, isEquipped }: {
+type MintPhase = 'idle' | 'loading' | 'waiting' | 'success' | 'error';
+
+function ItemCard({ item, onEquip, onUnequip, isEquipped, onMint, mintPhase, showMintBtn }: {
   item: InventoryItem;
   onEquip?: () => void;
   onUnequip?: () => void;
   isEquipped?: boolean;
+  onMint?: () => void;
+  mintPhase?: MintPhase;
+  showMintBtn?: boolean;
 }) {
   const color = RARITY_COLORS[item.rarity];
+  const isMinting = mintPhase === 'loading' || mintPhase === 'waiting';
   return (
     <div
       className="dragon-panel p-2 flex flex-col gap-1"
@@ -61,9 +67,16 @@ function ItemCard({ item, onEquip, onUnequip, isEquipped }: {
         <span className="font-cinzel font-bold text-[11px] truncate" style={{ color }}>
           {item.name}
         </span>
-        <span className="text-[8px] font-bold uppercase px-1 py-0.5 rounded" style={{ background: `${color}20`, color }}>
-          {item.rarity}
-        </span>
+        <div className="flex items-center gap-1">
+          {item.nftTokenId && (
+            <span className="text-[7px] font-bold px-1 py-0.5 rounded" style={{ background: 'rgba(240,192,64,0.2)', color: '#f0c040' }}>
+              ✨ NFT
+            </span>
+          )}
+          <span className="text-[8px] font-bold uppercase px-1 py-0.5 rounded" style={{ background: `${color}20`, color }}>
+            {item.rarity}
+          </span>
+        </div>
       </div>
       <div className="flex items-center justify-between">
         <span className="text-[10px] text-[#9a8a6a]">⚡ {item.power} power</span>
@@ -86,6 +99,20 @@ function ItemCard({ item, onEquip, onUnequip, isEquipped }: {
           )
         )}
       </div>
+      {showMintBtn && !item.nftTokenId && onMint && (
+        <button
+          onClick={onMint}
+          disabled={isMinting}
+          className="w-full mt-0.5 py-1 rounded text-[8px] font-bold transition-all active:scale-95"
+          style={{
+            background: isMinting ? 'rgba(240,192,64,0.1)' : 'linear-gradient(135deg,#b8860b,#f0c040)',
+            color: isMinting ? '#f0c040' : '#1a0e00',
+            opacity: isMinting ? 0.7 : 1,
+          }}
+        >
+          {isMinting ? '⏳ Minting…' : '✨ Mint NFT'}
+        </button>
+      )}
     </div>
   );
 }
@@ -109,6 +136,7 @@ export default function ExpeditionTab() {
     equipItem,
     unequipItem,
     craftItem,
+    setItemNftTokenId,
     speedUpExpedition,
     placeEggInIncubator,
     claimHatchedEgg,
@@ -137,6 +165,97 @@ export default function ExpeditionTab() {
   const [section, setSection] = useState<Section>('expedition');
   const [now, setNow] = useState(Date.now());
   const [claimed, setClaimed] = useState(() => !!state.lastExpeditionResult && !state.activeExpedition);
+  const [craftOpen, setCraftOpen] = useState(false);
+
+  // ── Mint state ────────────────────────────────────────────────────────────
+  const [mintItemId, setMintItemId] = useState<string | null>(null);
+  const [mintPhase, setMintPhase] = useState<MintPhase>('idle');
+  const [mintDeeplink, setMintDeeplink] = useState<string | null>(null);
+  const [mintQr, setMintQr] = useState<string | null>(null);
+  const [mintUuid, setMintUuid] = useState<string | null>(null);
+  const [mintError, setMintError] = useState<string | null>(null);
+  const mintPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const mintUuidRef = useRef<string | null>(null);
+
+  const clearMintPoll = useCallback(() => {
+    if (mintPollRef.current) { clearInterval(mintPollRef.current); mintPollRef.current = null; }
+  }, []);
+
+  useEffect(() => () => clearMintPoll(), [clearMintPoll]);
+
+  const cancelMint = useCallback(() => {
+    clearMintPoll();
+    setMintItemId(null);
+    setMintPhase('idle');
+    setMintDeeplink(null);
+    setMintQr(null);
+    setMintUuid(null);
+    setMintError(null);
+    mintUuidRef.current = null;
+  }, [clearMintPoll]);
+
+  const doPollMint = useCallback(async (uuid: string, itemId: string) => {
+    try {
+      const res = await fetch(`/frontend-api/mint/status/${uuid}`, { cache: 'no-store' });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.signed) {
+        clearMintPoll();
+        setItemNftTokenId(itemId, data.tokenId ?? uuid);
+        setMintPhase('success');
+        mintUuidRef.current = null;
+        return;
+      }
+      if (data.cancelled || data.expired) {
+        clearMintPoll();
+        setMintPhase('error');
+        setMintError(data.cancelled ? 'Mint was cancelled.' : 'Mint request expired — please try again.');
+        mintUuidRef.current = null;
+      }
+    } catch { /* network error — keep polling */ }
+  }, [clearMintPoll, setItemNftTokenId]);
+
+  const startMint = useCallback(async (item: InventoryItem) => {
+    setMintItemId(item.id);
+    setMintPhase('loading');
+    setMintError(null);
+    clearMintPoll();
+    try {
+      const res = await fetch('/frontend-api/mint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          wallet: state.walletAddress,
+          itemId: item.id,
+          itemName: item.name,
+          playerId: state.playerId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.uuid) throw new Error(data.error || 'Failed to create mint request');
+      const { uuid, deeplink, qr_png } = data;
+      mintUuidRef.current = uuid;
+      setMintUuid(uuid);
+      setMintDeeplink(deeplink);
+      setMintQr(qr_png);
+      setMintPhase('waiting');
+      // Open deeplink — TWA-aware
+      if (deeplink) {
+        const twa = typeof window !== 'undefined' ? (window as any).Telegram?.WebApp : null;
+        if (twa?.openLink) {
+          twa.openLink(deeplink);
+        } else if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+          const w = window.open(deeplink, '_blank', 'noopener,noreferrer');
+          if (!w) window.location.href = deeplink;
+        }
+      }
+      // Start polling every 2.5s
+      mintPollRef.current = setInterval(() => doPollMint(uuid, item.id), 2500);
+    } catch (err: any) {
+      setMintPhase('error');
+      setMintError(err.message || 'Mint failed');
+    }
+  }, [clearMintPoll, doPollMint, state.walletAddress, state.playerId]);
 
   // Live countdown
   useEffect(() => {
@@ -387,7 +506,14 @@ export default function ExpeditionTab() {
                     </div>
                   ) : item ? (
                     <div className="flex-1">
-                      <ItemCard item={item} isEquipped onUnequip={() => unequipItem(slot)} />
+                      <ItemCard
+                        item={item}
+                        isEquipped
+                        onUnequip={() => unequipItem(slot)}
+                        showMintBtn={state.level >= 4}
+                        onMint={() => startMint(item)}
+                        mintPhase={mintItemId === item.id ? mintPhase : 'idle'}
+                      />
                     </div>
                   ) : (
                     <div className="flex-1 flex items-center justify-center px-2 py-1.5 rounded-lg border border-dashed border-[rgba(212,160,23,0.2)]">
@@ -413,6 +539,9 @@ export default function ExpeditionTab() {
                 key={item.id}
                 item={item}
                 onEquip={() => equipItem(item.id)}
+                showMintBtn={state.level >= 4}
+                onMint={() => startMint(item)}
+                mintPhase={mintItemId === item.id ? mintPhase : 'idle'}
               />
             ))}
           </div>
@@ -989,9 +1118,15 @@ export default function ExpeditionTab() {
           <>
             {renderGear()}
             <div className="mt-1 px-1">
-              <p className="font-cinzel font-bold text-[#e8d8a8] text-[10px] tracking-wider mb-2">🔨 FORGE EQUIPMENT</p>
+              <button
+                onClick={() => setCraftOpen(v => !v)}
+                className="w-full flex items-center justify-between py-1.5 px-1 transition-colors"
+              >
+                <p className="font-cinzel font-bold text-[#e8d8a8] text-[10px] tracking-wider">🔨 FORGE EQUIPMENT</p>
+                <span className="text-[#6b5a3a] text-[12px] leading-none" style={{ transform: craftOpen ? 'rotate(180deg)' : 'none', display: 'inline-block', transition: 'transform 0.2s' }}>▼</span>
+              </button>
             </div>
-            {renderCraft()}
+            {craftOpen && renderCraft()}
           </>
         )}
         {section === 'stash' && (
@@ -1013,6 +1148,84 @@ export default function ExpeditionTab() {
           </>
         )}
       </div>
+
+      {/* ── Mint modal overlay ── */}
+      {mintPhase !== 'idle' && mintItemId && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-end justify-center z-50 p-4">
+          <div
+            className="rounded-2xl p-5 w-full max-w-sm shadow-2xl mb-2"
+            style={{
+              background: 'linear-gradient(180deg, rgba(22,16,8,0.99) 0%, rgba(12,8,4,1) 100%)',
+              border: '1px solid rgba(212,160,23,0.25)',
+            }}
+          >
+            <div className="text-center mb-4">
+              <div className="flex items-center justify-center gap-2 mb-1">
+                <span className="text-xl">✨</span>
+                <h2 className="text-lg font-bold text-[#f0c040] font-cinzel">Mint NFT</h2>
+              </div>
+              {mintPhase === 'loading' && (
+                <p className="text-[#6b5a3a] text-xs">Creating Xaman request…</p>
+              )}
+              {mintPhase === 'waiting' && (
+                <p className="text-[#6b5a3a] text-xs">Waiting for approval in Xaman…</p>
+              )}
+              {mintPhase === 'success' && (
+                <p className="text-[#4ade80] text-xs font-bold">✅ NFT minted successfully!</p>
+              )}
+              {mintPhase === 'error' && (
+                <p className="text-red-400 text-xs">{mintError || 'Mint failed'}</p>
+              )}
+            </div>
+
+            {mintPhase === 'waiting' && (
+              <div className="flex flex-col gap-2 mb-4">
+                {mintDeeplink && (
+                  <button
+                    onClick={() => {
+                      const twa = (window as any).Telegram?.WebApp;
+                      if (twa?.openLink) {
+                        twa.openLink(mintDeeplink);
+                      } else {
+                        const w = window.open(mintDeeplink, '_blank', 'noopener,noreferrer');
+                        if (!w) window.location.href = mintDeeplink;
+                      }
+                    }}
+                    className="flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl font-bold text-white text-sm active:scale-95 transition-all shadow-lg"
+                    style={{ background: 'linear-gradient(135deg,#b8860b,#f0c040)', color: '#1a0e00' }}
+                  >
+                    <img src="https://xumm.app/assets/icons/favicon-196x196.png" alt="" className="w-4 h-4 rounded" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                    Open Xaman to Mint
+                  </button>
+                )}
+                {mintUuid && (
+                  <button
+                    onClick={() => mintUuidRef.current && doPollMint(mintUuidRef.current, mintItemId)}
+                    className="w-full py-2.5 rounded-xl text-xs font-bold active:scale-95 transition-all"
+                    style={{ border: '2px solid rgba(212,160,23,0.7)', color: '#f0c040', background: 'rgba(212,160,23,0.1)' }}
+                  >
+                    ✓ Approved in Xaman? Check now
+                  </button>
+                )}
+                {mintQr && (
+                  <div className="bg-white rounded-xl p-3 flex items-center justify-center">
+                    <img src={mintQr} alt="Xaman QR" className="w-full max-w-[160px] h-auto mx-auto" />
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex justify-end">
+              <button
+                onClick={cancelMint}
+                className="text-xs text-[#4a3a2a] hover:text-[#6b5a3a] transition-colors underline"
+              >
+                {mintPhase === 'success' ? 'Close' : 'Cancel'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

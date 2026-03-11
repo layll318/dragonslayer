@@ -260,6 +260,7 @@ interface GameContextType {
   recordDungeonRun: (tier: number, roomsCleared: number, won: boolean, goldEarned: number, xpEarned: number, materials: { type: MaterialType; quantity: number }[], tokensHeld: number) => void;
   resetArenaAttacks: () => void;
   claimHolderGift: () => void;
+  setItemNftTokenId: (itemId: string, tokenId: string) => void;
   CRAFTING_RECIPES: CraftingRecipe[];
   ITEM_UNLOCK_LEVELS: Record<ItemType, number>;
 }
@@ -1479,6 +1480,30 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const setItemNftTokenId = useCallback((itemId: string, tokenId: string) => {
+    setState((prev) => {
+      const invIdx = prev.inventory.findIndex(i => i.id === itemId);
+      if (invIdx !== -1) {
+        const newInventory = [...prev.inventory];
+        newInventory[invIdx] = { ...newInventory[invIdx], nftTokenId: tokenId };
+        return { ...prev, inventory: newInventory };
+      }
+      const slotKey = (Object.keys(prev.equipment) as (keyof EquipmentSlots)[]).find(
+        k => prev.equipment[k]?.id === itemId
+      );
+      if (slotKey) {
+        return {
+          ...prev,
+          equipment: {
+            ...prev.equipment,
+            [slotKey]: { ...prev.equipment[slotKey]!, nftTokenId: tokenId },
+          },
+        };
+      }
+      return prev;
+    });
+  }, []);
+
   const craftItem = useCallback((recipeId: string) => {
     setState((prev) => {
       const recipe = CRAFTING_RECIPES.find(r => r.id === recipeId);
@@ -1974,6 +1999,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         equipItem,
         unequipItem,
         craftItem,
+        setItemNftTokenId,
         addMaterials,
         connectWallet,
         disconnectWallet,
