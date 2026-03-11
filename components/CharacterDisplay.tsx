@@ -81,8 +81,8 @@ export default function CharacterDisplay() {
 
   const equippedWeapon = state.equipment.weapon;
   const equippedShield = state.equipment.shield;
-  const showSword  = equippedWeapon?.rarity === 'epic' || equippedWeapon?.rarity === 'legendary';
-  const showShield = equippedShield?.rarity === 'epic' || equippedShield?.rarity === 'legendary';
+  const showSword  = !!(equippedWeapon?.nftTokenId);
+  const showShield = !!(equippedShield?.nftTokenId);
   const swordImg  = '/images/lynxsword.png';
   const shieldImg = '/images/nomicsshield.png';
 
