@@ -261,6 +261,7 @@ interface GameContextType {
   resetArenaAttacks: () => void;
   claimHolderGift: () => void;
   setItemNftTokenId: (itemId: string, tokenId: string) => void;
+  clearItemNftTokenId: (itemId: string) => void;
   refreshFromServer: () => Promise<void>;
   CRAFTING_RECIPES: CraftingRecipe[];
   ITEM_UNLOCK_LEVELS: Record<ItemType, number>;
@@ -407,10 +408,11 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
   },
 
   // ── LEGENDARY NFT FORGE ─────────────────────────────────────────────────────
-  // These are standalone NFT items — not part of the T1-T4 upgrade chain.
-  // Minted on XRPL by admin; materials burn immediately on request.
+  // T5 legendary: upgrade from epic by burning the epic item + rare materials.
+  // The resulting item is minted on XRPL via Xaman.
   {
     id: 'lynx_sword', itemType: 'weapon', name: 'Lynx Sword', rarity: 'legendary', power: 60, goldCost: 50000,
+    upgradesFrom: { itemType: 'weapon', rarity: 'epic' },
     materials: [
       { type: 'lynx_fang',    quantity: 5 },
       { type: 'dragon_scale', quantity: 8 },
@@ -419,6 +421,7 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
   },
   {
     id: 'nomic_shield', itemType: 'shield', name: 'Nomic Shield', rarity: 'legendary', power: 50, goldCost: 50000,
+    upgradesFrom: { itemType: 'shield', rarity: 'epic' },
     materials: [
       { type: 'nomic_core',   quantity: 5 },
       { type: 'dragon_scale', quantity: 8 },
@@ -1505,6 +1508,30 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const clearItemNftTokenId = useCallback((itemId: string) => {
+    setState((prev) => {
+      const invIdx = prev.inventory.findIndex(i => i.id === itemId);
+      if (invIdx !== -1) {
+        const newInventory = [...prev.inventory];
+        newInventory[invIdx] = { ...newInventory[invIdx], nftTokenId: null };
+        return { ...prev, inventory: newInventory };
+      }
+      const slotKey = (Object.keys(prev.equipment) as (keyof EquipmentSlots)[]).find(
+        k => prev.equipment[k]?.id === itemId
+      );
+      if (slotKey) {
+        return {
+          ...prev,
+          equipment: {
+            ...prev.equipment,
+            [slotKey]: { ...prev.equipment[slotKey]!, nftTokenId: null },
+          },
+        };
+      }
+      return prev;
+    });
+  }, []);
+
   const craftItem = useCallback((recipeId: string) => {
     setState((prev) => {
       const recipe = CRAFTING_RECIPES.find(r => r.id === recipeId);
@@ -2019,6 +2046,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         unequipItem,
         craftItem,
         setItemNftTokenId,
+        clearItemNftTokenId,
         refreshFromServer,
         addMaterials,
         connectWallet,

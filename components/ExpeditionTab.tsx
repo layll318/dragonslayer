@@ -47,7 +47,7 @@ const SLOT_ORDER: (keyof EquipmentSlots)[] = ['weapon', 'shield', 'helm', 'armor
 
 type MintPhase = 'idle' | 'loading' | 'waiting' | 'success' | 'error';
 
-function ItemCard({ item, onEquip, onUnequip, isEquipped, onMint, mintPhase, showMintBtn }: {
+function ItemCard({ item, onEquip, onUnequip, isEquipped, onMint, mintPhase, showMintBtn, onClearNft }: {
   item: InventoryItem;
   onEquip?: () => void;
   onUnequip?: () => void;
@@ -55,6 +55,7 @@ function ItemCard({ item, onEquip, onUnequip, isEquipped, onMint, mintPhase, sho
   onMint?: () => void;
   mintPhase?: MintPhase;
   showMintBtn?: boolean;
+  onClearNft?: () => void;
 }) {
   const color = RARITY_COLORS[item.rarity];
   const isMinting = mintPhase === 'loading' || mintPhase === 'waiting';
@@ -69,8 +70,15 @@ function ItemCard({ item, onEquip, onUnequip, isEquipped, onMint, mintPhase, sho
         </span>
         <div className="flex items-center gap-1">
           {item.nftTokenId && (
-            <span className="text-[7px] font-bold px-1 py-0.5 rounded" style={{ background: 'rgba(240,192,64,0.2)', color: '#f0c040' }}>
+            <span className="flex items-center gap-0.5 text-[7px] font-bold px-1 py-0.5 rounded" style={{ background: 'rgba(240,192,64,0.2)', color: '#f0c040' }}>
               ✨ NFT
+              {onClearNft && (
+                <button
+                  onClick={e => { e.stopPropagation(); onClearNft(); }}
+                  className="ml-0.5 opacity-60 hover:opacity-100 leading-none"
+                  title="Clear bad mint"
+                >×</button>
+              )}
             </span>
           )}
           <span className="text-[8px] font-bold uppercase px-1 py-0.5 rounded" style={{ background: `${color}20`, color }}>
@@ -137,6 +145,7 @@ export default function ExpeditionTab() {
     unequipItem,
     craftItem,
     setItemNftTokenId,
+    clearItemNftTokenId,
     speedUpExpedition,
     placeEggInIncubator,
     claimHatchedEgg,
@@ -513,6 +522,7 @@ export default function ExpeditionTab() {
                         showMintBtn={item.rarity === 'legendary'}
                         onMint={() => startMint(item)}
                         mintPhase={mintItemId === item.id ? mintPhase : 'idle'}
+                        onClearNft={item.nftTokenId ? () => clearItemNftTokenId(item.id) : undefined}
                       />
                     </div>
                   ) : (
@@ -542,6 +552,7 @@ export default function ExpeditionTab() {
                 showMintBtn={item.rarity === 'legendary'}
                 onMint={() => startMint(item)}
                 mintPhase={mintItemId === item.id ? mintPhase : 'idle'}
+                onClearNft={item.nftTokenId ? () => clearItemNftTokenId(item.id) : undefined}
               />
             ))}
           </div>
@@ -577,12 +588,11 @@ export default function ExpeditionTab() {
   }
 
   const renderCraft = () => {
-    // Group recipes by slot in display order — exclude legendary NFT items from normal chain
+    // Full chain per slot: common → uncommon → rare → epic → legendary (weapon/shield only)
     const bySlot: Record<string, CraftingRecipe[]> = {};
     for (const slot of SLOT_ORDER) {
-      bySlot[slot] = CRAFTING_RECIPES.filter(r => r.itemType === slot && r.rarity !== 'legendary');
+      bySlot[slot] = CRAFTING_RECIPES.filter(r => r.itemType === slot);
     }
-    const legendaryRecipes = CRAFTING_RECIPES.filter(r => r.rarity === 'legendary');
 
     return (
       <div className="flex flex-col gap-3">
@@ -661,6 +671,7 @@ export default function ExpeditionTab() {
 
               {/* Active recipe card */}
               {nextRecipe ? (() => {
+                const isLegendary = nextRecipe.rarity === 'legendary';
                 const color = RARITY_COLORS[nextRecipe.rarity];
                 const isUpgrade = !!nextRecipe.upgradesFrom;
                 const canAffordGold = state.gold >= nextRecipe.goldCost;
@@ -677,25 +688,38 @@ export default function ExpeditionTab() {
                 return (
                   <div
                     className="rounded-lg p-2.5 border"
-                    style={{ background: `${color}08`, borderColor: `${color}30` }}
+                    style={{
+                      background: isLegendary ? 'rgba(240,192,64,0.07)' : `${color}08`,
+                      borderColor: isLegendary ? 'rgba(240,192,64,0.45)' : `${color}30`,
+                      boxShadow: isLegendary ? '0 0 10px rgba(240,192,64,0.12)' : undefined,
+                    }}
                   >
+                    {isLegendary && (
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <span className="text-sm">✨</span>
+                        <span className="font-cinzel font-bold text-[10px] tracking-wider" style={{ color }}>LEGENDARY NFT UPGRADE</span>
+                        <span className="text-[7px] font-bold px-1 py-0.5 rounded" style={{ background: 'rgba(240,192,64,0.2)', color }}>XRPL NFT</span>
+                      </div>
+                    )}
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <div>
                         <div className="flex items-center gap-1.5">
                           <span className="font-cinzel font-bold text-[11px]" style={{ color }}>
                             {nextRecipe.name}
                           </span>
-                          <span
-                            className="text-[7px] font-bold uppercase px-1 py-0.5 rounded"
-                            style={{ background: `${color}20`, color }}
-                          >
-                            {nextRecipe.rarity}
-                          </span>
+                          {!isLegendary && (
+                            <span
+                              className="text-[7px] font-bold uppercase px-1 py-0.5 rounded"
+                              style={{ background: `${color}20`, color }}
+                            >
+                              {nextRecipe.rarity}
+                            </span>
+                          )}
                         </div>
                         <p className="text-[9px] text-[#9a8a6a] mt-0.5">
                           ⚡ {nextRecipe.power} power
                           {isUpgrade && (
-                            <span className="text-[#d4a017]"> · consumes {nextRecipe.upgradesFrom!.rarity} {nextRecipe.upgradesFrom!.itemType}</span>
+                            <span className="text-[#f97316]"> · 🔥 burns {nextRecipe.upgradesFrom!.rarity} {nextRecipe.upgradesFrom!.itemType}</span>
                           )}
                         </p>
                       </div>
@@ -703,9 +727,11 @@ export default function ExpeditionTab() {
                         onClick={() => craftItem(nextRecipe.id)}
                         disabled={!canCraft}
                         className="action-btn px-3 py-1.5 text-[9px] flex-shrink-0"
-                        style={canCraft ? {} : { opacity: 0.4, cursor: 'not-allowed' }}
+                        style={canCraft
+                          ? (isLegendary ? { background: 'linear-gradient(135deg,#b8860b,#f0c040)', boxShadow: '0 0 12px rgba(240,192,64,0.4)', color: '#1a0e00' } : {})
+                          : { opacity: 0.4, cursor: 'not-allowed' }}
                       >
-                        {isUpgrade ? '⬆ UPGRADE' : '⚒ FORGE'}
+                        {isLegendary ? '⛔ FORGE LEGENDARY' : isUpgrade ? '⬆ UPGRADE' : '⚒ FORGE'}
                       </button>
                     </div>
 
@@ -755,118 +781,54 @@ export default function ExpeditionTab() {
                     </div>
                   </div>
                 );
-              })() : (
-                <div className="text-center py-2">
-                  <span className="text-[10px] text-[#4ade80] font-bold">✓ Fully upgraded!</span>
-                </div>
-              )}
+              })() : (() => {
+                // All tiers owned — check if legendary is in this chain and handle mint
+                const legendaryInChain = chain.find(r => r.rarity === 'legendary');
+                const ownedLegendary = legendaryInChain
+                  ? findOwnedItem(legendaryInChain.itemType as ItemType, legendaryInChain.rarity as ItemRarity)
+                  : null;
+                const isMintingThis = ownedLegendary
+                  ? mintItemId === ownedLegendary.id && (mintPhase === 'loading' || mintPhase === 'waiting')
+                  : false;
+                const itemImg = ownedLegendary?.name === 'Lynx Sword'
+                  ? '/images/swordlvl4.png'
+                  : ownedLegendary?.name === 'Nomic Shield'
+                  ? '/images/shieldlvl4.png'
+                  : null;
+                return (
+                  <div className="py-2">
+                    {ownedLegendary ? (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {itemImg && (
+                          <img src={itemImg} alt={ownedLegendary.name} className="w-10 h-10 object-contain rounded" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                        )}
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[9px] font-bold text-[#4ade80]">✓ {ownedLegendary.name} Forged!</span>
+                          {!ownedLegendary.nftTokenId ? (
+                            <button
+                              onClick={() => startMint(ownedLegendary)}
+                              disabled={isMintingThis}
+                              className="text-[8px] font-bold px-2 py-1 rounded transition-all active:scale-95 whitespace-nowrap"
+                              style={{ background: isMintingThis ? 'rgba(240,192,64,0.1)' : 'linear-gradient(135deg,#b8860b,#f0c040)', color: isMintingThis ? '#f0c040' : '#1a0e00' }}
+                            >
+                              {isMintingThis ? '⏳…' : '✨ Mint NFT to Wallet'}
+                            </button>
+                          ) : (
+                            <span className="text-[7px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(240,192,64,0.2)', color: '#f0c040' }}>✨ NFT Minted</span>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-[10px] text-[#4ade80] font-bold">✓ Fully upgraded!</span>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           );
         })}
 
-        {/* ── LEGENDARY NFT FORGE ────────────────────────────────────────────── */}
-        {legendaryRecipes.length > 0 && (
-          <div className="dragon-panel p-3" style={{ border: '1px solid rgba(240,192,64,0.35)', background: 'rgba(240,192,64,0.04)' }}>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-base">✨</span>
-              <p className="font-cinzel font-bold text-[#f0c040] text-[11px] tracking-wider">LEGENDARY NFT FORGE</p>
-            </div>
-            <p className="text-[9px] text-[#6b5a3a] mb-3">
-              Legendary weapons minted as XRPL NFTs. Collect <span className="text-[#f0c040]">Lynx Fang</span> &amp; <span className="text-[#f0c040]">Nomic Core</span> from 12h expeditions — token holders get 5× better drop rates.
-            </p>
-            <div className="flex flex-col gap-2">
-              {legendaryRecipes.map(recipe => {
-                const legendColor = '#f0c040';
-                const owned = hasItem(recipe.itemType as ItemType, recipe.rarity as ItemRarity);
-                const canAffordGold = state.gold >= recipe.goldCost;
-                const matsMet = recipe.materials.every(req => {
-                  const held = state.materials.find(m => m.type === req.type);
-                  return held && held.quantity >= req.quantity;
-                });
-                const canCraft = canAffordGold && matsMet && !owned;
-                return (
-                  <div key={recipe.id} className="rounded-lg p-2.5 border" style={{ background: 'rgba(240,192,64,0.06)', borderColor: 'rgba(240,192,64,0.28)' }}>
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-cinzel font-bold text-[11px]" style={{ color: legendColor }}>{recipe.name}</span>
-                          <span className="text-[7px] font-bold uppercase px-1 py-0.5 rounded" style={{ background: 'rgba(240,192,64,0.2)', color: legendColor }}>LEGENDARY NFT</span>
-                        </div>
-                        <p className="text-[9px] text-[#9a8a6a] mt-0.5">⚡ {recipe.power} power · XRPL NFT · Tradeable</p>
-                      </div>
-                      {owned ? (() => {
-                        const ownedItem = findOwnedItem(recipe.itemType as ItemType, recipe.rarity as ItemRarity);
-                        const isMintingThis = mintItemId === ownedItem?.id && (mintPhase === 'loading' || mintPhase === 'waiting');
-                        const itemImg = recipe.name === 'Lynx Sword' ? '/images/swordlvl4.png' : recipe.name === 'Nomic Shield' ? '/images/shieldlvl4.png' : null;
-                        return (
-                          <div className="flex items-center gap-2 flex-shrink-0">
-                            {itemImg && (
-                              <img
-                                src={itemImg}
-                                alt={recipe.name}
-                                className="w-9 h-9 object-contain rounded"
-                                onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                              />
-                            )}
-                            <div className="flex flex-col gap-1 items-end">
-                              <span className="text-[9px] font-bold text-[#4ade80]">✓ Forged</span>
-                              {ownedItem && !ownedItem.nftTokenId && (
-                                <button
-                                  onClick={() => startMint(ownedItem)}
-                                  disabled={isMintingThis}
-                                  className="text-[8px] font-bold px-2 py-1 rounded transition-all active:scale-95 whitespace-nowrap"
-                                  style={{
-                                    background: isMintingThis ? 'rgba(240,192,64,0.1)' : 'linear-gradient(135deg,#b8860b,#f0c040)',
-                                    color: isMintingThis ? '#f0c040' : '#1a0e00',
-                                  }}
-                                >
-                                  {isMintingThis ? '⏳…' : '✨ Mint NFT'}
-                                </button>
-                              )}
-                              {ownedItem?.nftTokenId && (
-                                <span className="text-[7px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(240,192,64,0.2)', color: '#f0c040' }}>
-                                  ✨ NFT Minted
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })() : (
-                        <button
-                          onClick={() => craftItem(recipe.id)}
-                          disabled={!canCraft}
-                          className="action-btn px-3 py-1.5 text-[9px] flex-shrink-0"
-                          style={canCraft ? { background: 'linear-gradient(135deg,#b8860b,#f0c040)', boxShadow: '0 0 12px rgba(240,192,64,0.4)' } : { opacity: 0.4, cursor: 'not-allowed' }}
-                        >
-                          ⚒ REQUEST FORGE
-                        </button>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap gap-1 mb-1.5">
-                      {recipe.materials.map((req, i) => {
-                        const held = state.materials.find(m => m.type === req.type);
-                        const have = held?.quantity ?? 0;
-                        const ok = have >= req.quantity;
-                        return (
-                          <span key={i} className="text-[8px] px-1.5 py-0.5 rounded-full" style={{ background: ok ? 'rgba(74,222,128,0.12)' : 'rgba(255,60,60,0.1)', color: ok ? '#4ade80' : '#f87171' }}>
-                            {MATERIAL_LABELS[req.type as MaterialType]} ×{req.quantity}
-                            <span className="opacity-60"> ({have}/{req.quantity})</span>
-                          </span>
-                        );
-                      })}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <span className="coin-icon" style={{ width: 8, height: 8 }} />
-                      <span className={`text-[9px] font-bold ${canAffordGold ? 'text-[#b09a60]' : 'text-red-400'}`}>
-                        {formatNumber(recipe.goldCost)} gold
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
+        {/* legendary NFT FORGE section removed — legendary is now the T5 step in each chain */}
       </div>
     );
   };
