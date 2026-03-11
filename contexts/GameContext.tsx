@@ -1534,39 +1534,46 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const burnItemToWallet = useCallback((itemId: string, tokenId: string) => {
     setState((prev) => {
-      // Find the item in inventory or equipment
-      let burned: InventoryItem | null = null;
-      let newInventory = prev.inventory.filter(i => {
-        if (i.id === itemId) { burned = i; return false; }
-        return true;
-      });
-      let newEquipment = { ...prev.equipment };
-      if (!burned) {
+      // Keep the item in inventory/equipment — just stamp nftTokenId on it.
+      // Removing it here races with the server-state reload on page return from
+      // Xaman, causing the item to vanish.  The economic burn already happened
+      // at craftItem time (materials + epic base item consumed).
+      let found: InventoryItem | null = null;
+      const invIdx = prev.inventory.findIndex(i => i.id === itemId);
+      let newInventory = prev.inventory;
+      let newEquipment = prev.equipment;
+      if (invIdx !== -1) {
+        found = prev.inventory[invIdx];
+        newInventory = [...prev.inventory];
+        newInventory[invIdx] = { ...found, nftTokenId: tokenId };
+      } else {
         const slotKey = (Object.keys(prev.equipment) as (keyof EquipmentSlots)[]).find(
           k => prev.equipment[k]?.id === itemId
         );
         if (slotKey && prev.equipment[slotKey]) {
-          burned = prev.equipment[slotKey]!;
-          newEquipment = { ...newEquipment, [slotKey]: null };
+          found = prev.equipment[slotKey]!;
+          newEquipment = { ...prev.equipment, [slotKey]: { ...found, nftTokenId: tokenId } };
         }
       }
-      if (!burned) return prev; // item not found — no-op
+      if (!found) return prev; // item not found — no-op
+      // Deduplicate: don't add walletNfts entry if already present
+      const alreadyIn = (prev.walletNfts ?? []).some(n => n.itemId === itemId);
       const walletEntry: WalletNft = {
         itemId,
         tokenId,
-        name: burned.name,
-        itemType: burned.itemType,
-        rarity: burned.rarity,
-        power: burned.power,
+        name: found.name,
+        itemType: found.itemType,
+        rarity: found.rarity,
+        power: found.power,
         mintedAt: Date.now(),
       };
       const newState = {
         ...prev,
         inventory: newInventory,
         equipment: newEquipment,
-        walletNfts: [...(prev.walletNfts ?? []), walletEntry],
+        walletNfts: alreadyIn ? (prev.walletNfts ?? []) : [...(prev.walletNfts ?? []), walletEntry],
       };
-      // Immediately persist so page reload retains walletNfts
+      // Immediately persist so page reload retains nftTokenId
       const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? '';
       if (apiUrl && newState.playerId) {
         fetch(`${apiUrl}/api/save/${newState.playerId}`, {
