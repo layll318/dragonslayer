@@ -40,11 +40,12 @@ async function xrplLookupTx(txHash: string): Promise<{ ok: boolean; result?: Rec
 // discount are always accepted.  Full prices: rare_egg=2, legendary_egg=5,
 // rare_bundle=5, incubator_slot=1.
 const PREMIUM_ITEMS: Record<string, { dropsRequired: number; fullDrops: number; label: string }> = {
-  rare_egg:        { dropsRequired: 1_000_000, fullDrops: 2_000_000, label: 'Rare Dragon Egg' },
-  legendary_egg:   { dropsRequired: 2_500_000, fullDrops: 5_000_000, label: 'Legendary Dragon Egg' },
-  rare_bundle:     { dropsRequired: 2_500_000, fullDrops: 5_000_000, label: 'Rare Material Mega Bundle' },
-  incubator_slot:  { dropsRequired:   500_000, fullDrops: 1_000_000, label: 'Permanent Incubator Slot' },
-  gold_50m:        { dropsRequired: 1_500_000, fullDrops: 3_000_000, label: '50,000,000 Gold Pack' },
+  rare_egg:           { dropsRequired: 1_000_000, fullDrops: 2_000_000, label: 'Rare Dragon Egg' },
+  legendary_egg:      { dropsRequired: 2_500_000, fullDrops: 5_000_000, label: 'Legendary Dragon Egg' },
+  rare_bundle:        { dropsRequired: 2_500_000, fullDrops: 5_000_000, label: 'Rare Material Mega Bundle' },
+  incubator_slot:     { dropsRequired:   500_000, fullDrops: 1_000_000, label: 'Permanent Incubator Slot' },
+  gold_50m:           { dropsRequired: 1_500_000, fullDrops: 3_000_000, label: '50,000,000 Gold Pack' },
+  nomic_shield_bundle:{ dropsRequired: 2_500_000, fullDrops: 5_000_000, label: 'Nomic Shield Craft Bundle' },
 };
 
 export async function POST(request: NextRequest) {
@@ -113,9 +114,15 @@ export async function POST(request: NextRequest) {
       label: item.label,
       // For rare_egg / legendary_egg: egg rarity to add to inventory
       eggRarity: premiumType === 'rare_egg' ? 'rare' : premiumType === 'legendary_egg' ? 'legendary' : null,
-      // For rare_bundle: material credits
+      // For rare_bundle / nomic_shield_bundle: material credits
       materialCredits: premiumType === 'rare_bundle'
         ? ALL_TYPES.map(t => ({ type: t, quantity: 5 }))
+        : premiumType === 'nomic_shield_bundle'
+        ? [
+            { type: 'nomic_core',   quantity: 5 },
+            { type: 'dragon_scale', quantity: 8 },
+            { type: 'ancient_rune', quantity: 5 },
+          ]
         : null,
       // For incubator_slot: permanent slot
       incubatorSlot: premiumType === 'incubator_slot' ? true : null,

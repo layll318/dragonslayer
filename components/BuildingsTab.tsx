@@ -587,6 +587,7 @@ export default function BuildingsTab() {
             </div>
             <p className="text-[#4a3a6a] text-[8px] mb-3">Exclusive items. Send XRP to treasury, then claim with TX hash.</p>
             {[
+              { id: 'nomic_shield_bundle', icon: '🛡️', label: 'Nomic Shield Craft Bundle', xrp: 5, desc: '🔮 Nomic Core ×5 · 🐉 Dragon Scale ×8 · ✨ Ancient Rune ×5 — everything to forge the Nomic Shield' },
               { id: 'rare_egg',       icon: '💎', label: 'Rare Dragon Egg',          xrp: 2, desc: 'Hatches in 4h · +15% material drops forever' },
               { id: 'legendary_egg',  icon: '✨', label: 'Legendary Dragon Egg',      xrp: 5, desc: 'Hatches in 6h · −10% expedition time forever' },
               { id: 'rare_bundle',    icon: '🎁', label: 'Rare Material Mega Bundle', xrp: 5, desc: '5× of all 5 material types' },

@@ -161,7 +161,7 @@ export default function CharacterDisplay() {
           <div
             className="absolute pointer-events-none z-20"
             style={{
-              left: 0,
+              left: 'calc(50% - 125px)',
               bottom: 50,
               width: 90,
               height: 120,
@@ -192,7 +192,7 @@ export default function CharacterDisplay() {
           <div
             className="absolute pointer-events-none z-20"
             style={{
-              right: 0,
+              right: 'calc(50% - 120px)',
               bottom: 40,
               width: 70,
               height: 160,
