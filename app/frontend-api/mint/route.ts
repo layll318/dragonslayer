@@ -50,6 +50,10 @@ export async function POST(request: NextRequest) {
       itemPower != null && `Power: ${itemPower}`,
     ].filter(Boolean).join(' · ');
 
+    const origin = request.headers.get('origin') || 'https://dragonslayer-production.up.railway.app';
+    const cleanOrigin = origin.replace(/\/$/, '').split('/').slice(0, 3).join('/');
+    const returnUrl = `${cleanOrigin}/`;
+
     const res = await fetch(`${XAMAN_BASE}/payload`, {
       method: 'POST',
       headers: {
@@ -63,8 +67,12 @@ export async function POST(request: NextRequest) {
           NFTokenSellOffer: offer_index,
           Account: wallet,
         },
-        options: { submit: true },
+        options: {
+          submit: true,
+          return_url: { app: returnUrl, web: returnUrl },
+        },
         custom_meta: {
+          identifier: `dragonslayer-nft-${itemId}`,
           instruction,
           blob: JSON.stringify({ nft_token_id }),
         },
