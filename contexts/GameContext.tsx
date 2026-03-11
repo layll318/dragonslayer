@@ -261,6 +261,7 @@ interface GameContextType {
   resetArenaAttacks: () => void;
   claimHolderGift: () => void;
   setItemNftTokenId: (itemId: string, tokenId: string) => void;
+  refreshFromServer: () => Promise<void>;
   CRAFTING_RECIPES: CraftingRecipe[];
   ITEM_UNLOCK_LEVELS: Record<ItemType, number>;
 }
@@ -1952,6 +1953,24 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }).catch(() => {});
   }, [API_URL]);
 
+  const refreshFromServer = useCallback(async () => {
+    const s = stateRef.current;
+    if (!s.playerId || !API_URL) return;
+    const res = await fetch(`${API_URL}/api/save/${s.playerId}`).catch(() => null);
+    if (!res?.ok) return;
+    const data = await res.json().catch(() => null);
+    const serverSave = data?.save_json && Object.keys(data.save_json).length > 0 ? data.save_json : null;
+    if (!serverSave) return;
+    setState(prev => ({
+      ...prev,
+      ...serverSave,
+      lastTick: Date.now(),
+      walletAddress: prev.walletAddress,
+      playerId: prev.playerId,
+      isSynced: true,
+    }));
+  }, [API_URL]);
+
   const addIncubatorSlot = useCallback(() => {
     setState(prev => ({
       ...prev,
@@ -2000,6 +2019,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         unequipItem,
         craftItem,
         setItemNftTokenId,
+        refreshFromServer,
         addMaterials,
         connectWallet,
         disconnectWallet,

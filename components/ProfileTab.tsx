@@ -36,7 +36,7 @@ const TIER_ICONS = ['🧑‍🌾', '🛡️', '⚔️', '🐲', '👑'];
 const TIER_LEVELS = [1, 10, 25, 50, 80];
 
 export default function ProfileTab() {
-  const { state, goldPerHour, goldPerTap, getCharacterTier, connectWallet, disconnectWallet, setDisplayName, forceSave, refreshTokenDiscount } = useGame();
+  const { state, goldPerHour, goldPerTap, getCharacterTier, connectWallet, disconnectWallet, setDisplayName, forceSave, refreshFromServer, refreshTokenDiscount } = useGame();
   const { user, isTWA } = useTelegramWebApp();
 
   const [editingName, setEditingName] = useState(false);
@@ -69,6 +69,8 @@ export default function ProfileTab() {
 
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string>('');
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshMsg, setRefreshMsg] = useState<string>('');
   const [refreshingDiscount, setRefreshingDiscount] = useState(false);
   const [holderGiftCountdown, setHolderGiftCountdown] = useState('');
 
@@ -119,6 +121,19 @@ export default function ProfileTab() {
     setTimeout(() => setSaveMsg(''), 3000);
   }, [forceSave]);
 
+  const handleRefreshFromServer = useCallback(async () => {
+    setRefreshing(true);
+    setRefreshMsg('');
+    try {
+      await refreshFromServer();
+      setRefreshMsg('✅');
+    } catch {
+      setRefreshMsg('❌');
+    }
+    setRefreshing(false);
+    setTimeout(() => setRefreshMsg(''), 3000);
+  }, [refreshFromServer]);
+
   const handleRefreshDiscount = useCallback(async () => {
     setRefreshingDiscount(true);
     await refreshTokenDiscount();
@@ -134,19 +149,35 @@ export default function ProfileTab() {
             <h2 className="gold-shimmer font-cinzel font-bold text-lg tracking-wide">Profile</h2>
             <p className="text-[#6b5a3a] text-[10px] mt-0.5 uppercase tracking-wider">Your journey</p>
           </div>
-          <button
-            onClick={handleForceSave}
-            disabled={saving}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-cinzel font-bold text-[10px] transition-all active:scale-95"
-            style={{
-              background: saving ? 'rgba(212,160,23,0.05)' : 'rgba(212,160,23,0.12)',
-              border: '1px solid rgba(212,160,23,0.3)',
-              color: saving ? '#6b5a3a' : '#f0c040',
-              opacity: saving ? 0.7 : 1,
-            }}
-          >
-            ☁️ {saving ? 'Saving…' : saveMsg || 'Save'}
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={handleForceSave}
+              disabled={saving}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-cinzel font-bold text-[10px] transition-all active:scale-95"
+              style={{
+                background: saving ? 'rgba(212,160,23,0.05)' : 'rgba(212,160,23,0.12)',
+                border: '1px solid rgba(212,160,23,0.3)',
+                color: saving ? '#6b5a3a' : '#f0c040',
+                opacity: saving ? 0.7 : 1,
+              }}
+            >
+              ☁️ {saving ? 'Saving…' : saveMsg || 'Save'}
+            </button>
+            <button
+              onClick={handleRefreshFromServer}
+              disabled={refreshing}
+              title="Reload state from server"
+              className="flex items-center justify-center w-8 h-8 rounded-xl transition-all active:scale-95"
+              style={{
+                background: refreshing ? 'rgba(96,165,250,0.05)' : 'rgba(96,165,250,0.12)',
+                border: '1px solid rgba(96,165,250,0.3)',
+                color: refreshing ? '#3a4a6a' : (refreshMsg || '#60a5fa'),
+                opacity: refreshing ? 0.7 : 1,
+              }}
+            >
+              {refreshMsg || <RefreshCw size={13} style={{ animation: refreshing ? 'spin 1s linear infinite' : undefined }} />}
+            </button>
+          </div>
         </div>
       </div>
 

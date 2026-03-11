@@ -159,10 +159,18 @@ export default function CharacterDisplay() {
             }}
           >
             <NftItemOverlay
-              src="/images/nomicsshield.png"
+              src="/images/shieldlvl4.png"
               alt="Nomic Shield"
               fallbackLabel="🛡️ Nomic Shield"
             />
+            {equippedShield?.nftTokenId && (
+              <span
+                className="absolute -top-2 -right-2 z-30 text-[7px] font-bold px-1 py-0.5 rounded"
+                style={{ background: 'rgba(240,192,64,0.9)', color: '#1a0e00', pointerEvents: 'none' }}
+              >
+                ✨ NFT
+              </span>
+            )}
           </div>
         )}
 
@@ -180,10 +188,18 @@ export default function CharacterDisplay() {
             }}
           >
             <NftItemOverlay
-              src="/images/lynxsword.png"
+              src="/images/swordlvl4.png"
               alt="Lynx Sword"
               fallbackLabel="⚔️ Lynx Sword"
             />
+            {equippedWeapon?.nftTokenId && (
+              <span
+                className="absolute -top-2 -right-2 z-30 text-[7px] font-bold px-1 py-0.5 rounded"
+                style={{ background: 'rgba(240,192,64,0.9)', color: '#1a0e00', pointerEvents: 'none' }}
+              >
+                ✨ NFT
+              </span>
+            )}
           </div>
         )}
       </div>

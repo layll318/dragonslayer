@@ -6,6 +6,68 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/nft", tags=["nft"])
 
 PLACEHOLDER_IMAGE = "https://placehold.co/600x600/1a0e00/f0c040?text=DragonSlayer"
+BASE_URL = "https://dragonslayer-production.up.railway.app"
+
+ITEM_IMAGE_MAP = {
+    "Lynx Sword":   f"{BASE_URL}/images/swordlvl4.png",
+    "Nomic Shield": f"{BASE_URL}/images/shieldlvl4.png",
+}
+
+
+@router.get("/item/{player_id}/{item_id}")
+async def get_nft_item_metadata(player_id: int, item_id: str):
+    """
+    XRPL NFT metadata for a crafted legendary item.
+    The mint URI points here: /api/nft/item/{player_id}/{item_id}
+    """
+    pool = get_pool()
+    async with pool.acquire() as conn:
+        save = await conn.fetchrow(
+            "SELECT save_json FROM game_saves WHERE player_id=$1",
+            player_id,
+        )
+
+    item = None
+    if save and save["save_json"]:
+        s = save["save_json"]
+        # Search inventory
+        for inv_item in (s.get("inventory") or []):
+            if str(inv_item.get("id", "")) == item_id:
+                item = inv_item
+                break
+        # Search equipment slots
+        if not item:
+            for slot_item in (s.get("equipment") or {}).values():
+                if slot_item and str(slot_item.get("id", "")) == item_id:
+                    item = slot_item
+                    break
+
+    if not item:
+        return {
+            "name": "DragonSlayer Item",
+            "description": "A legendary DragonSlayer item minted on XRPL.",
+            "image": PLACEHOLDER_IMAGE,
+            "attributes": [{"trait_type": "Status", "value": "Unknown"}],
+        }
+
+    name = item.get("name", "Unknown Item")
+    rarity = item.get("rarity", "legendary")
+    power = item.get("power", 0)
+    item_type = item.get("itemType", "weapon")
+    image = ITEM_IMAGE_MAP.get(name, PLACEHOLDER_IMAGE)
+
+    return {
+        "name": name,
+        "description": f"Legendary DragonSlayer {item_type} · Power {power} · Minted on XRPL",
+        "image": image,
+        "external_url": f"{BASE_URL}/profile/{player_id}",
+        "attributes": [
+            {"trait_type": "Rarity",    "value": rarity.title()},
+            {"trait_type": "Type",      "value": item_type.title()},
+            {"trait_type": "Power",     "value": power},
+            {"trait_type": "Game",      "value": "DragonSlayer"},
+        ],
+    }
 
 
 @router.get("/{token_id}")

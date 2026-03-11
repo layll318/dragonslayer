@@ -510,7 +510,7 @@ export default function ExpeditionTab() {
                         item={item}
                         isEquipped
                         onUnequip={() => unequipItem(slot)}
-                        showMintBtn={state.level >= 4}
+                        showMintBtn={item.rarity === 'legendary'}
                         onMint={() => startMint(item)}
                         mintPhase={mintItemId === item.id ? mintPhase : 'idle'}
                       />
@@ -539,7 +539,7 @@ export default function ExpeditionTab() {
                 key={item.id}
                 item={item}
                 onEquip={() => equipItem(item.id)}
-                showMintBtn={state.level >= 4}
+                showMintBtn={item.rarity === 'legendary'}
                 onMint={() => startMint(item)}
                 mintPhase={mintItemId === item.id ? mintPhase : 'idle'}
               />
