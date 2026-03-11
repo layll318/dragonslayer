@@ -28,17 +28,17 @@ XRPL_NODE = os.environ.get("XRPL_NODE", "https://s1.ripple.com:51234/")
 XRPL_WALLET_SEED = os.environ.get("XRPL_WALLET_SEED", "")
 
 ITEM_IMAGE_MAP = {
-    "Lynx Sword":   f"{FRONTEND_URL}/images/lynxsword.png",
-    "Nomic Shield": f"{FRONTEND_URL}/images/nomicsshield.png",
-    "Dragon Fang":  f"{FRONTEND_URL}/images/swordlvl4.png",
-    "Aegis":        f"{FRONTEND_URL}/images/shieldlvl4.png",
+    "Lynx Sword":   f"{BACKEND_URL}/images/lynxsword.png",
+    "Nomic Shield": f"{BACKEND_URL}/images/nomicsshield.png",
+    "Dragon Fang":  f"{BACKEND_URL}/images/swordlvl4.png",
+    "Aegis":        f"{BACKEND_URL}/images/shieldlvl4.png",
 }
 
 ITEM_IMAGE_BY_ID = {
-    "lynx_sword":   f"{FRONTEND_URL}/images/lynxsword.png",
-    "nomic_shield": f"{FRONTEND_URL}/images/nomicsshield.png",
-    "dragon_fang":  f"{FRONTEND_URL}/images/swordlvl4.png",
-    "aegis":        f"{FRONTEND_URL}/images/shieldlvl4.png",
+    "lynx_sword":   f"{BACKEND_URL}/images/lynxsword.png",
+    "nomic_shield": f"{BACKEND_URL}/images/nomicsshield.png",
+    "dragon_fang":  f"{BACKEND_URL}/images/swordlvl4.png",
+    "aegis":        f"{BACKEND_URL}/images/shieldlvl4.png",
 }
 
 ITEM_NAME_BY_ID = {
