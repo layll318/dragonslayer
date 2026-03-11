@@ -18,6 +18,7 @@ import {
   DragonBonusType,
   DragonEgg,
   EggRarity,
+  FUSION_BUFF_BY_RECIPE,
 } from '@/contexts/GameContext';
 import { formatNumber } from '@/utils/format';
 
@@ -144,6 +145,7 @@ export default function ExpeditionTab() {
     equipItem,
     unequipItem,
     craftItem,
+    fuseLegendaryItems,
     burnItemToWallet,
     clearItemNftTokenId,
     speedUpExpedition,
@@ -669,10 +671,12 @@ export default function ExpeditionTab() {
           // Find highest tier already owned
           const ownedTiers = chain.filter(r => hasItem(r.itemType as ItemType, r.rarity));
           const highestOwned = ownedTiers[ownedTiers.length - 1] ?? null;
-          // Next recipe to craft/upgrade
-          const nextIdx = highestOwned
+          // Next recipe to craft/upgrade; if legendary is highest, keep showing it so player can forge another
+          let nextIdx = highestOwned
             ? chain.findIndex(r => r.id === highestOwned.id) + 1
             : 0;
+          const lastInChain = chain[chain.length - 1];
+          if (nextIdx >= chain.length && lastInChain?.rarity === 'legendary') nextIdx = chain.length - 1;
           const nextRecipe = chain[nextIdx] ?? null;
 
           return (
@@ -729,6 +733,43 @@ export default function ExpeditionTab() {
                   );
                 })}
               </div>
+
+              {/* Fusion card — shown when 2+ of the same legendary are in inventory */}
+              {(() => {
+                const legendaryInChain = chain.find(r => r.rarity === 'legendary');
+                if (!legendaryInChain) return null;
+                const fusionDef = (FUSION_BUFF_BY_RECIPE as Record<string, { buffId: string; label: string; description: string }>)[legendaryInChain.id];
+                if (!fusionDef) return null;
+                const alreadyFused = (state.fusionBuffs ?? []).includes(fusionDef.buffId);
+                const copies = state.inventory.filter(i => i.name === legendaryInChain.name && i.rarity === 'legendary');
+                if (copies.length < 2 && !alreadyFused) return null;
+                return (
+                  <div className="rounded-lg p-2.5 mb-2 border" style={{ background: 'rgba(240,100,220,0.08)', borderColor: 'rgba(240,100,220,0.4)', boxShadow: '0 0 10px rgba(240,100,220,0.12)' }}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <span className="text-sm">🔮</span>
+                          <span className="font-cinzel font-bold text-[10px] tracking-wider" style={{ color: '#e879f9' }}>FUSION</span>
+                        </div>
+                        {alreadyFused ? (
+                          <span className="text-[9px] font-bold text-[#4ade80]">✓ {fusionDef.label} active — {fusionDef.description}</span>
+                        ) : (
+                          <span className="text-[9px] text-[#c084fc]">Combine 2× {legendaryInChain.name} → <b>{fusionDef.label}</b>: {fusionDef.description}</span>
+                        )}
+                      </div>
+                      {!alreadyFused && copies.length >= 2 && (
+                        <button
+                          onClick={() => fuseLegendaryItems(legendaryInChain.id)}
+                          className="text-[8px] font-bold px-2 py-1 rounded transition-all active:scale-95 whitespace-nowrap flex-shrink-0"
+                          style={{ background: 'linear-gradient(135deg,#7e22ce,#e879f9)', color: '#fff' }}
+                        >
+                          🔮 FUSE
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Active recipe card */}
               {nextRecipe ? (() => {

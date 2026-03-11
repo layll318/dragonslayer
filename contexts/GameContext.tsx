@@ -230,6 +230,7 @@ export interface GameState {
   dungeonTotalVictories: number;
   dungeonBestCompletion: Record<string, number>;
   walletNfts: WalletNft[];
+  fusionBuffs: string[];
 }
 
 interface GameContextType {
@@ -250,6 +251,7 @@ interface GameContextType {
   equipItem: (itemId: string) => void;
   unequipItem: (slot: keyof EquipmentSlots) => void;
   craftItem: (recipeId: string) => void;
+  fuseLegendaryItems: (recipeId: string) => void;
   addMaterials: (drops: { type: MaterialType; quantity: number }[]) => void;
   connectWallet: (address: string) => Promise<void>;
   disconnectWallet: () => void;
@@ -441,6 +443,11 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
     ],
   },
 ];
+
+export const FUSION_BUFF_BY_RECIPE: Record<string, { buffId: string; label: string; description: string }> = {
+  lynx_sword:   { buffId: 'twin_fangs', label: 'Twin Fangs',   description: '+25% expedition gold' },
+  nomic_shield: { buffId: 'nomic_wall', label: 'Nomic Wall',   description: '+15% gold per hour'   },
+};
 
 const RARITY_GPH_MULT: Record<string, number> = { common: 0.03, uncommon: 0.05, rare: 0.12, epic: 0.25, legendary: 0.40 };
 export function getEffectiveCraftingCost(recipe: CraftingRecipe, gph: number): number {
@@ -797,6 +804,7 @@ function createInitialState(): GameState {
     dungeonTotalVictories: 0,
     dungeonBestCompletion: {},
     walletNfts: [],
+    fusionBuffs: [],
   };
 }
 
@@ -1082,7 +1090,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         // Passive income from buildings, boosted by gear
         const totalIncome = prev.buildings.reduce((sum, b) => sum + b.baseIncome * b.owned, 0);
         const gearMult = calcGearMultiplier(prev.equipment);
-        const passiveGold = (totalIncome / 3600) * dt * gearMult;
+        const nomicWall = (prev.fusionBuffs ?? []).includes('nomic_wall') ? 1.15 : 1;
+        const passiveGold = (totalIncome / 3600) * dt * gearMult * nomicWall;
 
         return {
           ...prev,
@@ -1228,8 +1237,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const goldPerTap = Math.max(1, Math.floor((1 + state.level * 0.5) * gearMultiplier * (1 + tapDragonPct / 100)));
 
+  const fusionGphMult = (state.fusionBuffs ?? []).includes('nomic_wall') ? 1.15 : 1;
   const goldPerHour = Math.floor(
-    state.buildings.reduce((sum, b) => sum + b.baseIncome * b.owned, 0) * gearMultiplier
+    state.buildings.reduce((sum, b) => sum + b.baseIncome * b.owned, 0) * gearMultiplier * fusionGphMult
   );
 
   const getBuildingCost = useCallback((building: Building): number => {
@@ -1329,9 +1339,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       if (Date.now() < prev.activeExpedition.endsAt) return prev;
       const armyPwr = calcArmyPower(prev.buildings);
       const gearBonus = calcGearBonus(prev.equipment);
-      const { dragonsSlain, goldEarned, materials } = calcExpeditionYield(
+      const { dragonsSlain, goldEarned: rawGold, materials } = calcExpeditionYield(
         prev.level, armyPwr, gearBonus, prev.activeExpedition.durationHours,
       );
+      const twinFangs = (prev.fusionBuffs ?? []).includes('twin_fangs') ? 1.25 : 1;
+      const goldEarned = Math.floor(rawGold * twinFangs);
       const materialDropPct = calcDiminishingBonus(prev.hatchedDragons, 'material_drop_pct');
       const boostedMaterials = materialDropPct > 0
         ? materials.map(m => ({ ...m, quantity: Math.ceil(m.quantity * (1 + materialDropPct / 100)) }))
@@ -1667,6 +1679,24 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         materials: newMaterials,
         inventory: newInventory,
         equipment: newEquipment,
+      };
+    });
+  }, []);
+
+  const fuseLegendaryItems = useCallback((recipeId: string) => {
+    setState((prev) => {
+      const fusionDef = FUSION_BUFF_BY_RECIPE[recipeId];
+      if (!fusionDef) return prev;
+      if ((prev.fusionBuffs ?? []).includes(fusionDef.buffId)) return prev;
+      const recipe = CRAFTING_RECIPES.find(r => r.id === recipeId);
+      if (!recipe || recipe.rarity !== 'legendary') return prev;
+      const copies = prev.inventory.filter(i => i.name === recipe.name && i.rarity === 'legendary');
+      if (copies.length < 2) return prev;
+      const toRemove = new Set([copies[0].id, copies[1].id]);
+      return {
+        ...prev,
+        inventory: prev.inventory.filter(i => !toRemove.has(i.id)),
+        fusionBuffs: [...(prev.fusionBuffs ?? []), fusionDef.buffId],
       };
     });
   }, []);
@@ -2123,6 +2153,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         equipItem,
         unequipItem,
         craftItem,
+        fuseLegendaryItems,
         setItemNftTokenId,
         clearItemNftTokenId,
         burnItemToWallet,
