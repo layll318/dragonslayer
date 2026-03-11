@@ -81,8 +81,13 @@ export default function CharacterDisplay() {
 
   const equippedWeapon = state.equipment.weapon;
   const equippedShield = state.equipment.shield;
-  const showSword  = !!(equippedWeapon?.nftTokenId);
-  const showShield = !!(equippedShield?.nftTokenId);
+  const walletNfts = state.walletNfts ?? [];
+  const walletShield = walletNfts.find(n => n.itemType === 'shield');
+  const walletSword  = walletNfts.find(n => n.itemType === 'weapon');
+  const showShield = !!(equippedShield?.nftTokenId) || !!walletShield;
+  const showSword  = !!(equippedWeapon?.nftTokenId)  || !!walletSword;
+  const shieldRarity = equippedShield?.rarity ?? walletShield?.rarity ?? 'legendary';
+  const swordRarity  = equippedWeapon?.rarity  ?? walletSword?.rarity  ?? 'legendary';
   const swordImg  = '/images/lynxsword.png';
   const shieldImg = '/images/nomicsshield.png';
 
@@ -122,18 +127,17 @@ export default function CharacterDisplay() {
       }} />
 
       {/* Character image + NFT weapon overlays */}
-      {/* Outer container is wide enough to contain overlays on both sides without overflowing */}
+      {/* Fixed 260px box: shield[0-80] | character[40-240] | sword[200-260] */}
       <div
-        className="relative z-10"
-        style={{ width: 'min(360px, 92vw)', height: 300 }}
+        className="relative z-10 mx-auto"
+        style={{ width: 260, height: 300 }}
       >
-        {/* Character image — shifted right so shield has clear left space */}
+        {/* Character image — fixed offset so overlays always align */}
         <div
           className="absolute pointer-events-none"
           style={{
-            left: 'calc(50% + 25px)',
+            left: 40,
             top: 0,
-            transform: 'translateX(-50%)',
             width: 200,
             height: 300,
             animation: floatAnim,
@@ -161,11 +165,11 @@ export default function CharacterDisplay() {
           <div
             className="absolute pointer-events-none z-20"
             style={{
-              left: 4,
-              bottom: 50,
-              width: 90,
-              height: 120,
-              filter: equippedShield?.rarity === 'legendary'
+              left: 0,
+              bottom: 60,
+              width: 80,
+              height: 110,
+              filter: shieldRarity === 'legendary'
                 ? 'drop-shadow(0 0 14px rgba(240,192,64,0.9)) drop-shadow(0 0 6px rgba(240,192,64,0.7))'
                 : 'drop-shadow(0 0 10px rgba(100,149,237,0.8)) drop-shadow(0 0 4px rgba(150,180,255,0.6))',
               animation: floatAnim,
@@ -192,11 +196,11 @@ export default function CharacterDisplay() {
           <div
             className="absolute pointer-events-none z-20"
             style={{
-              right: 4,
-              bottom: 40,
-              width: 70,
-              height: 160,
-              filter: equippedWeapon?.rarity === 'legendary'
+              right: 0,
+              bottom: 50,
+              width: 60,
+              height: 155,
+              filter: swordRarity === 'legendary'
                 ? 'drop-shadow(0 0 14px rgba(240,192,64,0.9)) drop-shadow(0 0 6px rgba(240,192,64,0.7))'
                 : 'drop-shadow(0 0 10px rgba(100,149,237,0.8)) drop-shadow(0 0 4px rgba(150,180,255,0.6))',
               animation: floatAnim,

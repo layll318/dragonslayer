@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     const mintRes = await fetch(`${BACKEND_URL}/api/nft/mint-item`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ player_id: playerId, item_id: itemId, player_wallet: wallet }),
+      body: JSON.stringify({ player_id: playerId, item_id: itemId, item_name: itemName, player_wallet: wallet }),
     });
     if (!mintRes.ok) {
       const err = await mintRes.text();

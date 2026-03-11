@@ -48,6 +48,7 @@ async def server_mint_item(request: Request):
     body = await request.json()
     player_id = body.get("player_id")
     item_id = body.get("item_id")
+    item_name = body.get("item_name", "")
     player_wallet = body.get("player_wallet")
 
     if not player_id or not item_id or not player_wallet:
@@ -56,7 +57,10 @@ async def server_mint_item(request: Request):
     if not XRPL_WALLET_SEED:
         raise HTTPException(status_code=500, detail="XRPL_WALLET_SEED not configured on server")
 
-    meta_url = f"{BACKEND_URL}/api/nft/item/{player_id}/{item_id}"
+    # Use a readable slug in the URI so the metadata endpoint can resolve the image
+    # even if the DB save hasn't been synced yet.
+    item_slug = item_name.strip().lower().replace(" ", "_") if item_name else item_id
+    meta_url = f"{BACKEND_URL}/api/nft/item/{player_id}/{item_slug}"
     uri_hex = meta_url.encode("utf-8").hex().upper()
 
     server_wallet = Wallet.from_seed(XRPL_WALLET_SEED)
@@ -115,16 +119,22 @@ async def get_nft_item_metadata(player_id: int, item_id: str):
                 player_id,
             )
 
+        def _matches(candidate: dict) -> bool:
+            if str(candidate.get("id", "")) == item_id:
+                return True
+            name_slug = candidate.get("name", "").strip().lower().replace(" ", "_")
+            return name_slug == item_id
+
         item = None
         if save and save["save_json"]:
             s = save["save_json"]
             for inv_item in (s.get("inventory") or []):
-                if str(inv_item.get("id", "")) == item_id:
+                if _matches(inv_item):
                     item = inv_item
                     break
             if not item:
                 for slot_item in (s.get("equipment") or {}).values():
-                    if slot_item and str(slot_item.get("id", "")) == item_id:
+                    if slot_item and _matches(slot_item):
                         item = slot_item
                         break
 

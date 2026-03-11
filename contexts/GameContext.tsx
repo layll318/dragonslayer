@@ -98,6 +98,16 @@ export type EquipmentSlots = {
   ring:   InventoryItem | null;
 };
 
+export interface WalletNft {
+  itemId: string;
+  tokenId: string;
+  name: string;
+  itemType: ItemType;
+  rarity: ItemRarity;
+  power: number;
+  mintedAt: number;
+}
+
 export interface ActiveExpedition {
   startedAt: number;
   durationHours: 4 | 8 | 12;
@@ -219,6 +229,7 @@ export interface GameState {
   dungeonCooldownUntil: number;
   dungeonTotalVictories: number;
   dungeonBestCompletion: Record<string, number>;
+  walletNfts: WalletNft[];
 }
 
 interface GameContextType {
@@ -262,6 +273,7 @@ interface GameContextType {
   claimHolderGift: () => void;
   setItemNftTokenId: (itemId: string, tokenId: string) => void;
   clearItemNftTokenId: (itemId: string) => void;
+  burnItemToWallet: (itemId: string, tokenId: string) => void;
   refreshFromServer: () => Promise<void>;
   CRAFTING_RECIPES: CraftingRecipe[];
   ITEM_UNLOCK_LEVELS: Record<ItemType, number>;
@@ -784,6 +796,7 @@ function createInitialState(): GameState {
     dungeonCooldownUntil: 0,
     dungeonTotalVictories: 0,
     dungeonBestCompletion: {},
+    walletNfts: [],
   };
 }
 
@@ -1519,6 +1532,53 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const burnItemToWallet = useCallback((itemId: string, tokenId: string) => {
+    setState((prev) => {
+      // Find the item in inventory or equipment
+      let burned: InventoryItem | null = null;
+      let newInventory = prev.inventory.filter(i => {
+        if (i.id === itemId) { burned = i; return false; }
+        return true;
+      });
+      let newEquipment = { ...prev.equipment };
+      if (!burned) {
+        const slotKey = (Object.keys(prev.equipment) as (keyof EquipmentSlots)[]).find(
+          k => prev.equipment[k]?.id === itemId
+        );
+        if (slotKey && prev.equipment[slotKey]) {
+          burned = prev.equipment[slotKey]!;
+          newEquipment = { ...newEquipment, [slotKey]: null };
+        }
+      }
+      if (!burned) return prev; // item not found — no-op
+      const walletEntry: WalletNft = {
+        itemId,
+        tokenId,
+        name: burned.name,
+        itemType: burned.itemType,
+        rarity: burned.rarity,
+        power: burned.power,
+        mintedAt: Date.now(),
+      };
+      const newState = {
+        ...prev,
+        inventory: newInventory,
+        equipment: newEquipment,
+        walletNfts: [...(prev.walletNfts ?? []), walletEntry],
+      };
+      // Immediately persist so page reload retains walletNfts
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? '';
+      if (apiUrl && newState.playerId) {
+        fetch(`${apiUrl}/api/save/${newState.playerId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ save_json: newState }),
+        }).catch(() => {});
+      }
+      return newState;
+    });
+  }, []);
+
   const clearItemNftTokenId = useCallback((itemId: string) => {
     setState((prev) => {
       const invIdx = prev.inventory.findIndex(i => i.id === itemId);
@@ -2058,6 +2118,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         craftItem,
         setItemNftTokenId,
         clearItemNftTokenId,
+        burnItemToWallet,
         refreshFromServer,
         addMaterials,
         connectWallet,

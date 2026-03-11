@@ -144,7 +144,7 @@ export default function ExpeditionTab() {
     equipItem,
     unequipItem,
     craftItem,
-    setItemNftTokenId,
+    burnItemToWallet,
     clearItemNftTokenId,
     speedUpExpedition,
     placeEggInIncubator,
@@ -221,7 +221,7 @@ export default function ExpeditionTab() {
         clearMintPoll();
         localStorage.removeItem(MINT_UUID_KEY);
         localStorage.removeItem(MINT_ITEMID_KEY);
-        setItemNftTokenId(itemId, data.tokenId ?? uuid);
+        burnItemToWallet(itemId, data.tokenId ?? uuid);
         setMintPhase('success');
         mintUuidRef.current   = null;
         mintItemIdRef.current = null;
@@ -237,7 +237,7 @@ export default function ExpeditionTab() {
         mintItemIdRef.current = null;
       }
     } catch { /* network error — keep polling */ }
-  }, [clearMintPoll, setItemNftTokenId]);
+  }, [clearMintPoll, burnItemToWallet]);
 
   const startMint = useCallback(async (item: InventoryItem) => {
     setMintItemId(item.id);
