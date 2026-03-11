@@ -559,6 +559,15 @@ export default function ExpeditionTab() {
 
   // ── SECTION: CRAFT ───────────────────────────────────────────────────────
 
+  /** Returns the owned item for the given type+rarity (inventory OR equipped), or null */
+  function findOwnedItem(itemType: ItemType, rarity: ItemRarity): InventoryItem | null {
+    const inInv = state.inventory.find(i => i.itemType === itemType && i.rarity === rarity);
+    if (inInv) return inInv;
+    const eq = state.equipment[itemType as keyof EquipmentSlots];
+    if (eq && eq.rarity === rarity) return eq;
+    return null;
+  }
+
   /** Returns true if player owns an item of the given type+rarity (inventory OR equipped) */
   function hasItem(itemType: ItemType, rarity: ItemRarity): boolean {
     const inInv = state.inventory.some(i => i.itemType === itemType && i.rarity === rarity);
@@ -785,9 +794,44 @@ export default function ExpeditionTab() {
                         </div>
                         <p className="text-[9px] text-[#9a8a6a] mt-0.5">⚡ {recipe.power} power · XRPL NFT · Tradeable</p>
                       </div>
-                      {owned ? (
-                        <span className="text-[9px] font-bold text-[#4ade80] flex-shrink-0">✓ Forged</span>
-                      ) : (
+                      {owned ? (() => {
+                        const ownedItem = findOwnedItem(recipe.itemType as ItemType, recipe.rarity as ItemRarity);
+                        const isMintingThis = mintItemId === ownedItem?.id && (mintPhase === 'loading' || mintPhase === 'waiting');
+                        const itemImg = recipe.name === 'Lynx Sword' ? '/images/swordlvl4.png' : recipe.name === 'Nomic Shield' ? '/images/shieldlvl4.png' : null;
+                        return (
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            {itemImg && (
+                              <img
+                                src={itemImg}
+                                alt={recipe.name}
+                                className="w-9 h-9 object-contain rounded"
+                                onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                              />
+                            )}
+                            <div className="flex flex-col gap-1 items-end">
+                              <span className="text-[9px] font-bold text-[#4ade80]">✓ Forged</span>
+                              {ownedItem && !ownedItem.nftTokenId && (
+                                <button
+                                  onClick={() => startMint(ownedItem)}
+                                  disabled={isMintingThis}
+                                  className="text-[8px] font-bold px-2 py-1 rounded transition-all active:scale-95 whitespace-nowrap"
+                                  style={{
+                                    background: isMintingThis ? 'rgba(240,192,64,0.1)' : 'linear-gradient(135deg,#b8860b,#f0c040)',
+                                    color: isMintingThis ? '#f0c040' : '#1a0e00',
+                                  }}
+                                >
+                                  {isMintingThis ? '⏳…' : '✨ Mint NFT'}
+                                </button>
+                              )}
+                              {ownedItem?.nftTokenId && (
+                                <span className="text-[7px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(240,192,64,0.2)', color: '#f0c040' }}>
+                                  ✨ NFT Minted
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })() : (
                         <button
                           onClick={() => craftItem(recipe.id)}
                           disabled={!canCraft}

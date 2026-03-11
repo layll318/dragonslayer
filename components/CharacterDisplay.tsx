@@ -120,37 +120,46 @@ export default function CharacterDisplay() {
       }} />
 
       {/* Character image + NFT weapon overlays */}
+      {/* Outer container is wide enough to contain overlays on both sides without overflowing */}
       <div
         className="relative z-10"
-        style={{
-          width: 240,
-          height: 300,
-          animation: floatAnim,
-          filter: tier >= 3
-            ? `drop-shadow(0 0 26px ${cfg.glowColor}) drop-shadow(0 0 10px ${cfg.glowColor})`
-            : `drop-shadow(0 8px 18px rgba(0,0,0,0.8))`,
-        }}
+        style={{ width: 'min(360px, 92vw)', height: 300 }}
       >
-        <Image
-          src={TIER_IMAGES[tier - 1]}
-          alt="DragonSlayer character"
-          fill
-          style={{ objectFit: 'contain', imageRendering: 'pixelated' }}
-          priority
-        />
+        {/* Character image — centred inside the wider container */}
+        <div
+          className="absolute pointer-events-none"
+          style={{
+            left: '50%',
+            top: 0,
+            transform: 'translateX(-50%)',
+            width: 200,
+            height: 300,
+            animation: floatAnim,
+            filter: tier >= 3
+              ? `drop-shadow(0 0 26px ${cfg.glowColor}) drop-shadow(0 0 10px ${cfg.glowColor})`
+              : `drop-shadow(0 8px 18px rgba(0,0,0,0.8))`,
+          }}
+        >
+          <Image
+            src={TIER_IMAGES[tier - 1]}
+            alt="DragonSlayer character"
+            fill
+            style={{ objectFit: 'contain', imageRendering: 'pixelated' }}
+            priority
+          />
+          {/* Mood blue tint when sad */}
+          {moodState === 'sad' && (
+            <div className="absolute inset-0 rounded pointer-events-none"
+              style={{ background: 'rgba(0,0,80,0.2)', mixBlendMode: 'multiply' }} />
+          )}
+        </div>
 
-        {/* Mood blue tint when sad */}
-        {moodState === 'sad' && (
-          <div className="absolute inset-0 rounded pointer-events-none"
-            style={{ background: 'rgba(0,0,80,0.2)', mixBlendMode: 'multiply' }} />
-        )}
-
-        {/* Nomic Shield — left of character */}
+        {/* Nomic Shield — left edge of container */}
         {hasNomicShield && (
           <div
             className="absolute pointer-events-none z-20"
             style={{
-              left: -68,
+              left: 4,
               bottom: 60,
               width: 72,
               height: 100,
@@ -174,12 +183,12 @@ export default function CharacterDisplay() {
           </div>
         )}
 
-        {/* Lynx Sword — right of character */}
+        {/* Lynx Sword — right edge of container */}
         {hasLynxSword && (
           <div
             className="absolute pointer-events-none z-20"
             style={{
-              right: -60,
+              right: 4,
               bottom: 55,
               width: 60,
               height: 140,
