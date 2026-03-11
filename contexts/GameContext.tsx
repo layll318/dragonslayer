@@ -454,7 +454,7 @@ export function getEffectiveCraftingCost(recipe: CraftingRecipe, gph: number): n
   return Math.max(recipe.goldCost, Math.floor(gph * (RARITY_GPH_MULT[recipe.rarity] ?? 0.03)));
 }
 
-const MAX_INVENTORY = 20;
+const MAX_INVENTORY = 50;
 
 const EMPTY_EQUIPMENT: EquipmentSlots = { weapon: null, shield: null, helm: null, armor: null, ring: null };
 

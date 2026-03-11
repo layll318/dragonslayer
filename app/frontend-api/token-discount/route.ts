@@ -51,6 +51,28 @@ async function xrplPost(body: object): Promise<any> {
   throw new Error('All XRPL nodes failed');
 }
 
+/** Fetch ALL trust lines for a wallet, following XRPL pagination markers. */
+async function getAllAccountLines(wallet: string): Promise<any[]> {
+  const allLines: any[] = [];
+  let marker: unknown = undefined;
+  const MAX_PAGES = 20; // safety cap — 20 × 400 = 8 000 lines
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const params: Record<string, unknown> = {
+      account: wallet,
+      ledger_index: 'validated',
+      limit: 400,
+    };
+    if (marker !== undefined) params.marker = marker;
+    const data = await xrplPost({ method: 'account_lines', params: [params] });
+    if (data?.result?.status === 'error') break;
+    const lines: any[] = data?.result?.lines ?? [];
+    allLines.push(...lines);
+    marker = data?.result?.marker;
+    if (!marker) break; // no more pages
+  }
+  return allLines;
+}
+
 /** Decode hex currency code (40-char) to ASCII string */
 function decodeCurrencyHex(hex: string): string {
   try {
@@ -75,13 +97,7 @@ async function checkTokenBalance(
   minBalance: number,
 ): Promise<{ holds: boolean; balance: number; xrplError: boolean }> {
   try {
-    const data = await xrplPost({
-      method: 'account_lines',
-      params: [{ account: wallet, ledger_index: 'validated' }],
-    });
-
-    if (data?.result?.status === 'error') return { holds: false, balance: 0, xrplError: false };
-    const lines: any[] = data?.result?.lines ?? [];
+    const lines = await getAllAccountLines(wallet);
     const targetHex = normCurrency(currencyHex);
     const targetDecoded = normCurrency(decodeCurrencyHex(currencyHex));
 
@@ -104,20 +120,14 @@ async function checkTokenBalance(
 }
 
 /** For DragonSlayer: match ANY trust line from the DS issuer with a positive balance.
- *  This avoids needing to know the exact currency hex — the issuer address is the key. */
+ *  Paginates through all account_lines so wallets with many trust lines are fully scanned. */
 async function checkDragonSlayerBalance(
   wallet: string,
   issuer: string,
   minBalance: number,
 ): Promise<{ holds: boolean; balance: number; currencyFound: string | null; xrplError: boolean }> {
   try {
-    const data = await xrplPost({
-      method: 'account_lines',
-      params: [{ account: wallet, ledger_index: 'validated' }],
-    });
-
-    if (data?.result?.status === 'error') return { holds: false, balance: 0, currencyFound: null, xrplError: false };
-    const lines: any[] = data?.result?.lines ?? [];
+    const lines = await getAllAccountLines(wallet);
 
     for (const line of lines) {
       if (normCurrency(line.account) !== normCurrency(issuer)) continue;

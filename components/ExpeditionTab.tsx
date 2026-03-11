@@ -651,11 +651,12 @@ export default function ExpeditionTab() {
   }
 
   const renderCraft = () => {
-    // Full chain per slot: common → uncommon → rare → epic → legendary (weapon/shield only)
+    // T1-T4 chain per slot; legendary is its own forge section below
     const bySlot: Record<string, CraftingRecipe[]> = {};
     for (const slot of SLOT_ORDER) {
-      bySlot[slot] = CRAFTING_RECIPES.filter(r => r.itemType === slot);
+      bySlot[slot] = CRAFTING_RECIPES.filter(r => r.itemType === slot && r.rarity !== 'legendary');
     }
+    const legendaryRecipes = CRAFTING_RECIPES.filter(r => r.rarity === 'legendary');
 
     return (
       <div className="flex flex-col gap-3">
@@ -668,16 +669,15 @@ export default function ExpeditionTab() {
 
         {SLOT_ORDER.map(slot => {
           const chain = bySlot[slot];
-          // Find highest tier already owned
+          // Find highest tier already owned in T1-T4 chain
           const ownedTiers = chain.filter(r => hasItem(r.itemType as ItemType, r.rarity));
           const highestOwned = ownedTiers[ownedTiers.length - 1] ?? null;
-          // Next recipe to craft/upgrade; if legendary is highest, keep showing it so player can forge another
+          // Wrap back to T1 when complete so player can start another chain
           let nextIdx = highestOwned
             ? chain.findIndex(r => r.id === highestOwned.id) + 1
             : 0;
-          const lastInChain = chain[chain.length - 1];
-          if (nextIdx >= chain.length && lastInChain?.rarity === 'legendary') nextIdx = chain.length - 1;
-          const nextRecipe = chain[nextIdx] ?? null;
+          if (nextIdx >= chain.length) nextIdx = 0;
+          const nextRecipe = chain[nextIdx];
 
           return (
             <div key={slot} className="dragon-panel p-3">
@@ -959,7 +959,117 @@ export default function ExpeditionTab() {
           );
         })}
 
-        {/* legendary NFT FORGE section removed — legendary is now the T5 step in each chain */}
+        {/* ── Legendary Forge ───────────────────────────────────────────────── */}
+        {legendaryRecipes.length > 0 && (
+          <div className="dragon-panel p-3">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-base">✨</span>
+              <p className="font-cinzel font-bold text-[#f0c040] text-[11px] tracking-wider">Legendary Forge</p>
+              <span className="text-[7px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(240,192,64,0.2)', color: '#f0c040' }}>XRPL NFT</span>
+            </div>
+            <p className="text-[8px] text-[#6b5a3a] mb-3">Consume an epic item + rare materials to forge a legendary NFT. Multiple copies allowed.</p>
+            <div className="flex flex-col gap-3">
+              {legendaryRecipes.map(recipe => {
+                const color = RARITY_COLORS[recipe.rarity];
+                const isUpgrade = !!recipe.upgradesFrom;
+                const canAffordGold = state.gold >= recipe.goldCost;
+                const matsMet = recipe.materials.every(req => {
+                  const held = state.materials.find(m => m.type === req.type);
+                  return held && held.quantity >= req.quantity;
+                });
+                const hasBaseItem = !isUpgrade || hasItem(
+                  recipe.upgradesFrom!.itemType,
+                  recipe.upgradesFrom!.rarity,
+                );
+                const canCraft = canAffordGold && matsMet && hasBaseItem;
+                const fusionDef = (FUSION_BUFF_BY_RECIPE as Record<string, { buffId: string; label: string; description: string }>)[recipe.id];
+                const alreadyFused = fusionDef ? (state.fusionBuffs ?? []).includes(fusionDef.buffId) : false;
+                const ownedCopies = state.inventory.filter(i => i.name === recipe.name && i.rarity === 'legendary');
+                const epicItem = isUpgrade ? findOwnedItem(recipe.upgradesFrom!.itemType as ItemType, 'epic') : null;
+                const isMintingEpic = epicItem ? mintItemId === epicItem.id && (mintPhase === 'loading' || mintPhase === 'waiting') : false;
+                return (
+                  <div key={recipe.id} className="rounded-lg p-2.5 border" style={{ background: 'rgba(240,192,64,0.07)', borderColor: 'rgba(240,192,64,0.35)', boxShadow: '0 0 8px rgba(240,192,64,0.1)' }}>
+                    {epicItem && (
+                      <div className="flex items-center justify-between mb-2 pb-2 border-b border-[rgba(240,192,64,0.15)]">
+                        <span className="text-[8px] text-[#a0c4ff] font-bold">⚔️ Mint epic before forging (optional)</span>
+                        {!epicItem.nftTokenId ? (
+                          <button onClick={() => startMint(epicItem)} disabled={isMintingEpic} className="text-[8px] font-bold px-2 py-1 rounded whitespace-nowrap" style={{ background: isMintingEpic ? 'rgba(100,149,237,0.15)' : 'linear-gradient(135deg,#3a6fbc,#6499ef)', color: isMintingEpic ? '#a0c4ff' : '#fff' }}>
+                            {isMintingEpic ? '⏳…' : `✨ Mint ${epicItem.name}`}
+                          </button>
+                        ) : (
+                          <span className="text-[8px] font-bold px-2 py-0.5 rounded" style={{ background: 'rgba(100,149,237,0.2)', color: '#a0c4ff' }}>✨ Minted</span>
+                        )}
+                      </div>
+                    )}
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div>
+                        <span className="font-cinzel font-bold text-[11px]" style={{ color }}>{recipe.name}</span>
+                        <p className="text-[9px] text-[#9a8a6a] mt-0.5">⚡ {recipe.power} power · 🔥 burns epic {recipe.itemType}</p>
+                      </div>
+                      <button onClick={() => craftItem(recipe.id)} disabled={!canCraft} className="action-btn px-3 py-1.5 text-[9px] flex-shrink-0" style={canCraft ? { background: 'linear-gradient(135deg,#b8860b,#f0c040)', boxShadow: '0 0 12px rgba(240,192,64,0.4)', color: '#1a0e00' } : { opacity: 0.4, cursor: 'not-allowed' }}>
+                        ✨ FORGE
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-1 mb-1.5">
+                      <span className="text-[8px] px-1.5 py-0.5 rounded-full" style={{ background: hasBaseItem ? 'rgba(74,222,128,0.15)' : 'rgba(248,113,113,0.15)', color: hasBaseItem ? '#4ade80' : '#f87171' }}>
+                        {hasBaseItem ? '✓' : '✗'} Requires epic {recipe.upgradesFrom!.itemType}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1 mb-1.5">
+                      {recipe.materials.map((req, i) => {
+                        const held = state.materials.find(m => m.type === req.type);
+                        const have = held?.quantity ?? 0;
+                        const ok = have >= req.quantity;
+                        return (
+                          <span key={i} className="text-[8px] px-1.5 py-0.5 rounded" style={{ background: ok ? 'rgba(74,222,128,0.1)' : 'rgba(248,113,113,0.1)', color: ok ? '#4ade80' : '#f87171' }}>
+                            {MATERIAL_LABELS[req.type as MaterialType]} {have}/{req.quantity}
+                          </span>
+                        );
+                      })}
+                    </div>
+                    <div className="flex items-center gap-1 mb-2">
+                      <span className="coin-icon" style={{ width: 8, height: 8 }} />
+                      <span className={`text-[9px] font-bold ${canAffordGold ? 'text-[#b09a60]' : 'text-red-400'}`}>{formatNumber(recipe.goldCost)} gold</span>
+                    </div>
+                    {ownedCopies.length > 0 && (
+                      <div className="border-t border-[rgba(240,192,64,0.15)] pt-2 flex flex-col gap-1">
+                        {ownedCopies.map(item => {
+                          const isMinting = mintItemId === item.id && (mintPhase === 'loading' || mintPhase === 'waiting');
+                          return (
+                            <div key={item.id} className="flex items-center justify-between gap-2">
+                              <span className="text-[8px] font-bold" style={{ color }}>✓ {item.name}</span>
+                              {!item.nftTokenId ? (
+                                <button onClick={() => startMint(item)} disabled={isMinting} className="text-[8px] font-bold px-2 py-0.5 rounded whitespace-nowrap" style={{ background: isMinting ? 'rgba(240,192,64,0.1)' : 'linear-gradient(135deg,#b8860b,#f0c040)', color: isMinting ? '#f0c040' : '#1a0e00' }}>
+                                  {isMinting ? '⏳…' : '✨ Mint NFT'}
+                                </button>
+                              ) : (
+                                <span className="text-[7px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(240,192,64,0.2)', color: '#f0c040' }}>✨ NFT Minted</span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {fusionDef && (
+                      <div className="border-t border-[rgba(240,100,220,0.2)] pt-2 mt-1">
+                        {alreadyFused ? (
+                          <span className="text-[8px] font-bold text-[#4ade80]">🔮 {fusionDef.label} active — {fusionDef.description}</span>
+                        ) : ownedCopies.length >= 2 ? (
+                          <div className="flex items-center justify-between">
+                            <span className="text-[8px] text-[#c084fc]">🔮 Fuse 2× → <b>{fusionDef.label}</b>: {fusionDef.description}</span>
+                            <button onClick={() => fuseLegendaryItems(recipe.id)} className="text-[8px] font-bold px-2 py-0.5 rounded ml-1" style={{ background: 'linear-gradient(135deg,#7e22ce,#e879f9)', color: '#fff' }}>FUSE</button>
+                          </div>
+                        ) : (
+                          <span className="text-[8px] text-[#6b5a3a]">🔮 Fuse 2× → <b>{fusionDef.label}</b>: {fusionDef.description}</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     );
   };

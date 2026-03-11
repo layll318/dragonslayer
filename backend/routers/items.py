@@ -136,7 +136,7 @@ async def craft_item(req: CraftRequest):
         count = await conn.fetchval(
             "SELECT COUNT(*) FROM player_items WHERE player_id=$1", req.player_id,
         )
-        if count >= 20:
+        if count >= 50:
             oldest = await conn.fetchval(
                 "SELECT id FROM player_items WHERE player_id=$1 AND equipped=FALSE ORDER BY obtained_at ASC LIMIT 1",
                 req.player_id,
