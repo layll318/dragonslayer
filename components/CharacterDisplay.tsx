@@ -127,11 +127,11 @@ export default function CharacterDisplay() {
         className="relative z-10"
         style={{ width: 'min(360px, 92vw)', height: 300 }}
       >
-        {/* Character image — centred inside the wider container */}
+        {/* Character image — shifted right so shield has clear left space */}
         <div
           className="absolute pointer-events-none"
           style={{
-            left: '50%',
+            left: 'calc(50% + 25px)',
             top: 0,
             transform: 'translateX(-50%)',
             width: 200,
@@ -161,7 +161,7 @@ export default function CharacterDisplay() {
           <div
             className="absolute pointer-events-none z-20"
             style={{
-              left: 'calc(50% - 125px)',
+              left: 4,
               bottom: 50,
               width: 90,
               height: 120,
@@ -192,7 +192,7 @@ export default function CharacterDisplay() {
           <div
             className="absolute pointer-events-none z-20"
             style={{
-              right: 'calc(50% - 120px)',
+              right: 4,
               bottom: 40,
               width: 70,
               height: 160,

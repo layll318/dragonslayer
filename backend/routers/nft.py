@@ -24,6 +24,20 @@ ITEM_IMAGE_MAP = {
     "Aegis":        f"{FRONTEND_URL}/images/nft/shield_aegis.png",
 }
 
+ITEM_IMAGE_BY_ID = {
+    "lynx_sword":   f"{FRONTEND_URL}/images/lynxsword.png",
+    "nomic_shield": f"{FRONTEND_URL}/images/nomicsshield.png",
+    "dragon_fang":  f"{FRONTEND_URL}/images/nft/weapon_dragon_fang.png",
+    "aegis":        f"{FRONTEND_URL}/images/nft/shield_aegis.png",
+}
+
+ITEM_NAME_BY_ID = {
+    "lynx_sword":   "Lynx Sword",
+    "nomic_shield": "Nomic Shield",
+    "dragon_fang":  "Dragon Fang",
+    "aegis":        "Aegis",
+}
+
 
 @router.post("/mint-item")
 async def server_mint_item(request: Request):
@@ -115,18 +129,20 @@ async def get_nft_item_metadata(player_id: int, item_id: str):
                         break
 
         if not item:
+            fallback_img  = ITEM_IMAGE_BY_ID.get(item_id, PLACEHOLDER_IMAGE)
+            fallback_name = ITEM_NAME_BY_ID.get(item_id, item_id.replace("_", " ").title())
             return {
-                "name": "DragonSlayer Item",
-                "description": "A legendary DragonSlayer item minted on XRPL.",
-                "image": PLACEHOLDER_IMAGE,
-                "attributes": [{"trait_type": "Status", "value": "Unknown"}],
+                "name": fallback_name,
+                "description": f"Legendary DragonSlayer item · Minted on XRPL",
+                "image": fallback_img,
+                "attributes": [{"trait_type": "Game", "value": "DragonSlayer"}],
             }
 
-        name = item.get("name", "Unknown Item")
+        name = item.get("name", ITEM_NAME_BY_ID.get(item_id, "Unknown Item"))
         rarity = item.get("rarity", "legendary")
         power = item.get("power", 0)
         item_type = item.get("itemType", "weapon")
-        image = ITEM_IMAGE_MAP.get(name, PLACEHOLDER_IMAGE)
+        image = ITEM_IMAGE_MAP.get(name) or ITEM_IMAGE_BY_ID.get(item_id, PLACEHOLDER_IMAGE)
 
         return {
             "name": name,

@@ -1486,25 +1486,36 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const setItemNftTokenId = useCallback((itemId: string, tokenId: string) => {
     setState((prev) => {
+      let newState = prev;
       const invIdx = prev.inventory.findIndex(i => i.id === itemId);
       if (invIdx !== -1) {
         const newInventory = [...prev.inventory];
         newInventory[invIdx] = { ...newInventory[invIdx], nftTokenId: tokenId };
-        return { ...prev, inventory: newInventory };
+        newState = { ...prev, inventory: newInventory };
+      } else {
+        const slotKey = (Object.keys(prev.equipment) as (keyof EquipmentSlots)[]).find(
+          k => prev.equipment[k]?.id === itemId
+        );
+        if (slotKey) {
+          newState = {
+            ...prev,
+            equipment: {
+              ...prev.equipment,
+              [slotKey]: { ...prev.equipment[slotKey]!, nftTokenId: tokenId },
+            },
+          };
+        }
       }
-      const slotKey = (Object.keys(prev.equipment) as (keyof EquipmentSlots)[]).find(
-        k => prev.equipment[k]?.id === itemId
-      );
-      if (slotKey) {
-        return {
-          ...prev,
-          equipment: {
-            ...prev.equipment,
-            [slotKey]: { ...prev.equipment[slotKey]!, nftTokenId: tokenId },
-          },
-        };
+      // Immediately persist so a page reload never loses nftTokenId
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? '';
+      if (apiUrl && newState.playerId) {
+        fetch(`${apiUrl}/api/save/${newState.playerId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ save_json: newState }),
+        }).catch(() => {});
       }
-      return prev;
+      return newState;
     });
   }, []);
 
