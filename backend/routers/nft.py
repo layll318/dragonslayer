@@ -12,15 +12,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/nft", tags=["nft"])
 
 PLACEHOLDER_IMAGE = "https://placehold.co/600x600/1a0e00/f0c040?text=DragonSlayer"
-BASE_URL = "https://dragonslayer-production.up.railway.app"
+BACKEND_URL  = os.environ.get("BACKEND_URL",  "https://backend-production-7363.up.railway.app")
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://dragonslayer-production.up.railway.app")
 XRPL_NODE = os.environ.get("XRPL_NODE", "https://s1.ripple.com:51234/")
 XRPL_WALLET_SEED = os.environ.get("XRPL_WALLET_SEED", "")
 
 ITEM_IMAGE_MAP = {
-    "Lynx Sword":   f"{BASE_URL}/images/lynxsword.png",
-    "Nomic Shield": f"{BASE_URL}/images/nomicsshield.png",
-    "Dragon Fang":  f"{BASE_URL}/images/nft/weapon_dragon_fang.png",
-    "Aegis":        f"{BASE_URL}/images/nft/shield_aegis.png",
+    "Lynx Sword":   f"{FRONTEND_URL}/images/lynxsword.png",
+    "Nomic Shield": f"{FRONTEND_URL}/images/nomicsshield.png",
+    "Dragon Fang":  f"{FRONTEND_URL}/images/nft/weapon_dragon_fang.png",
+    "Aegis":        f"{FRONTEND_URL}/images/nft/shield_aegis.png",
 }
 
 
@@ -41,7 +42,7 @@ async def server_mint_item(request: Request):
     if not XRPL_WALLET_SEED:
         raise HTTPException(status_code=500, detail="XRPL_WALLET_SEED not configured on server")
 
-    meta_url = f"{BASE_URL}/api/nft/item/{player_id}/{item_id}"
+    meta_url = f"{BACKEND_URL}/api/nft/item/{player_id}/{item_id}"
     uri_hex = meta_url.encode("utf-8").hex().upper()
 
     server_wallet = Wallet.from_seed(XRPL_WALLET_SEED)

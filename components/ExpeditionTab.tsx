@@ -183,24 +183,33 @@ export default function ExpeditionTab() {
   const [mintQr, setMintQr] = useState<string | null>(null);
   const [mintUuid, setMintUuid] = useState<string | null>(null);
   const [mintError, setMintError] = useState<string | null>(null);
-  const mintPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const mintUuidRef = useRef<string | null>(null);
+  const mintPollRef  = useRef<ReturnType<typeof setInterval> | null>(null);
+  const mintBurstRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const mintUuidRef  = useRef<string | null>(null);
+  const mintItemIdRef = useRef<string | null>(null);
+
+  const MINT_UUID_KEY    = 'ds_mint_uuid';
+  const MINT_ITEMID_KEY  = 'ds_mint_item_id';
 
   const clearMintPoll = useCallback(() => {
-    if (mintPollRef.current) { clearInterval(mintPollRef.current); mintPollRef.current = null; }
+    if (mintPollRef.current)  { clearInterval(mintPollRef.current);  mintPollRef.current  = null; }
+    if (mintBurstRef.current) { clearInterval(mintBurstRef.current); mintBurstRef.current = null; }
   }, []);
 
   useEffect(() => () => clearMintPoll(), [clearMintPoll]);
 
   const cancelMint = useCallback(() => {
     clearMintPoll();
+    localStorage.removeItem(MINT_UUID_KEY);
+    localStorage.removeItem(MINT_ITEMID_KEY);
     setMintItemId(null);
     setMintPhase('idle');
     setMintDeeplink(null);
     setMintQr(null);
     setMintUuid(null);
     setMintError(null);
-    mintUuidRef.current = null;
+    mintUuidRef.current   = null;
+    mintItemIdRef.current = null;
   }, [clearMintPoll]);
 
   const doPollMint = useCallback(async (uuid: string, itemId: string) => {
@@ -210,16 +219,22 @@ export default function ExpeditionTab() {
       const data = await res.json();
       if (data.signed) {
         clearMintPoll();
+        localStorage.removeItem(MINT_UUID_KEY);
+        localStorage.removeItem(MINT_ITEMID_KEY);
         setItemNftTokenId(itemId, data.tokenId ?? uuid);
         setMintPhase('success');
-        mintUuidRef.current = null;
+        mintUuidRef.current   = null;
+        mintItemIdRef.current = null;
         return;
       }
       if (data.cancelled || data.expired) {
         clearMintPoll();
+        localStorage.removeItem(MINT_UUID_KEY);
+        localStorage.removeItem(MINT_ITEMID_KEY);
         setMintPhase('error');
         setMintError(data.cancelled ? 'Mint was cancelled.' : 'Mint request expired — please try again.');
-        mintUuidRef.current = null;
+        mintUuidRef.current   = null;
+        mintItemIdRef.current = null;
       }
     } catch { /* network error — keep polling */ }
   }, [clearMintPoll, setItemNftTokenId]);
@@ -246,7 +261,10 @@ export default function ExpeditionTab() {
       const data = await res.json();
       if (!res.ok || !data.uuid) throw new Error(data.error || 'Failed to create mint request');
       const { uuid, deeplink, qr_png } = data;
-      mintUuidRef.current = uuid;
+      mintUuidRef.current   = uuid;
+      mintItemIdRef.current = item.id;
+      localStorage.setItem(MINT_UUID_KEY,   uuid);
+      localStorage.setItem(MINT_ITEMID_KEY, item.id);
       setMintUuid(uuid);
       setMintDeeplink(deeplink);
       setMintQr(qr_png);
@@ -268,6 +286,46 @@ export default function ExpeditionTab() {
       setMintError(err.message || 'Mint failed');
     }
   }, [clearMintPoll, doPollMint, state.walletAddress, state.playerId]);
+
+  // Resume polling if page reloaded mid-mint (e.g. after returning from Xaman)
+  useEffect(() => {
+    const savedUuid   = localStorage.getItem(MINT_UUID_KEY);
+    const savedItemId = localStorage.getItem(MINT_ITEMID_KEY);
+    if (savedUuid && savedItemId) {
+      mintUuidRef.current   = savedUuid;
+      mintItemIdRef.current = savedItemId;
+      setMintUuid(savedUuid);
+      setMintItemId(savedItemId);
+      setMintPhase('waiting');
+      doPollMint(savedUuid, savedItemId);
+      mintPollRef.current = setInterval(() => doPollMint(savedUuid, savedItemId), 2500);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Burst-poll when user returns from Xaman (visibilitychange / TWA activated)
+  useEffect(() => {
+    const onVisible = () => {
+      const uid = mintUuidRef.current;
+      const iid = mintItemIdRef.current;
+      if (!uid || !iid) return;
+      doPollMint(uid, iid);
+      if (mintBurstRef.current) clearInterval(mintBurstRef.current);
+      let ticks = 0;
+      mintBurstRef.current = setInterval(() => {
+        doPollMint(uid, iid);
+        if (++ticks >= 10) { clearInterval(mintBurstRef.current!); mintBurstRef.current = null; }
+      }, 800);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('pageshow', onVisible);
+    const twa = typeof window !== 'undefined' ? (window as any).Telegram?.WebApp : null;
+    if (twa?.onEvent) twa.onEvent('activated', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('pageshow', onVisible);
+      if (twa?.offEvent) twa.offEvent('activated', onVisible);
+    };
+  }, [doPollMint]);
 
   // Live countdown
   useEffect(() => {
