@@ -65,24 +65,23 @@ export async function POST(request: NextRequest) {
         txjson: {
           TransactionType: 'NFTokenAcceptOffer',
           NFTokenSellOffer: offer_index,
-          Account: wallet,
         },
         options: {
           submit: true,
+          force_network: 'MAINNET',
           return_url: { app: returnUrl, web: returnUrl },
         },
         custom_meta: {
-          identifier: `dragonslayer-nft-${itemId}`,
           instruction,
-          blob: JSON.stringify({ nft_token_id }),
+          blob: { nft_token_id },
         },
       }),
     });
 
     if (!res.ok) {
-      const err = await res.text();
-      console.error('Xaman AcceptOffer create error:', err);
-      return NextResponse.json({ error: 'Xaman rejected the claim request' }, { status: res.status });
+      const errText = await res.text();
+      console.error('Xaman AcceptOffer create error:', errText);
+      return NextResponse.json({ error: `Xaman rejected: ${errText}` }, { status: res.status });
     }
 
     const data = await res.json();

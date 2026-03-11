@@ -34,11 +34,16 @@ export async function GET(
   const payload  = data.payload  ?? {};
 
   // nft_token_id was stored in custom_meta.blob during server-mint step
+  // Note: custom_meta is at top-level data.custom_meta, blob is a plain object
   let tokenId: string | null = response.nftoken_id ?? null;
   if (!tokenId) {
     try {
-      const blob = payload.custom_meta?.blob;
-      if (blob) tokenId = JSON.parse(blob).nft_token_id ?? null;
+      const blob = data.custom_meta?.blob;
+      if (blob && typeof blob === 'object') {
+        tokenId = (blob as Record<string, unknown>).nft_token_id as string ?? null;
+      } else if (typeof blob === 'string') {
+        tokenId = JSON.parse(blob).nft_token_id ?? null;
+      }
     } catch { /* ignore parse errors */ }
   }
 
