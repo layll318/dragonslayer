@@ -88,8 +88,18 @@ export default function CharacterDisplay() {
   const showSword  = !!(equippedWeapon?.nftTokenId)  || !!walletSword;
   const shieldRarity = equippedShield?.rarity ?? walletShield?.rarity ?? 'legendary';
   const swordRarity  = equippedWeapon?.rarity  ?? walletSword?.rarity  ?? 'legendary';
-  const swordImg  = '/images/lynxsword.png';
-  const shieldImg = '/images/nomicsshield.png';
+  const WEAPON_IMAGES: Record<string, string> = {
+    'Lynx Sword':  '/images/lynxsword.png',
+    'Dragon Fang': '/images/swordlvl4.png',
+  };
+  const SHIELD_IMAGES: Record<string, string> = {
+    'Nomic Shield': '/images/nomicsshield.png',
+    'Aegis':        '/images/shieldlvl4.png',
+  };
+  const weaponName = equippedWeapon?.name ?? walletSword?.name ?? '';
+  const shieldName = equippedShield?.name ?? walletShield?.name ?? '';
+  const swordImg  = WEAPON_IMAGES[weaponName] ?? '/images/swordlvl4.png';
+  const shieldImg = SHIELD_IMAGES[shieldName] ?? '/images/shieldlvl4.png';
 
   return (
     <div className="relative flex-1 w-full flex flex-col items-center justify-center" style={{ paddingBottom: 48 }}>

@@ -20,15 +20,15 @@ XRPL_WALLET_SEED = os.environ.get("XRPL_WALLET_SEED", "")
 ITEM_IMAGE_MAP = {
     "Lynx Sword":   f"{FRONTEND_URL}/images/lynxsword.png",
     "Nomic Shield": f"{FRONTEND_URL}/images/nomicsshield.png",
-    "Dragon Fang":  f"{FRONTEND_URL}/images/nft/weapon_dragon_fang.png",
-    "Aegis":        f"{FRONTEND_URL}/images/nft/shield_aegis.png",
+    "Dragon Fang":  f"{FRONTEND_URL}/images/swordlvl4.png",
+    "Aegis":        f"{FRONTEND_URL}/images/shieldlvl4.png",
 }
 
 ITEM_IMAGE_BY_ID = {
     "lynx_sword":   f"{FRONTEND_URL}/images/lynxsword.png",
     "nomic_shield": f"{FRONTEND_URL}/images/nomicsshield.png",
-    "dragon_fang":  f"{FRONTEND_URL}/images/nft/weapon_dragon_fang.png",
-    "aegis":        f"{FRONTEND_URL}/images/nft/shield_aegis.png",
+    "dragon_fang":  f"{FRONTEND_URL}/images/swordlvl4.png",
+    "aegis":        f"{FRONTEND_URL}/images/shieldlvl4.png",
 }
 
 ITEM_NAME_BY_ID = {
