@@ -118,6 +118,19 @@ async def create_tables():
                 ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMPTZ DEFAULT NOW()
         """)
         await conn.execute("""
+            CREATE TABLE IF NOT EXISTS player_nfts (
+                nft_token_id   TEXT PRIMARY KEY,
+                player_id      INTEGER REFERENCES players(id) ON DELETE SET NULL,
+                item_id        TEXT NOT NULL,
+                item_name      TEXT NOT NULL DEFAULT '',
+                item_data      JSONB NOT NULL DEFAULT '{}',
+                ipfs_image_cid TEXT,
+                ipfs_meta_cid  TEXT,
+                minted_at      TIMESTAMPTZ DEFAULT NOW(),
+                updated_at     TIMESTAMPTZ DEFAULT NOW()
+            );
+        """)
+        await conn.execute("""
             CREATE TABLE IF NOT EXISTS used_tx_hashes (
                 tx_hash    TEXT PRIMARY KEY,
                 player_id  INTEGER REFERENCES players(id) ON DELETE SET NULL,
