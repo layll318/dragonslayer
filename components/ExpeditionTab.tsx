@@ -56,7 +56,9 @@ const SLOT_ORDER: (keyof EquipmentSlots)[] = ['weapon', 'shield', 'helm', 'armor
 
 type MintPhase = 'idle' | 'loading' | 'waiting' | 'success' | 'error';
 
-function ItemCard({ item, onEquip, onUnequip, isEquipped, onMint, mintPhase, showMintBtn, onClearNft }: {
+const BURN_SOUL_YIELD: Record<string, number> = { common: 2, uncommon: 4, rare: 6, epic: 10, legendary: 20 };
+
+function ItemCard({ item, onEquip, onUnequip, isEquipped, onMint, mintPhase, showMintBtn, onClearNft, onBurn }: {
   item: InventoryItem;
   onEquip?: () => void;
   onUnequip?: () => void;
@@ -65,6 +67,7 @@ function ItemCard({ item, onEquip, onUnequip, isEquipped, onMint, mintPhase, sho
   mintPhase?: MintPhase;
   showMintBtn?: boolean;
   onClearNft?: () => void;
+  onBurn?: () => void;
 }) {
   const color = RARITY_COLORS[item.rarity];
   const isMinting = mintPhase === 'loading' || mintPhase === 'waiting';
@@ -130,6 +133,20 @@ function ItemCard({ item, onEquip, onUnequip, isEquipped, onMint, mintPhase, sho
           {isMinting ? '⏳ Minting…' : '✨ Mint NFT'}
         </button>
       )}
+      {onBurn && !item.nftTokenId && (
+        <button
+          onClick={() => {
+            if (item.rarity === 'legendary') {
+              if (!window.confirm(`Burn ${item.name} for ${BURN_SOUL_YIELD.legendary}🧿 Dragon Souls? This cannot be undone.`)) return;
+            }
+            onBurn();
+          }}
+          className="w-full mt-0.5 py-1 rounded text-[8px] font-bold transition-all active:scale-95"
+          style={{ background: 'rgba(248,113,113,0.12)', color: '#f87171', border: '1px solid rgba(248,113,113,0.2)' }}
+        >
+          🔥 Burn +{BURN_SOUL_YIELD[item.rarity] ?? 2}🧿
+        </button>
+      )}
     </div>
   );
 }
@@ -165,6 +182,7 @@ export default function ExpeditionTab() {
     armyPower,
     CRAFTING_RECIPES,
     ITEM_UNLOCK_LEVELS: unlockLevels,
+    burnInventoryItem,
     claimDrop,
     dismissDrop,
     levelUpItem,
@@ -656,6 +674,7 @@ export default function ExpeditionTab() {
                 onMint={() => startMint(item)}
                 mintPhase={mintItemId === item.id ? mintPhase : 'idle'}
                 onClearNft={item.nftTokenId ? () => clearItemNftTokenId(item.id) : undefined}
+                onBurn={() => burnInventoryItem(item.id)}
               />
             ))}
           </div>

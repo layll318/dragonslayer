@@ -271,6 +271,7 @@ interface GameContextType {
   levelUpItem: (itemId: string) => void;
   forgeLegendary: (itemId: string, recipeId: string) => void;
   enchantItem: (itemId: string, enchantId: string) => void;
+  burnInventoryItem: (itemId: string) => void;
   addMaterials: (drops: { type: MaterialType; quantity: number }[]) => void;
   connectWallet: (address: string) => Promise<void>;
   disconnectWallet: () => void;
@@ -2160,6 +2161,27 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const BURN_SOUL_YIELD: Record<ItemRarity, number> = { common: 2, uncommon: 4, rare: 6, epic: 10, legendary: 20 };
+
+  const burnInventoryItem = useCallback((itemId: string) => {
+    setState((prev) => {
+      const invIdx = prev.inventory.findIndex(i => i.id === itemId);
+      if (invIdx === -1) return prev;
+      const item = prev.inventory[invIdx];
+      if (item.nftTokenId) return prev; // never burn a minted NFT
+      const soulsGained = BURN_SOUL_YIELD[item.rarity] ?? 2;
+      const existing = prev.materials.find(m => m.type === 'dragon_soul');
+      const newMaterials = existing
+        ? prev.materials.map(m => m.type === 'dragon_soul' ? { ...m, quantity: m.quantity + soulsGained } : m)
+        : [...prev.materials, { type: 'dragon_soul' as MaterialType, quantity: soulsGained }];
+      return {
+        ...prev,
+        inventory: prev.inventory.filter(i => i.id !== itemId),
+        materials: newMaterials,
+      };
+    });
+  }, []);
+
   const buyBuilding = useCallback((id: string, qty = 1) => {
     setState((prev) => {
       const idx = prev.buildings.findIndex((b) => b.id === id);
@@ -2621,6 +2643,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         levelUpItem,
         forgeLegendary,
         enchantItem,
+        burnInventoryItem,
         setItemNftTokenId,
         clearItemNftTokenId,
         burnItemToWallet,
