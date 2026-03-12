@@ -59,35 +59,41 @@ type MintPhase = 'idle' | 'loading' | 'waiting' | 'success' | 'error';
 const BURN_SOUL_YIELD: Record<string, number> = { common: 2, uncommon: 4, rare: 6, epic: 10, legendary: 20 };
 
 const ITEM_IMAGE_BY_NAME: Record<string, string> = {
+  // Legendary — unique root-level art
   'Lynx Sword':         '/images/lynxsword.png',
   'Nomic Shield':       '/images/nomicsshield.png',
   'Void Blade':         '/images/lynxsword.png',
   "Dragon's Aegis":     '/images/nomicsshield.png',
   'Dragonslayer Blade': '/images/lynxsword.png',
   'Nomic Fortress':     '/images/nomicsshield.png',
-  'Dragon Plate':       '/images/armor_dragonscale.png',
-  "Dragon's Eye":       '/images/ring_ancient_sigil.png',
-  'Eternal Ring':       '/images/ring_ancient_sigil.png',
-  'Dragon Fang':        '/images/weapon_dragon_fang.png',
-  'Aegis':              '/images/shield_aegis.png',
-  'Demon Helm':         '/images/helm_demon.png',
-  'Infernal Crown':     '/images/helm_infernal_crown.png',
-  'Infernal Plate':     '/images/armor_infernal_plate.png',
-  'Ancient Sigil':      '/images/ring_ancient_sigil.png',
-  'Flame Blade':        '/images/weapon_flame_blade.png',
-  'Dragon Shield':      '/images/shield_dragon.png',
-  'Dragonscale Armor':  '/images/armor_dragonscale.png',
-  "Dragon's Seal":      '/images/ring_dragons_seal.png',
-  'Steel Sword':        '/images/weapon_steel_sword.png',
-  'Iron Shield':        '/images/shield_iron.png',
-  'Scale Helm':         '/images/helm_scale.png',
-  'Chain Armor':        '/images/armor_chain.png',
-  'Flame Ring':         '/images/ring_flame.png',
-  'Iron Sword':         '/images/weapon_iron_sword.png',
-  'Oak Shield':         '/images/shield_oak.png',
-  'Iron Helm':          '/images/helm_iron.png',
-  'Leather Armor':      '/images/armor_leather.png',
-  'Iron Ring':          '/images/ring_iron.png',
+  // Legendary — nft subfolder art
+  'Infernal Crown':     '/images/nft/helm_infernal_crown.png',
+  'Dragon Plate':       '/images/nft/armor_dragonscale.png',
+  "Dragon's Eye":       '/images/nft/ring_ancient_sigil.png',
+  'Eternal Ring':       '/images/nft/ring_ancient_sigil.png',
+  // Epic (T4)
+  'Dragon Fang':        '/images/nft/weapon_dragon_fang.png',
+  'Aegis':              '/images/nft/shield_aegis.png',
+  'Demon Helm':         '/images/nft/helm_demon.png',
+  'Infernal Plate':     '/images/nft/armor_infernal_plate.png',
+  'Ancient Sigil':      '/images/nft/ring_ancient_sigil.png',
+  // Rare (T3)
+  'Flame Blade':        '/images/nft/weapon_flame_blade.png',
+  'Dragon Shield':      '/images/nft/shield_dragon.png',
+  'Dragonscale Armor':  '/images/nft/armor_dragonscale.png',
+  "Dragon's Seal":      '/images/nft/ring_dragons_seal.png',
+  // Uncommon (T2)
+  'Steel Sword':        '/images/nft/weapon_steel_sword.png',
+  'Iron Shield':        '/images/nft/shield_iron.png',
+  'Scale Helm':         '/images/nft/helm_scale.png',
+  'Chain Armor':        '/images/nft/armor_chain.png',
+  'Flame Ring':         '/images/nft/ring_flame.png',
+  // Common (T1)
+  'Iron Sword':         '/images/nft/weapon_iron_sword.png',
+  'Oak Shield':         '/images/nft/shield_oak.png',
+  'Iron Helm':          '/images/nft/helm_iron.png',
+  'Leather Armor':      '/images/nft/armor_leather.png',
+  'Iron Ring':          '/images/nft/ring_iron.png',
 };
 function getItemImage(name: string): string {
   return ITEM_IMAGE_BY_NAME[name] ?? '/images/salyer4.png';
@@ -171,9 +177,9 @@ function ItemCard({ item, onEquip, onUnequip, isEquipped, onMint, mintPhase, sho
       {onBurn && (
         <button
           onClick={() => {
-            if (item.nftTokenId) {
-              if (!window.confirm(`Remove "${item.name}" from your inventory? The NFT stays in your wallet — this only clears the in-game record.`)) return;
-            } else if (item.rarity === 'legendary') {
+            // NFT items route through the Xaman confirm modal (set via setBurnConfirmItem)
+            // so no window.confirm here. Non-NFT legendaries still get a native confirm.
+            if (!item.nftTokenId && item.rarity === 'legendary') {
               if (!window.confirm(`Burn ${item.name} for ${BURN_SOUL_YIELD.legendary}🧿 Dragon Souls? This cannot be undone.`)) return;
             }
             onBurn();
@@ -460,6 +466,8 @@ export default function ExpeditionTab() {
         rarity: item.rarity, power: item.power,
         basePower: item.basePower ?? item.power,
         reforgeLevel: item.reforgeLevel ?? 0,
+        itemLevel: item.itemLevel ?? 25,
+        enchantId: item.enchantId ?? null,
       }));
       setMintUuid(uuid);
       setMintDeeplink(deeplink);
@@ -798,7 +806,7 @@ export default function ExpeditionTab() {
       {state.inventory.length > 0 && (
         <div className="dragon-panel px-3 py-3">
           <p className="font-cinzel font-bold text-[#e8d8a8] text-[11px] tracking-wider mb-2">
-            🎒 INVENTORY ({state.inventory.length}/20)
+            🎒 INVENTORY ({state.inventory.length}/10)
           </p>
           <div className="grid grid-cols-2 gap-2">
             {state.inventory.map(item => (

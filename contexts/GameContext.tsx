@@ -1725,7 +1725,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         // server-state overwrite (race condition on Xaman return). Reconstruct it so
         // the NFT token ID is not silently dropped.
         // Try to recover item info from localStorage (saved at startMint time)
-        let savedInfo: { name: string; itemType: ItemType; rarity: ItemRarity; power: number; basePower?: number; reforgeLevel?: number } | null = null;
+        let savedInfo: { name: string; itemType: ItemType; rarity: ItemRarity; power: number; basePower?: number; reforgeLevel?: number; itemLevel?: number; enchantId?: string | null } | null = null;
         try {
           const raw = typeof window !== 'undefined' ? localStorage.getItem('ds_mint_item_info') : null;
           if (raw) savedInfo = JSON.parse(raw);
@@ -1738,6 +1738,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           power: savedInfo?.power ?? 0,
           basePower: savedInfo?.basePower ?? savedInfo?.power ?? 0,
           reforgeLevel: savedInfo?.reforgeLevel ?? 0,
+          itemLevel: savedInfo?.itemLevel ?? 25,
+          enchantId: savedInfo?.enchantId ?? null,
           nftTokenId: tokenId,
           obtainedVia: 'crafted',
           obtainedAt: Date.now(),
@@ -1939,24 +1941,33 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         : null;
       item = invIdx !== -1 ? prev.inventory[invIdx] : (slotKey ? prev.equipment[slotKey]! : null);
       if (!item || item.rarity !== 'legendary') return prev;
-      const currentLevel = item.reforgeLevel ?? 0;
-      if (currentLevel >= MAX_REFORGE_LEVEL) return prev;
-      const cost = REFORGE_COSTS[currentLevel];
-      if (prev.gold < cost.goldCost) return prev;
-      for (const req of cost.materials) {
+      // Use itemLevel to find current tier (25→100 system)
+      const currentItemLevel = item.itemLevel ?? 25;
+      if (currentItemLevel >= 100) return prev;
+      const forgeTier = FORGE_LEVEL_COSTS.find(t => currentItemLevel >= t.fromLevel && currentItemLevel < t.toLevel);
+      if (!forgeTier) return prev;
+      if (prev.gold < forgeTier.goldCost) return prev;
+      const soulMat = prev.materials.find(m => m.type === 'dragon_soul');
+      if (!soulMat || soulMat.quantity < forgeTier.dragonSouls) return prev;
+      for (const req of forgeTier.materials) {
         const held = prev.materials.find(m => m.type === req.type);
         if (!held || held.quantity < req.quantity) return prev;
       }
-      const basePowerGain = REFORGE_POWER_STEPS[currentLevel];
-      const powerGain = item.nftTokenId ? basePowerGain + 1 : basePowerGain;
+      // One click = advance entire tier (e.g. Lv25→40), power per level applied to all levels gained
+      const levelsGained = forgeTier.toLevel - currentItemLevel;
+      const basePowerGain = forgeTier.powerPerLevel * levelsGained;
+      const powerGain = item.nftTokenId ? (forgeTier.powerPerLevel + 1) * levelsGained : basePowerGain;
       const updatedItem: InventoryItem = {
         ...item,
-        reforgeLevel: currentLevel + 1,
+        reforgeLevel: (item.reforgeLevel ?? 0) + 1,
+        itemLevel: forgeTier.toLevel,
         power: item.power + powerGain,
       };
+      // Deduct souls + all tier materials
       const newMaterials = prev.materials
         .map(m => {
-          const req = cost.materials.find(r => r.type === m.type);
+          if (m.type === 'dragon_soul') return { ...m, quantity: m.quantity - forgeTier.dragonSouls };
+          const req = forgeTier.materials.find(r => r.type === m.type);
           return req ? { ...m, quantity: m.quantity - req.quantity } : m;
         })
         .filter(m => m.quantity > 0);
@@ -1974,7 +1985,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       );
       const newState = {
         ...prev,
-        gold: prev.gold - cost.goldCost,
+        gold: prev.gold - forgeTier.goldCost,
         materials: newMaterials,
         inventory: newInventory,
         equipment: newEquipment,
@@ -2121,8 +2132,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setState((prev) => {
       const recipe = LEGENDARY_RECIPES.find(r => r.id === recipeId);
       if (!recipe) return prev;
+      // Search inventory AND equipment (player may have the level-25 item equipped)
       const invIdx = prev.inventory.findIndex(i => i.id === itemId);
-      const item = invIdx !== -1 ? prev.inventory[invIdx] : null;
+      const slotKey = invIdx === -1
+        ? (Object.keys(prev.equipment) as (keyof EquipmentSlots)[]).find(k => prev.equipment[k]?.id === itemId)
+        : null;
+      const item = invIdx !== -1 ? prev.inventory[invIdx] : (slotKey ? prev.equipment[slotKey]! : null);
       if (!item) return prev;
       if ((item.itemLevel ?? 1) < 25) return prev;
       if (item.itemType !== recipe.itemType) return prev;
@@ -2135,7 +2150,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       const newMaterials = prev.materials
         .map(m => { const req = recipe.materials.find(r => r.type === m.type); return req ? { ...m, quantity: m.quantity - req.quantity } : m; })
         .filter(m => m.quantity > 0);
+      // Remove from whichever location it was found
       const newInventory = prev.inventory.filter(i => i.id !== itemId);
+      const newEquipmentForge = slotKey
+        ? { ...prev.equipment, [slotKey]: null as any }
+        : prev.equipment;
       const slotEnchants = ENCHANT_OPTIONS[recipe.itemType] ?? [];
       const randomEnchant = recipe.enchantId
         ? recipe.enchantId
@@ -2159,6 +2178,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         ...prev,
         gold: prev.gold - recipe.goldCost,
         materials: newMaterials,
+        equipment: newEquipmentForge,
         inventory: [...newInventory, legendaryItem].slice(-MAX_INVENTORY),
       };
     });
