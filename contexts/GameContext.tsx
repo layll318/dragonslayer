@@ -256,6 +256,7 @@ interface GameContextType {
   fuseLegendaryItems: (recipeId: string) => void;
   reforgeItem: (itemId: string) => void;
   alchemyConvert: (recipeId: string) => void;
+  reclaimNftItem: (tokenId: string) => void;
   addMaterials: (drops: { type: MaterialType; quantity: number }[]) => void;
   connectWallet: (address: string) => Promise<void>;
   disconnectWallet: () => void;
@@ -1629,8 +1630,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         }
         return newState;
       }
-      // Deduplicate: don't add walletNfts entry if already present
-      const alreadyIn = (prev.walletNfts ?? []).some(n => n.itemId === itemId);
+      // Deduplicate: don't add walletNfts entry if already present (check both itemId and tokenId)
+      const alreadyIn = (prev.walletNfts ?? []).some(n => n.itemId === itemId || n.tokenId === tokenId);
       const walletEntry: WalletNft = {
         itemId,
         tokenId,
@@ -1835,12 +1836,55 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       } else if (slotKey) {
         newEquipment = { ...prev.equipment, [slotKey]: updatedItem };
       }
+      // Sync power in walletNfts entry if present
+      const newWalletNfts = (prev.walletNfts ?? []).map(n =>
+        n.itemId === itemId ? { ...n, power: updatedItem.power } : n
+      );
       const newState = {
         ...prev,
         gold: prev.gold - cost.goldCost,
         materials: newMaterials,
         inventory: newInventory,
         equipment: newEquipment,
+        walletNfts: newWalletNfts,
+      };
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? '';
+      if (apiUrl && newState.playerId) {
+        fetch(`${apiUrl}/api/save/${newState.playerId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ save_json: newState }),
+        }).catch(() => {});
+      }
+      return newState;
+    });
+  }, []);
+
+  const reclaimNftItem = useCallback((tokenId: string) => {
+    setState((prev) => {
+      const nft = (prev.walletNfts ?? []).find(n => n.tokenId === tokenId);
+      if (!nft) return prev;
+      // Check if item is already in inventory or equipment
+      const inInv = prev.inventory.some(i => i.id === nft.itemId || i.nftTokenId === tokenId);
+      const inEquip = (Object.values(prev.equipment) as (InventoryItem | null)[]).some(
+        e => e && (e.id === nft.itemId || e.nftTokenId === tokenId)
+      );
+      if (inInv || inEquip) return prev; // already accessible
+      const restoredItem: InventoryItem = {
+        id: nft.itemId,
+        itemType: nft.itemType,
+        name: nft.name,
+        rarity: nft.rarity,
+        power: nft.power,
+        basePower: nft.power,
+        reforgeLevel: 0,
+        nftTokenId: tokenId,
+        obtainedVia: 'crafted',
+        obtainedAt: Date.now(),
+      };
+      const newState = {
+        ...prev,
+        inventory: [...prev.inventory, restoredItem].slice(-MAX_INVENTORY),
       };
       const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? '';
       if (apiUrl && newState.playerId) {
@@ -2331,6 +2375,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         fuseLegendaryItems,
         reforgeItem,
         alchemyConvert,
+        reclaimNftItem,
         setItemNftTokenId,
         clearItemNftTokenId,
         burnItemToWallet,

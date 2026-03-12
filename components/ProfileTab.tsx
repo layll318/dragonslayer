@@ -36,7 +36,7 @@ const TIER_ICONS = ['🧑‍🌾', '🛡️', '⚔️', '🐲', '👑'];
 const TIER_LEVELS = [1, 10, 25, 50, 80];
 
 export default function ProfileTab() {
-  const { state, goldPerHour, goldPerTap, getCharacterTier, connectWallet, disconnectWallet, setDisplayName, forceSave, refreshFromServer, refreshTokenDiscount } = useGame();
+  const { state, goldPerHour, goldPerTap, getCharacterTier, connectWallet, disconnectWallet, setDisplayName, forceSave, refreshFromServer, refreshTokenDiscount, reclaimNftItem } = useGame();
   const { user, isTWA } = useTelegramWebApp();
 
   const [editingName, setEditingName] = useState(false);
@@ -497,18 +497,20 @@ export default function ProfileTab() {
                   : '/images/salyer4.png';
                 const shortId = nft.tokenId ? `${nft.tokenId.slice(0, 8)}…${nft.tokenId.slice(-6)}` : '';
                 const xrpscanUrl = nft.tokenId ? `https://xrpscan.com/nft/${nft.tokenId}` : null;
-                const invItem = state.inventory.find(i => i.id === nft.itemId);
-                const eqItem = Object.values(state.equipment).find(e => e?.id === nft.itemId);
-                const liveItem = invItem ?? eqItem;
+                const invItem = state.inventory.find(i => i.id === nft.itemId || i.nftTokenId === nft.tokenId);
+                const eqItem = Object.values(state.equipment).find(e => e && (e.id === nft.itemId || e.nftTokenId === nft.tokenId));
+                const liveItem = invItem ?? eqItem ?? null;
                 const displayPower = liveItem?.power ?? nft.power;
                 const reforgeLevel = liveItem?.reforgeLevel ?? 0;
+                const inInventory = !!liveItem;
                 return (
-                  <div key={nft.itemId} className="flex items-center gap-3 rounded-xl px-3 py-2.5" style={{ background: 'rgba(240,192,64,0.05)', border: '1px solid rgba(240,192,64,0.2)' }}>
-                    <img src={imgSrc} alt={nft.name} className="w-10 h-10 object-contain rounded-lg flex-shrink-0" style={{ border: '1px solid rgba(240,192,64,0.25)' }} onError={e => { (e.target as HTMLImageElement).style.opacity = '0'; }} />
+                  <div key={nft.tokenId ?? nft.itemId} className="flex items-center gap-3 rounded-xl px-3 py-2.5" style={{ background: inInventory ? 'rgba(240,192,64,0.05)' : 'rgba(248,113,113,0.05)', border: `1px solid ${inInventory ? 'rgba(240,192,64,0.2)' : 'rgba(248,113,113,0.25)'}` }}>
+                    <img src={imgSrc} alt={nft.name} className="w-10 h-10 object-contain rounded-lg flex-shrink-0" style={{ border: '1px solid rgba(240,192,64,0.25)', opacity: inInventory ? 1 : 0.6 }} onError={e => { (e.target as HTMLImageElement).style.opacity = '0'; }} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 mb-0.5">
                         <span className="font-cinzel font-bold text-[11px] text-[#e8d8a8] truncate">{nft.name}</span>
                         {reforgeLevel > 0 && <span className="text-[7px] font-bold px-1 rounded flex-shrink-0" style={{ background: 'rgba(96,165,250,0.15)', color: '#60a5fa' }}>+{reforgeLevel}</span>}
+                        {!inInventory && <span className="text-[7px] font-bold px-1 rounded flex-shrink-0" style={{ background: 'rgba(248,113,113,0.15)', color: '#f87171' }}>not in bag</span>}
                       </div>
                       <p className="text-[9px] text-[#9a8a6a]">⚡ {displayPower} power · {nft.rarity}</p>
                       {xrpscanUrl ? (
@@ -519,6 +521,15 @@ export default function ProfileTab() {
                         <span className="text-[8px] text-[#3a2a1a]">{shortId}</span>
                       )}
                     </div>
+                    {!inInventory && nft.tokenId && (
+                      <button
+                        onClick={() => reclaimNftItem(nft.tokenId!)}
+                        className="text-[8px] font-bold px-2 py-1 rounded flex-shrink-0"
+                        style={{ background: 'linear-gradient(135deg,#1a4a1a,#2d7a2d)', color: '#86efac' }}
+                      >
+                        ↩ Reclaim
+                      </button>
+                    )}
                   </div>
                 );
               })}
