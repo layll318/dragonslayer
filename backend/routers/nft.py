@@ -168,7 +168,6 @@ async def get_nft_item_metadata(player_id: int, item_id: str):
             "name": name,
             "description": f"{rarity.title()} DragonSlayer {item_type} · Power {power} · Minted on XRPL",
             "image": image,
-            "external_url": f"{FRONTEND_URL}/",
             "attributes": [
                 {"trait_type": "Rarity",    "value": rarity.title()},
                 {"trait_type": "Type",      "value": item_type.title()},
@@ -256,7 +255,6 @@ async def get_nft_metadata(token_id: str):
                 f"{total_expeditions} expeditions completed"
             ),
             "image": PLACEHOLDER_IMAGE,
-            "external_url": f"https://dragonslayer.app/profile/{player_id}",
             "attributes": [
                 {"trait_type": "Level",            "value": level},
                 {"trait_type": "Dragons Slain",    "value": total_dragons},

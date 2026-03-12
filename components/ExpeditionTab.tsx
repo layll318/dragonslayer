@@ -984,7 +984,14 @@ export default function ExpeditionTab() {
                 const canCraft = canAffordGold && matsMet && hasBaseItem;
                 const fusionDef = (FUSION_BUFF_BY_RECIPE as Record<string, { buffId: string; label: string; description: string }>)[recipe.id];
                 const alreadyFused = fusionDef ? (state.fusionBuffs ?? []).includes(fusionDef.buffId) : false;
-                const ownedCopies = state.inventory.filter(i => i.name === recipe.name && i.rarity === 'legendary');
+                const equippedLegendary = (() => {
+                  const slot = state.equipment[recipe.itemType as keyof EquipmentSlots];
+                  return slot && slot.name === recipe.name && slot.rarity === 'legendary' ? slot : null;
+                })();
+                const ownedCopies = [
+                  ...(equippedLegendary ? [equippedLegendary] : []),
+                  ...state.inventory.filter(i => i.name === recipe.name && i.rarity === 'legendary'),
+                ];
                 const epicItem = isUpgrade ? findOwnedItem(recipe.upgradesFrom!.itemType as ItemType, 'epic') : null;
                 const isMintingEpic = epicItem ? mintItemId === epicItem.id && (mintPhase === 'loading' || mintPhase === 'waiting') : false;
                 return (

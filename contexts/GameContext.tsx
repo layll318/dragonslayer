@@ -1690,12 +1690,22 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       if ((prev.fusionBuffs ?? []).includes(fusionDef.buffId)) return prev;
       const recipe = CRAFTING_RECIPES.find(r => r.id === recipeId);
       if (!recipe || recipe.rarity !== 'legendary') return prev;
-      const copies = prev.inventory.filter(i => i.name === recipe.name && i.rarity === 'legendary');
-      if (copies.length < 2) return prev;
-      const toRemove = new Set([copies[0].id, copies[1].id]);
+      const invCopies = prev.inventory.filter(i => i.name === recipe.name && i.rarity === 'legendary');
+      const equippedCopy = (() => {
+        const slot = prev.equipment[recipe.itemType as keyof EquipmentSlots];
+        return slot && slot.name === recipe.name && slot.rarity === 'legendary' ? slot : null;
+      })();
+      const allCopies = equippedCopy ? [equippedCopy, ...invCopies] : invCopies;
+      if (allCopies.length < 2) return prev;
+      const toRemove = new Set([allCopies[0].id, allCopies[1].id]);
+      const newEquipment = { ...prev.equipment };
+      if (equippedCopy && toRemove.has(equippedCopy.id)) {
+        newEquipment[recipe.itemType as keyof EquipmentSlots] = null as any;
+      }
       return {
         ...prev,
         inventory: prev.inventory.filter(i => !toRemove.has(i.id)),
+        equipment: newEquipment,
         fusionBuffs: [...(prev.fusionBuffs ?? []), fusionDef.buffId],
       };
     });
