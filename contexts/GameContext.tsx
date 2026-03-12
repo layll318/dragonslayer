@@ -6,7 +6,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 // TYPES
 // ============================================================
 
-export type MaterialType = 'dragon_scale' | 'fire_crystal' | 'iron_ore' | 'bone_shard' | 'ancient_rune' | 'lynx_fang' | 'nomic_core';
+export type MaterialType = 'dragon_scale' | 'fire_crystal' | 'ancient_rune' | 'lynx_fang' | 'nomic_core' | 'dragon_soul';
 export type EggRarity = 'common' | 'uncommon' | 'rare' | 'legendary';
 export type DragonBonusType = 'tap_gold_pct' | 'army_power_flat' | 'material_drop_pct' | 'expedition_time_pct';
 
@@ -326,11 +326,10 @@ export const ITEM_UNLOCK_LEVELS: Record<ItemType, number> = {
 export const MATERIAL_LABELS: Record<MaterialType, string> = {
   dragon_scale: '🐉 Dragon Scale',
   fire_crystal:  '🔥 Fire Crystal',
-  iron_ore:      '⚙️ Iron Ore',
-  bone_shard:    '🦴 Bone Shard',
   ancient_rune:  '✨ Ancient Rune',
   lynx_fang:     '🐾 Lynx Fang',
   nomic_core:    '🔮 Nomic Core',
+  dragon_soul:   '🧿 Dragon Soul',
 };
 
 // ── Upgrade chains: T1(common) → T2(uncommon) → T3(rare) → T4(epic) ──────────
@@ -341,12 +340,12 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
   // ── WEAPON ──────────────────────────────────────────────────────────────────
   {
     id: 'iron_sword', itemType: 'weapon', name: 'Iron Sword', rarity: 'common', power: 5, goldCost: 300,
-    materials: [{ type: 'iron_ore', quantity: 3 }, { type: 'bone_shard', quantity: 2 }],
+    materials: [{ type: 'dragon_scale', quantity: 2 }, { type: 'ancient_rune', quantity: 1 }],
   },
   {
     id: 'steel_sword', itemType: 'weapon', name: 'Steel Sword', rarity: 'uncommon', power: 10, goldCost: 800,
     upgradesFrom: { itemType: 'weapon', rarity: 'common' },
-    materials: [{ type: 'iron_ore', quantity: 4 }, { type: 'dragon_scale', quantity: 3 }],
+    materials: [{ type: 'dragon_scale', quantity: 4 }, { type: 'fire_crystal', quantity: 2 }],
   },
   {
     id: 'flame_blade', itemType: 'weapon', name: 'Flame Blade', rarity: 'rare', power: 18, goldCost: 2000,
@@ -362,12 +361,12 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
   // ── SHIELD ──────────────────────────────────────────────────────────────────
   {
     id: 'oak_shield', itemType: 'shield', name: 'Oak Shield', rarity: 'common', power: 4, goldCost: 250,
-    materials: [{ type: 'iron_ore', quantity: 3 }, { type: 'bone_shard', quantity: 2 }],
+    materials: [{ type: 'dragon_scale', quantity: 2 }, { type: 'ancient_rune', quantity: 1 }],
   },
   {
     id: 'iron_shield', itemType: 'shield', name: 'Iron Shield', rarity: 'uncommon', power: 9, goldCost: 700,
     upgradesFrom: { itemType: 'shield', rarity: 'common' },
-    materials: [{ type: 'iron_ore', quantity: 4 }, { type: 'dragon_scale', quantity: 2 }],
+    materials: [{ type: 'dragon_scale', quantity: 4 }, { type: 'fire_crystal', quantity: 2 }],
   },
   {
     id: 'dragon_shield', itemType: 'shield', name: 'Dragon Shield', rarity: 'rare', power: 16, goldCost: 1800,
@@ -383,7 +382,7 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
   // ── HELM ────────────────────────────────────────────────────────────────────
   {
     id: 'iron_helm', itemType: 'helm', name: 'Iron Helm', rarity: 'common', power: 3, goldCost: 200,
-    materials: [{ type: 'bone_shard', quantity: 2 }, { type: 'iron_ore', quantity: 2 }],
+    materials: [{ type: 'dragon_scale', quantity: 2 }, { type: 'fire_crystal', quantity: 1 }],
   },
   {
     id: 'scale_helm', itemType: 'helm', name: 'Scale Helm', rarity: 'uncommon', power: 8, goldCost: 600,
@@ -404,17 +403,17 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
   // ── ARMOR ───────────────────────────────────────────────────────────────────
   {
     id: 'leather_armor', itemType: 'armor', name: 'Leather Armor', rarity: 'common', power: 4, goldCost: 300,
-    materials: [{ type: 'bone_shard', quantity: 3 }, { type: 'iron_ore', quantity: 2 }],
+    materials: [{ type: 'dragon_scale', quantity: 2 }, { type: 'ancient_rune', quantity: 1 }],
   },
   {
     id: 'chain_armor', itemType: 'armor', name: 'Chain Armor', rarity: 'uncommon', power: 10, goldCost: 900,
     upgradesFrom: { itemType: 'armor', rarity: 'common' },
-    materials: [{ type: 'iron_ore', quantity: 4 }, { type: 'bone_shard', quantity: 3 }],
+    materials: [{ type: 'dragon_scale', quantity: 4 }, { type: 'fire_crystal', quantity: 2 }],
   },
   {
     id: 'dragonscale_armor', itemType: 'armor', name: 'Dragonscale Armor', rarity: 'rare', power: 20, goldCost: 2500,
     upgradesFrom: { itemType: 'armor', rarity: 'uncommon' },
-    materials: [{ type: 'dragon_scale', quantity: 5 }, { type: 'iron_ore', quantity: 3 }],
+    materials: [{ type: 'dragon_scale', quantity: 5 }, { type: 'ancient_rune', quantity: 2 }],
   },
   {
     id: 'infernal_plate', itemType: 'armor', name: 'Infernal Plate', rarity: 'epic', power: 34, goldCost: 7000,
@@ -425,7 +424,7 @@ export const CRAFTING_RECIPES: CraftingRecipe[] = [
   // ── RING ────────────────────────────────────────────────────────────────────
   {
     id: 'iron_ring', itemType: 'ring', name: 'Iron Ring', rarity: 'common', power: 2, goldCost: 150,
-    materials: [{ type: 'iron_ore', quantity: 2 }, { type: 'ancient_rune', quantity: 1 }],
+    materials: [{ type: 'dragon_scale', quantity: 1 }, { type: 'ancient_rune', quantity: 1 }],
   },
   {
     id: 'flame_ring', itemType: 'ring', name: 'Flame Ring', rarity: 'uncommon', power: 7, goldCost: 500,
@@ -538,13 +537,16 @@ function calcExpeditionYield(
   ));
   const goldEarned = dragonsSlain * (50 + level * 8);
 
-  const allTypes: MaterialType[] = ['dragon_scale', 'fire_crystal', 'iron_ore', 'bone_shard', 'ancient_rune'];
-  // All 5 types always drop — qty: 4h=1-2, 8h=1-3, 12h=2-4
+  const coreTypes: MaterialType[] = ['dragon_scale', 'fire_crystal', 'ancient_rune'];
+  // Core 3 types always drop — qty: 4h=1-2, 8h=1-3, 12h=2-4
   const maxQty = hours === 4 ? 2 : hours === 8 ? 3 : 4;
-  const materials: Material[] = allTypes.map(type => ({
+  const materials: Material[] = coreTypes.map(type => ({
     type, quantity: Math.floor(Math.random() * maxQty) + 1,
   }));
-  // Legendary mats only from 12h expeditions
+  // Legendary mats + Dragon Souls from 8h/12h expeditions
+  if (hours >= 8) {
+    materials.push({ type: 'dragon_soul', quantity: hours === 12 ? 2 + Math.floor(Math.random() * 2) : 1 });
+  }
   if (hours === 12) {
     materials.push({ type: 'lynx_fang',  quantity: 1 + Math.floor(Math.random() * 3) });
     materials.push({ type: 'nomic_core', quantity: 1 + Math.floor(Math.random() * 3) });
@@ -605,7 +607,7 @@ export function computeDungeonRewards(
   level: number,
   dungeonTier: number,
 ): DungeonRewards {
-  const commonMats: MaterialType[] = ['dragon_scale', 'fire_crystal', 'iron_ore', 'bone_shard', 'ancient_rune'];
+  const commonMats: MaterialType[] = ['dragon_scale', 'fire_crystal', 'ancient_rune'];
   if (outcome === 'victory') {
     const goldEarned = Math.max(2000, Math.floor(gph * 2));
     const xpEarned = 20 * level;
@@ -613,6 +615,7 @@ export function computeDungeonRewards(
     const materials: { type: MaterialType; quantity: number }[] = commonMats.map(type => ({ type, quantity: matQty }));
     materials.push({ type: 'lynx_fang',  quantity: 1 + Math.floor(Math.random() * 2) });
     materials.push({ type: 'nomic_core', quantity: 1 + Math.floor(Math.random() * 2) });
+    materials.push({ type: 'dragon_soul', quantity: 2 + Math.floor(Math.random() * 3) });
     let egg: DragonEgg | null = null;
     if (Math.random() < 0.08) {
       const rarity: EggRarity = dungeonTier >= 4 ? 'rare' : dungeonTier >= 2 ? 'uncommon' : 'common';
@@ -668,7 +671,7 @@ function generateMerchantDeals(level: number, dateStr: string, gph = 0): Merchan
   // Seeded pseudo-random from date string so deals are consistent within a day
   let seed = dateStr.split('').reduce((s, c) => s + c.charCodeAt(0), 0) + level;
   const rng = () => { seed = (seed * 1664525 + 1013904223) & 0xffffffff; return Math.abs(seed) / 0x7fffffff; };
-  const allMats: MaterialType[] = ['dragon_scale','fire_crystal','iron_ore','bone_shard','ancient_rune'];
+  const allMats: MaterialType[] = ['dragon_scale','fire_crystal','ancient_rune','lynx_fang','nomic_core'];
   const pickMat = () => allMats[Math.floor(rng() * allMats.length)];
   const goldBase = Math.max(500, gph > 0 ? Math.floor(gph * 0.5) : level * 200);
   const rareMat = pickMat();
@@ -747,6 +750,24 @@ function generateDailyQuests(level: number, gph = 0): DailyQuest[] {
 const GameContext = createContext<GameContextType | undefined>(undefined);
 
 const SAVE_KEY = 'dragonslayer_save';
+
+function migrateMaterials(mats: Material[]): Material[] {
+  const result: Material[] = [];
+  let conversionPool = 0;
+  for (const m of mats) {
+    if ((m.type as string) === 'iron_ore' || (m.type as string) === 'bone_shard') {
+      conversionPool += m.quantity;
+    } else {
+      result.push({ ...m });
+    }
+  }
+  if (conversionPool > 0) {
+    const existing = result.find(m => m.type === 'dragon_scale');
+    if (existing) existing.quantity += conversionPool;
+    else result.push({ type: 'dragon_scale', quantity: conversionPool });
+  }
+  return result;
+}
 
 function loadState(): GameState | null {
   if (typeof window === 'undefined') return null;
@@ -887,7 +908,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         buildings: migratedBuildings,
         equipment: savedEquipment,
         inventory: saved.inventory ?? [],
-        materials: mergeMaterialsByType(saved.materials ?? []),
+        materials: mergeMaterialsByType(migrateMaterials(saved.materials ?? [])),
         activeExpedition: saved.activeExpedition ?? null,
         lastExpeditionResult: saved.lastExpeditionResult ?? null,
         totalDragonsSlain: saved.totalDragonsSlain ?? 0,
@@ -2121,7 +2142,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       const egg: DragonEgg = { id: `holder-egg-${Date.now()}`, rarity: eggRarity, ...variant };
       // Materials: 1 per type at day 1, +1 every 5 days
       const materialQty = 1 + Math.floor(streak / 5);
-      const allMats: MaterialType[] = ['dragon_scale', 'fire_crystal', 'iron_ore', 'bone_shard', 'ancient_rune'];
+      const allMats: MaterialType[] = ['dragon_scale', 'fire_crystal', 'ancient_rune', 'lynx_fang', 'nomic_core'];
       const newMats = [...prev.materials];
       for (const mtype of allMats) {
         const ex = newMats.find(m => m.type === mtype);

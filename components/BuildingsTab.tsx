@@ -92,7 +92,7 @@ export default function BuildingsTab() {
         return;
       }
       const memo: string = status.memo || pending.memo || '';
-      const allTypes: MaterialType[] = ['dragon_scale','fire_crystal','iron_ore','bone_shard','ancient_rune'];
+      const allTypes: MaterialType[] = ['dragon_scale','fire_crystal','ancient_rune','lynx_fang','nomic_core'];
       let drops: { type: MaterialType; quantity: number }[] = [];
       if (memo.startsWith('bundle')) {
         drops = allTypes.map(t => ({ type: t, quantity: 3 }));
@@ -517,7 +517,7 @@ export default function BuildingsTab() {
               <p className="text-[8px] text-[#6b5a3a] mb-1">Pay via Xaman (wallet connected):</p>
             )}
             <div className="grid grid-cols-5 gap-1 mb-2">
-              {(['dragon_scale','fire_crystal','iron_ore','bone_shard','ancient_rune'] as MaterialType[]).map(t => (
+              {(['dragon_scale','fire_crystal','ancient_rune','lynx_fang','nomic_core'] as MaterialType[]).map(t => (
                 <button key={t} onClick={() => handleBuyMaterial(t)} disabled={buyStatus === 'loading' || !state.walletAddress}
                   className="flex flex-col items-center py-1.5 px-1 rounded-lg transition-opacity"
                   style={{ background: 'rgba(212,160,23,0.08)', border: '1px solid rgba(212,160,23,0.2)', opacity: (buyStatus === 'loading' || !state.walletAddress) ? 0.4 : 1 }}>
@@ -562,7 +562,7 @@ export default function BuildingsTab() {
                 style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(212,160,23,0.25)', outline: 'none' }} />
               <p className="text-[8px] text-[#6b5a3a] mb-1">1 XRP = pick a type below · 3 XRP = all 5 types automatically</p>
               <div className="grid grid-cols-5 gap-1 mb-2">
-                {(['dragon_scale','fire_crystal','iron_ore','bone_shard','ancient_rune'] as MaterialType[]).map(t => (
+                {(['dragon_scale','fire_crystal','ancient_rune','lynx_fang','nomic_core'] as MaterialType[]).map(t => (
                   <button key={t} onClick={() => setTxType(prev => prev === t ? '' : t)}
                     className="flex flex-col items-center py-1 px-1 rounded-lg transition-all"
                     style={{ background: txType === t ? 'rgba(212,160,23,0.3)' : 'rgba(212,160,23,0.06)', border: `1px solid ${txType === t ? 'rgba(212,160,23,0.7)' : 'rgba(212,160,23,0.15)'}` }}>

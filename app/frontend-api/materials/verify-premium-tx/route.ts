@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const ALL_TYPES = ['dragon_scale', 'fire_crystal', 'iron_ore', 'bone_shard', 'ancient_rune'] as const;
+    const ALL_TYPES = ['dragon_scale', 'fire_crystal', 'ancient_rune', 'lynx_fang', 'nomic_core'] as const;
 
     return NextResponse.json({
       success: true,

@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
     // Thresholds are set at 50% of the full price to accept max-discounted payments:
     //   bundle (3 XRP full) → accept >= 1.5 XRP
     //   single (1 XRP full) → accept >= 0.5 XRP
-    const ALL_TYPES = ['dragon_scale', 'fire_crystal', 'iron_ore', 'bone_shard', 'ancient_rune'] as const;
+    const ALL_TYPES = ['dragon_scale', 'fire_crystal', 'ancient_rune', 'lynx_fang', 'nomic_core'] as const;
     type MatType = typeof ALL_TYPES[number];
 
     let credits: { type: MatType; quantity: number }[];

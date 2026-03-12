@@ -9,7 +9,7 @@ from database import get_pool
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/expeditions", tags=["expeditions"])
 
-MATERIAL_TYPES = ["dragon_scale", "fire_crystal", "iron_ore", "bone_shard", "ancient_rune"]
+MATERIAL_TYPES = ["dragon_scale", "fire_crystal", "ancient_rune"]
 
 
 class StartExpeditionRequest(BaseModel):
@@ -49,12 +49,20 @@ def _calc_yield(level: int, army_power: float, gear_bonus: float, hours: int):
     gold_earned = dragons_slain * (50 + level * 8)
 
     quality = "rare" if hours >= 12 else "uncommon" if hours >= 8 else "common"
-    # All 5 types always drop — qty: 4h=1, 8h=1-2, 12h=1-3
+    # Core 3 types always drop — qty: 4h=1, 8h=1-2, 12h=1-3
     max_qty = 1 if hours == 4 else 2 if hours == 8 else 3
     materials = [
         {"type": t, "quality": quality, "quantity": random.randint(1, max_qty)}
         for t in MATERIAL_TYPES
     ]
+    # Dragon Souls from 8h/12h expeditions
+    if hours >= 8:
+        soul_qty = random.randint(2, 3) if hours == 12 else 1
+        materials.append({"type": "dragon_soul", "quality": "rare", "quantity": soul_qty})
+    # Legendary mats from 12h only
+    if hours == 12:
+        materials.append({"type": "lynx_fang",  "quality": "rare", "quantity": random.randint(1, 3)})
+        materials.append({"type": "nomic_core", "quality": "rare", "quantity": random.randint(1, 3)})
     return dragons_slain, gold_earned, materials
 
 

@@ -785,7 +785,7 @@ const DUNGEON_BOSS_DROPS: Record<DungeonTier, { type: MaterialType; qty: number 
   4: [{ type: 'lynx_fang', qty: 1 }, { type: 'nomic_core', qty: 1 }],
 };
 
-const DUNGEON_COMMON_MATS: MaterialType[] = ['dragon_scale', 'fire_crystal', 'iron_ore', 'bone_shard', 'ancient_rune'];
+const DUNGEON_COMMON_MATS: MaterialType[] = ['dragon_scale', 'fire_crystal', 'ancient_rune'];
 
 interface DungeonPlayerStats { atk: number; maxHp: number; reduction: number; hasRing: boolean }
 
