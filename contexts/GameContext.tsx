@@ -242,6 +242,8 @@ export interface GameState {
   walletNfts: WalletNft[];
   fusionBuffs: string[];
   claimableDrops: ClaimableDrop[];
+  craftingV2Migrated?: boolean;
+  craftingV2SoulsAwarded?: number;
 }
 
 interface GameContextType {
@@ -272,6 +274,7 @@ interface GameContextType {
   forgeLegendary: (itemId: string, recipeId: string) => void;
   enchantItem: (itemId: string, enchantId: string) => void;
   burnInventoryItem: (itemId: string) => void;
+  dismissCraftingV2Modal: () => void;
   addMaterials: (drops: { type: MaterialType; quantity: number }[]) => void;
   connectWallet: (address: string) => Promise<void>;
   disconnectWallet: () => void;
@@ -508,7 +511,7 @@ export function getEffectiveCraftingCost(recipe: CraftingRecipe, gph: number): n
   return Math.max(recipe.goldCost, Math.floor(gph * (RARITY_GPH_MULT[recipe.rarity] ?? 0.03)));
 }
 
-const MAX_INVENTORY = 50;
+const MAX_INVENTORY = 10;
 
 const EMPTY_EQUIPMENT: EquipmentSlots = { weapon: null, shield: null, helm: null, armor: null, ring: null };
 
@@ -972,12 +975,40 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       );
 
 
+      // ── Crafting V2 migration: reward Dragon Souls, wipe inventory+equipment ──
+      const V2_SOUL_YIELD: Record<string, number> = { common: 2, uncommon: 4, rare: 6, epic: 10, legendary: 20 };
+      let v2Migrated = saved.craftingV2Migrated ?? false;
+      let v2SoulsAwarded = saved.craftingV2SoulsAwarded ?? 0;
+      let v2Equipment = savedEquipment;
+      let v2Inventory: InventoryItem[] = saved.inventory ?? [];
+      let v2BaseMats = mergeMaterialsByType(migrateMaterials(saved.materials ?? []));
+      if (!v2Migrated) {
+        const allItems: InventoryItem[] = [
+          ...(saved.inventory ?? []),
+          ...Object.values(savedEquipment).filter(Boolean) as InventoryItem[],
+        ];
+        let soulsFromItems = 0;
+        for (const it of allItems) {
+          if (!it.nftTokenId) {
+            soulsFromItems += V2_SOUL_YIELD[it.rarity] ?? 2;
+          }
+        }
+        const existingSoul = v2BaseMats.find(m => m.type === 'dragon_soul');
+        v2BaseMats = existingSoul
+          ? v2BaseMats.map(m => m.type === 'dragon_soul' ? { ...m, quantity: m.quantity + soulsFromItems } : m)
+          : [...v2BaseMats, { type: 'dragon_soul' as MaterialType, quantity: soulsFromItems }];
+        v2Equipment = { ...EMPTY_EQUIPMENT };
+        v2Inventory = [];
+        v2Migrated = true;
+        v2SoulsAwarded = soulsFromItems;
+      }
+
       setState({
         ...saved,
         buildings: migratedBuildings,
-        equipment: savedEquipment,
-        inventory: saved.inventory ?? [],
-        materials: mergeMaterialsByType(migrateMaterials(saved.materials ?? [])),
+        equipment: v2Equipment,
+        inventory: v2Inventory,
+        materials: v2BaseMats,
         claimableDrops: saved.claimableDrops ?? [],
         activeExpedition: saved.activeExpedition ?? null,
         lastExpeditionResult: saved.lastExpeditionResult ?? null,
@@ -1019,6 +1050,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         dungeonCooldownUntil: saved.dungeonCooldownUntil ?? 0,
         dungeonTotalVictories: saved.dungeonTotalVictories ?? 0,
         dungeonBestCompletion: saved.dungeonBestCompletion ?? {},
+        craftingV2Migrated: v2Migrated,
+        craftingV2SoulsAwarded: v2SoulsAwarded,
       });
 
       // Auto-reconnect: wallet already in localStorage — re-establish identity via wallet path
@@ -1913,7 +1946,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         const held = prev.materials.find(m => m.type === req.type);
         if (!held || held.quantity < req.quantity) return prev;
       }
-      const powerGain = REFORGE_POWER_STEPS[currentLevel];
+      const basePowerGain = REFORGE_POWER_STEPS[currentLevel];
+      const powerGain = item.nftTokenId ? basePowerGain + 1 : basePowerGain;
       const updatedItem: InventoryItem = {
         ...item,
         reforgeLevel: currentLevel + 1,
@@ -2183,6 +2217,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         materials: newMaterials,
       };
     });
+  }, []);
+
+  const dismissCraftingV2Modal = useCallback(() => {
+    setState((prev) => ({ ...prev, craftingV2SoulsAwarded: 0 }));
   }, []);
 
   const buyBuilding = useCallback((id: string, qty = 1) => {
@@ -2677,6 +2715,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         LEGENDARY_RECIPES,
         ENCHANT_OPTIONS,
         FORGE_LEVEL_COSTS,
+        dismissCraftingV2Modal,
       }}
     >
       {children}

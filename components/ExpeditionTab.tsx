@@ -58,6 +58,41 @@ type MintPhase = 'idle' | 'loading' | 'waiting' | 'success' | 'error';
 
 const BURN_SOUL_YIELD: Record<string, number> = { common: 2, uncommon: 4, rare: 6, epic: 10, legendary: 20 };
 
+const ITEM_IMAGE_BY_NAME: Record<string, string> = {
+  'Lynx Sword':         '/images/lynxsword.png',
+  'Nomic Shield':       '/images/nomicsshield.png',
+  'Void Blade':         '/images/lynxsword.png',
+  "Dragon's Aegis":     '/images/nomicsshield.png',
+  'Dragonslayer Blade': '/images/lynxsword.png',
+  'Nomic Fortress':     '/images/nomicsshield.png',
+  'Dragon Plate':       '/images/armor_dragonscale.png',
+  "Dragon's Eye":       '/images/ring_ancient_sigil.png',
+  'Eternal Ring':       '/images/ring_ancient_sigil.png',
+  'Dragon Fang':        '/images/weapon_dragon_fang.png',
+  'Aegis':              '/images/shield_aegis.png',
+  'Demon Helm':         '/images/helm_demon.png',
+  'Infernal Crown':     '/images/helm_infernal_crown.png',
+  'Infernal Plate':     '/images/armor_infernal_plate.png',
+  'Ancient Sigil':      '/images/ring_ancient_sigil.png',
+  'Flame Blade':        '/images/weapon_flame_blade.png',
+  'Dragon Shield':      '/images/shield_dragon.png',
+  'Dragonscale Armor':  '/images/armor_dragonscale.png',
+  "Dragon's Seal":      '/images/ring_dragons_seal.png',
+  'Steel Sword':        '/images/weapon_steel_sword.png',
+  'Iron Shield':        '/images/shield_iron.png',
+  'Scale Helm':         '/images/helm_scale.png',
+  'Chain Armor':        '/images/armor_chain.png',
+  'Flame Ring':         '/images/ring_flame.png',
+  'Iron Sword':         '/images/weapon_iron_sword.png',
+  'Oak Shield':         '/images/shield_oak.png',
+  'Iron Helm':          '/images/helm_iron.png',
+  'Leather Armor':      '/images/armor_leather.png',
+  'Iron Ring':          '/images/ring_iron.png',
+};
+function getItemImage(name: string): string {
+  return ITEM_IMAGE_BY_NAME[name] ?? '/images/salyer4.png';
+}
+
 function ItemCard({ item, onEquip, onUnequip, isEquipped, onMint, mintPhase, showMintBtn, onClearNft, onBurn }: {
   item: InventoryItem;
   onEquip?: () => void;
@@ -193,6 +228,7 @@ export default function ExpeditionTab() {
     LEGENDARY_RECIPES,
     ENCHANT_OPTIONS,
     FORGE_LEVEL_COSTS,
+    dismissCraftingV2Modal,
   } = useGame();
 
   const AD_VIDEOS = [
@@ -985,8 +1021,10 @@ export default function ExpeditionTab() {
                         <div className="border-t border-[rgba(240,192,64,0.15)] pt-2 mb-2">
                           <div className="flex items-center justify-between gap-2">
                             <div>
-                              <p className="text-[8px] font-bold text-[#c8b87a]">🔥 Forge Lv{forgeTier.fromLevel}→{forgeTier.toLevel}</p>
-                              <p className="text-[7px] text-[#6b5a3a]">+{forgeTier.powerPerLevel * (forgeTier.toLevel - forgeTier.fromLevel)} power · 🧿{forgeTier.dragonSouls} souls + 🪙{formatNumber(forgeTier.goldCost)}g</p>
+                              <p className="text-[8px] font-bold text-[#c8b87a]">🔥 Forge Lv{forgeTier.fromLevel}→{forgeTier.toLevel}
+                                {item.nftTokenId && <span className="ml-1 text-[7px] font-bold text-[#f0c040]">✨ +1 NFT bonus</span>}
+                              </p>
+                              <p className="text-[7px] text-[#6b5a3a]">+{item.nftTokenId ? (forgeTier.powerPerLevel + 1) : forgeTier.powerPerLevel} power/lv · 🧿{forgeTier.dragonSouls} souls + 🪙{formatNumber(forgeTier.goldCost)}g</p>
                             </div>
                             <button onClick={() => reforgeItem(item.id)} disabled={!canForgeTier}
                               className="text-[8px] font-bold px-2 py-1 rounded whitespace-nowrap"
@@ -1314,6 +1352,34 @@ export default function ExpeditionTab() {
         </div>
       )}
 
+      {/* ── Crafting V2 Migration Banner ──────────────────────────────── */}
+      {(state.craftingV2SoulsAwarded ?? 0) > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: 'rgba(0,0,0,0.90)' }}>
+          <div className="w-full max-w-xs rounded-2xl p-5 flex flex-col gap-4" style={{ background: '#0f0800', border: '1px solid rgba(74,222,128,0.45)', boxShadow: '0 0 40px rgba(74,222,128,0.12)' }}>
+            <p className="font-cinzel font-bold text-[#4ade80] text-sm tracking-widest text-center">⚔️ SYSTEM UPGRADE</p>
+            <p className="text-[#c8b87a] text-[11px] text-center leading-relaxed">
+              The crafting system has been rebuilt from scratch.
+              Your old items have been converted to Dragon Souls.
+            </p>
+            <div className="flex items-center justify-center gap-2 py-3 rounded-xl" style={{ background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.2)' }}>
+              <span className="text-2xl">🧿</span>
+              <span className="font-cinzel font-bold text-[#4ade80] text-lg">+{state.craftingV2SoulsAwarded}</span>
+              <span className="text-[#9a9a9a] text-[10px]">Dragon Souls awarded</span>
+            </div>
+            <p className="text-[#6b5a3a] text-[9px] text-center leading-relaxed">
+              NFT items were kept on-chain. Start fresh — run expeditions to earn new gear drops!
+            </p>
+            <button
+              onClick={dismissCraftingV2Modal}
+              className="w-full py-2.5 rounded-xl font-cinzel font-bold text-[11px] tracking-wider"
+              style={{ background: 'linear-gradient(135deg,#2a6b3a,#4ade80)', color: '#0a1a0a' }}
+            >
+              Let's Go! ⚔️
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Mint Confirmation Card ─────────────────────────────────────── */}
       {mintConfirmItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: 'rgba(0,0,0,0.88)' }}>
@@ -1321,7 +1387,7 @@ export default function ExpeditionTab() {
             <p className="font-cinzel font-bold text-[#f0c040] text-sm tracking-widest text-center">✨ MINT NFT</p>
             <div className="flex items-center gap-4">
               <img
-                src={mintConfirmItem.name === 'Lynx Sword' ? '/images/lynxsword.png' : mintConfirmItem.name === 'Nomic Shield' ? '/images/nomicsshield.png' : '/images/salyer4.png'}
+                src={getItemImage(mintConfirmItem.name)}
                 alt={mintConfirmItem.name}
                 className="w-16 h-16 object-contain rounded-xl"
                 style={{ border: '1px solid rgba(240,192,64,0.3)' }}

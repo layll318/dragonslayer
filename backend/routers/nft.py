@@ -27,26 +27,66 @@ FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://dragonslayer-production.u
 XRPL_NODE = os.environ.get("XRPL_NODE", "https://s1.ripple.com:51234/")
 XRPL_WALLET_SEED = os.environ.get("XRPL_WALLET_SEED", "")
 
-ITEM_IMAGE_MAP = {
-    "Lynx Sword":   f"{BACKEND_URL}/images/lynxsword.png",
-    "Nomic Shield": f"{BACKEND_URL}/images/nomicsshield.png",
-    "Dragon Fang":  f"{BACKEND_URL}/images/swordlvl4.png",
-    "Aegis":        f"{BACKEND_URL}/images/shieldlvl4.png",
+ITEM_IMAGE_BY_NAME = {
+    # Legendary
+    "Lynx Sword":          f"{BACKEND_URL}/images/lynxsword.png",
+    "Nomic Shield":        f"{BACKEND_URL}/images/nomicsshield.png",
+    "Void Blade":          f"{BACKEND_URL}/images/lynxsword.png",
+    "Dragon's Aegis":      f"{BACKEND_URL}/images/nomicsshield.png",
+    "Dragonslayer Blade":  f"{BACKEND_URL}/images/lynxsword.png",
+    "Nomic Fortress":      f"{BACKEND_URL}/images/nomicsshield.png",
+    "Infernal Crown":      f"{BACKEND_URL}/images/helm_infernal_crown.png",
+    "Dragon Plate":        f"{BACKEND_URL}/images/armor_dragonscale.png",
+    "Dragon's Eye":        f"{BACKEND_URL}/images/ring_ancient_sigil.png",
+    "Eternal Ring":        f"{BACKEND_URL}/images/ring_ancient_sigil.png",
+    # Epic (T4)
+    "Dragon Fang":         f"{BACKEND_URL}/images/weapon_dragon_fang.png",
+    "Aegis":               f"{BACKEND_URL}/images/shield_aegis.png",
+    "Demon Helm":          f"{BACKEND_URL}/images/helm_demon.png",
+    "Infernal Plate":      f"{BACKEND_URL}/images/armor_infernal_plate.png",
+    "Ancient Sigil":       f"{BACKEND_URL}/images/ring_ancient_sigil.png",
+    # Rare (T3)
+    "Flame Blade":         f"{BACKEND_URL}/images/weapon_flame_blade.png",
+    "Dragon Shield":       f"{BACKEND_URL}/images/shield_dragon.png",
+    "Infernal Crown":      f"{BACKEND_URL}/images/helm_infernal_crown.png",
+    "Dragonscale Armor":   f"{BACKEND_URL}/images/armor_dragonscale.png",
+    "Dragon's Seal":       f"{BACKEND_URL}/images/ring_dragons_seal.png",
+    # Uncommon (T2)
+    "Steel Sword":         f"{BACKEND_URL}/images/weapon_steel_sword.png",
+    "Iron Shield":         f"{BACKEND_URL}/images/shield_iron.png",
+    "Scale Helm":          f"{BACKEND_URL}/images/helm_scale.png",
+    "Chain Armor":         f"{BACKEND_URL}/images/armor_chain.png",
+    "Flame Ring":          f"{BACKEND_URL}/images/ring_flame.png",
+    # Common (T1)
+    "Iron Sword":          f"{BACKEND_URL}/images/weapon_iron_sword.png",
+    "Oak Shield":          f"{BACKEND_URL}/images/shield_oak.png",
+    "Iron Helm":           f"{BACKEND_URL}/images/helm_iron.png",
+    "Leather Armor":       f"{BACKEND_URL}/images/armor_leather.png",
+    "Iron Ring":           f"{BACKEND_URL}/images/ring_iron.png",
 }
 
 ITEM_IMAGE_BY_ID = {
-    "lynx_sword":   f"{BACKEND_URL}/images/lynxsword.png",
-    "nomic_shield": f"{BACKEND_URL}/images/nomicsshield.png",
-    "dragon_fang":  f"{BACKEND_URL}/images/swordlvl4.png",
-    "aegis":        f"{BACKEND_URL}/images/shieldlvl4.png",
+    "lynx_sword":          f"{BACKEND_URL}/images/lynxsword.png",
+    "nomic_shield":        f"{BACKEND_URL}/images/nomicsshield.png",
+    "dragon_fang":         f"{BACKEND_URL}/images/weapon_dragon_fang.png",
+    "aegis":               f"{BACKEND_URL}/images/shield_aegis.png",
+    "demon_helm":          f"{BACKEND_URL}/images/helm_demon.png",
+    "infernal_plate":      f"{BACKEND_URL}/images/armor_infernal_plate.png",
+    "ancient_sigil":       f"{BACKEND_URL}/images/ring_ancient_sigil.png",
 }
 
 ITEM_NAME_BY_ID = {
-    "lynx_sword":   "Lynx Sword",
-    "nomic_shield": "Nomic Shield",
-    "dragon_fang":  "Dragon Fang",
-    "aegis":        "Aegis",
+    "lynx_sword":          "Lynx Sword",
+    "nomic_shield":        "Nomic Shield",
+    "dragon_fang":         "Dragon Fang",
+    "aegis":               "Aegis",
+    "demon_helm":          "Demon Helm",
+    "infernal_plate":      "Infernal Plate",
+    "ancient_sigil":       "Ancient Sigil",
 }
+
+# Keep legacy alias for backwards compat
+ITEM_IMAGE_MAP = ITEM_IMAGE_BY_NAME
 
 
 @router.post("/mint-item")
@@ -79,7 +119,7 @@ async def server_mint_item(request: Request):
         client = AsyncJsonRpcClient(XRPL_NODE)
         mint_tx = NFTokenMint(
             account=server_wallet.classic_address,
-            nftoken_taxon=0,
+            nftoken_taxon=1,
             flags=8,
             uri=uri_hex,
         )
@@ -162,19 +202,29 @@ async def get_nft_item_metadata(player_id: int, item_id: str):
         rarity = item.get("rarity", "legendary")
         power = item.get("power", 0)
         item_type = item.get("itemType", "weapon")
-        image = ITEM_IMAGE_MAP.get(name) or ITEM_IMAGE_BY_ID.get(item_id, PLACEHOLDER_IMAGE)
+        item_level = item.get("itemLevel", 1)
+        enchant_id = item.get("enchantId") or ""
+        reforge_level = item.get("reforgeLevel", 0)
+        image = ITEM_IMAGE_BY_NAME.get(name) or ITEM_IMAGE_BY_ID.get(item_id, PLACEHOLDER_IMAGE)
+
+        attributes = [
+            {"trait_type": "Rarity",        "value": rarity.title()},
+            {"trait_type": "Type",          "value": item_type.title()},
+            {"trait_type": "Power",         "value": power},
+            {"trait_type": "Item Level",    "value": item_level},
+            {"trait_type": "Game",          "value": "DragonSlayer"},
+            {"trait_type": "Item Name",     "value": name},
+        ]
+        if enchant_id:
+            attributes.append({"trait_type": "Enchant", "value": enchant_id})
+        if reforge_level:
+            attributes.append({"trait_type": "Reforge Level", "value": reforge_level})
 
         return {
             "name": name,
-            "description": f"{rarity.title()} DragonSlayer {item_type} · Power {power} · Minted on XRPL",
+            "description": f"{rarity.title()} DragonSlayer {item_type} · Power {power} · Level {item_level} · Minted on XRPL",
             "image": image,
-            "attributes": [
-                {"trait_type": "Rarity",    "value": rarity.title()},
-                {"trait_type": "Type",      "value": item_type.title()},
-                {"trait_type": "Power",     "value": power},
-                {"trait_type": "Game",      "value": "DragonSlayer"},
-                {"trait_type": "Item Name", "value": name},
-            ],
+            "attributes": attributes,
         }
     except Exception as e:
         logger.exception("get_nft_item_metadata error for player=%s item=%s", player_id, item_id)
