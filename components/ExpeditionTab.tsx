@@ -19,6 +19,10 @@ import {
   DragonEgg,
   EggRarity,
   FUSION_BUFF_BY_RECIPE,
+  REFORGE_COSTS,
+  REFORGE_POWER_STEPS,
+  MAX_REFORGE_LEVEL,
+  ALCHEMY_RECIPES,
 } from '@/contexts/GameContext';
 import { formatNumber } from '@/utils/format';
 
@@ -146,6 +150,8 @@ export default function ExpeditionTab() {
     unequipItem,
     craftItem,
     fuseLegendaryItems,
+    reforgeItem,
+    alchemyConvert,
     burnItemToWallet,
     clearItemNftTokenId,
     speedUpExpedition,
@@ -190,9 +196,11 @@ export default function ExpeditionTab() {
   const mintUuidRef  = useRef<string | null>(null);
   const mintItemIdRef = useRef<string | null>(null);
   const [fuseSuccess, setFuseSuccess] = useState<string | null>(null);
+  const [mintConfirmItem, setMintConfirmItem] = useState<InventoryItem | null>(null);
 
-  const MINT_UUID_KEY    = 'ds_mint_uuid';
-  const MINT_ITEMID_KEY  = 'ds_mint_item_id';
+  const MINT_UUID_KEY       = 'ds_mint_uuid';
+  const MINT_ITEMID_KEY     = 'ds_mint_item_id';
+  const MINT_ITEM_INFO_KEY  = 'ds_mint_item_info';
 
   const clearMintPoll = useCallback(() => {
     if (mintPollRef.current)  { clearInterval(mintPollRef.current);  mintPollRef.current  = null; }
@@ -224,7 +232,15 @@ export default function ExpeditionTab() {
         clearMintPoll();
         localStorage.removeItem(MINT_UUID_KEY);
         localStorage.removeItem(MINT_ITEMID_KEY);
-        burnItemToWallet(itemId, data.tokenId ?? uuid);
+        if (!data.tokenId) {
+          setMintPhase('error');
+          setMintError('NFT signed but token ID not received — tap ✨ Mint again to retry.');
+          mintUuidRef.current = null;
+          mintItemIdRef.current = null;
+          return;
+        }
+        localStorage.removeItem(MINT_ITEM_INFO_KEY);
+        burnItemToWallet(itemId, data.tokenId);
         setMintPhase('success');
         mintUuidRef.current   = null;
         mintItemIdRef.current = null;
@@ -242,7 +258,12 @@ export default function ExpeditionTab() {
     } catch { /* network error — keep polling */ }
   }, [clearMintPoll, burnItemToWallet]);
 
+  const confirmAndMint = useCallback((item: InventoryItem) => {
+    setMintConfirmItem(item);
+  }, []);
+
   const startMint = useCallback(async (item: InventoryItem) => {
+    setMintConfirmItem(null);
     setMintItemId(item.id);
     setMintPhase('loading');
     setMintError(null);
@@ -268,6 +289,12 @@ export default function ExpeditionTab() {
       mintItemIdRef.current = item.id;
       localStorage.setItem(MINT_UUID_KEY,   uuid);
       localStorage.setItem(MINT_ITEMID_KEY, item.id);
+      localStorage.setItem(MINT_ITEM_INFO_KEY, JSON.stringify({
+        id: item.id, name: item.name, itemType: item.itemType,
+        rarity: item.rarity, power: item.power,
+        basePower: item.basePower ?? item.power,
+        reforgeLevel: item.reforgeLevel ?? 0,
+      }));
       setMintUuid(uuid);
       setMintDeeplink(deeplink);
       setMintQr(qr_png);
@@ -978,11 +1005,30 @@ export default function ExpeditionTab() {
                             <div key={item.id} className="flex items-center justify-between gap-2">
                               <span className="text-[8px] font-bold" style={{ color }}>✓ {item.name}</span>
                               {!item.nftTokenId ? (
-                                <button onClick={() => startMint(item)} disabled={isMinting} className="text-[8px] font-bold px-2 py-0.5 rounded whitespace-nowrap" style={{ background: isMinting ? 'rgba(240,192,64,0.1)' : 'linear-gradient(135deg,#b8860b,#f0c040)', color: isMinting ? '#f0c040' : '#1a0e00' }}>
+                                <button onClick={() => confirmAndMint(item)} disabled={isMinting} className="text-[8px] font-bold px-2 py-0.5 rounded whitespace-nowrap" style={{ background: isMinting ? 'rgba(240,192,64,0.1)' : 'linear-gradient(135deg,#b8860b,#f0c040)', color: isMinting ? '#f0c040' : '#1a0e00' }}>
                                   {isMinting ? '⏳…' : '✨ Mint NFT'}
                                 </button>
                               ) : (
-                                <span className="text-[7px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(240,192,64,0.2)', color: '#f0c040' }}>✨ NFT Minted</span>
+                                <div className="flex flex-col items-end gap-1">
+                                  <span className="text-[7px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(240,192,64,0.2)', color: '#f0c040' }}>✨ NFT Minted</span>
+                                  {(() => {
+                                    const lvl = item.reforgeLevel ?? 0;
+                                    const canReforge = lvl < MAX_REFORGE_LEVEL;
+                                    if (!canReforge) return <span className="text-[7px] text-[#f0c040] font-bold">⚒ MAX REFORGE</span>;
+                                    const cost = REFORGE_COSTS[lvl];
+                                    const canAffordReforge = state.gold >= cost.goldCost && cost.materials.every(r => (state.materials.find(m => m.type === r.type)?.quantity ?? 0) >= r.quantity);
+                                    return (
+                                      <button
+                                        onClick={() => reforgeItem(item.id)}
+                                        disabled={!canAffordReforge}
+                                        className="text-[7px] font-bold px-1.5 py-0.5 rounded whitespace-nowrap"
+                                        style={{ background: canAffordReforge ? 'linear-gradient(135deg,#1a3a6b,#2a5fa8)' : 'rgba(255,255,255,0.05)', color: canAffordReforge ? '#a0d4ff' : '#4a3a2a' }}
+                                      >
+                                        ⚒ Reforge +{REFORGE_POWER_STEPS[lvl]} (Lv{lvl}→{lvl+1})
+                                      </button>
+                                    );
+                                  })()}
+                                </div>
                               )}
                             </div>
                           );
@@ -1040,13 +1086,50 @@ export default function ExpeditionTab() {
           </div>
         )}
 
-        {state.materials.length > 0 && (
-          <div className="dragon-panel px-3 py-2 text-center">
-            <p className="text-[9px] text-[#6b5a3a]">
-              Use materials in the <span className="text-[#d4a017] font-bold">Craft</span> section to forge equipment.
-            </p>
+        {/* ── Alchemy ────────────────────────────────────────────────── */}
+        <div className="dragon-panel px-3 py-2.5">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-base">🔥</span>
+            <p className="font-cinzel font-bold text-[#e8d8a8] text-[10px] tracking-wider">Alchemy</p>
+            <span className="text-[7px] px-1 py-0.5 rounded" style={{ background: 'rgba(240,192,64,0.15)', color: '#f0c040' }}>converts mats</span>
           </div>
-        )}
+          <p className="text-[8px] text-[#6b5a3a] mb-2">Combine excess common materials into rare legendary crafting materials.</p>
+          <div className="flex flex-col gap-2">
+            {ALCHEMY_RECIPES.map(recipe => {
+              const canConvert = recipe.inputs.every(req => (state.materials.find(m => m.type === req.type)?.quantity ?? 0) >= req.quantity);
+              return (
+                <div key={recipe.id} className="flex items-center justify-between gap-2 rounded-lg px-2 py-1.5" style={{ background: 'rgba(240,192,64,0.05)', border: '1px solid rgba(240,192,64,0.15)' }}>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[9px] font-bold text-[#e8d8a8]">{recipe.label}</span>
+                    <div className="flex flex-wrap gap-1">
+                      {recipe.inputs.map((req, i) => {
+                        const have = state.materials.find(m => m.type === req.type)?.quantity ?? 0;
+                        const ok = have >= req.quantity;
+                        return (
+                          <span key={i} className="text-[7px] px-1 py-0.5 rounded" style={{ color: ok ? '#4ade80' : '#f87171', background: ok ? 'rgba(74,222,128,0.08)' : 'rgba(248,113,113,0.08)' }}>
+                            {MATERIAL_LABELS[req.type as MaterialType]} {have}/{req.quantity}
+                          </span>
+                        );
+                      })}
+                      <span className="text-[7px] text-[#6b5a3a]">→</span>
+                      <span className="text-[7px] font-bold px-1 py-0.5 rounded" style={{ background: 'rgba(240,192,64,0.12)', color: '#f0c040' }}>
+                        +1 {MATERIAL_LABELS[recipe.output.type as MaterialType]}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => alchemyConvert(recipe.id)}
+                    disabled={!canConvert}
+                    className="text-[8px] font-bold px-2 py-1 rounded flex-shrink-0 whitespace-nowrap"
+                    style={{ background: canConvert ? 'linear-gradient(135deg,#7c3a00,#d4600a)' : 'rgba(255,255,255,0.04)', color: canConvert ? '#ffe0a0' : '#3a2a1a' }}
+                  >
+                    Convert
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
 
         {/* XRP Store moved to Shop tab */}
         <div className="dragon-panel px-3 py-2 text-center">
@@ -1262,6 +1345,46 @@ export default function ExpeditionTab() {
                 </button>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Mint Confirmation Card ─────────────────────────────────────── */}
+      {mintConfirmItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: 'rgba(0,0,0,0.88)' }}>
+          <div className="w-full max-w-xs rounded-2xl p-5 flex flex-col gap-4" style={{ background: '#160d04', border: '1px solid rgba(240,192,64,0.4)', boxShadow: '0 0 32px rgba(240,192,64,0.15)' }}>
+            <p className="font-cinzel font-bold text-[#f0c040] text-sm tracking-widest text-center">✨ MINT NFT</p>
+            <div className="flex items-center gap-4">
+              <img
+                src={mintConfirmItem.name === 'Lynx Sword' ? '/images/lynxsword.png' : mintConfirmItem.name === 'Nomic Shield' ? '/images/nomicsshield.png' : '/images/salyer4.png'}
+                alt={mintConfirmItem.name}
+                className="w-16 h-16 object-contain rounded-xl"
+                style={{ border: '1px solid rgba(240,192,64,0.3)' }}
+                onError={e => { (e.target as HTMLImageElement).style.opacity = '0'; }}
+              />
+              <div className="flex flex-col gap-1">
+                <p className="font-cinzel font-bold text-[#e8d8a8] text-[13px]">{mintConfirmItem.name}</p>
+                <p className="text-[#9a8a6a] text-[10px]">⚡ {mintConfirmItem.power} power · {mintConfirmItem.rarity}</p>
+                {(mintConfirmItem.reforgeLevel ?? 0) > 0 && (
+                  <p className="text-[10px] font-bold" style={{ color: '#60a5fa' }}>⚒ Reforge Lv{mintConfirmItem.reforgeLevel}</p>
+                )}
+              </div>
+            </div>
+            <p className="text-[9px] text-[#6b5a3a] text-center leading-relaxed">
+              This item will be minted permanently on <span className="text-[#f0c040] font-bold">XRPL</span> and sent to your wallet. After signing in Xaman, the NFT is yours forever.
+            </p>
+            <div className="flex gap-2">
+              <button onClick={() => setMintConfirmItem(null)} className="flex-1 py-2 rounded-xl text-[10px] font-bold" style={{ background: 'rgba(255,255,255,0.05)', color: '#6b5a3a' }}>
+                Cancel
+              </button>
+              <button
+                onClick={() => startMint(mintConfirmItem)}
+                className="flex-1 py-2 rounded-xl text-[10px] font-bold"
+                style={{ background: 'linear-gradient(135deg,#b8860b,#f0c040)', color: '#1a0e00' }}
+              >
+                ✨ Open Xaman
+              </button>
+            </div>
           </div>
         </div>
       )}

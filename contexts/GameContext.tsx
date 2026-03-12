@@ -85,6 +85,8 @@ export interface InventoryItem {
   name: string;
   rarity: ItemRarity;
   power: number;
+  basePower?: number;
+  reforgeLevel?: number;
   nftTokenId: string | null;
   obtainedVia: 'crafted' | 'expedition_drop';
   obtainedAt: number;
@@ -252,6 +254,8 @@ interface GameContextType {
   unequipItem: (slot: keyof EquipmentSlots) => void;
   craftItem: (recipeId: string) => void;
   fuseLegendaryItems: (recipeId: string) => void;
+  reforgeItem: (itemId: string) => void;
+  alchemyConvert: (recipeId: string) => void;
   addMaterials: (drops: { type: MaterialType; quantity: number }[]) => void;
   connectWallet: (address: string) => Promise<void>;
   disconnectWallet: () => void;
@@ -284,6 +288,23 @@ interface GameContextType {
 // ============================================================
 // CONSTANTS
 // ============================================================
+
+// ── Reforge: upgrade a minted legendary item in-place (dynamic metadata updates on-chain automatically)
+export const REFORGE_COSTS: Array<{ goldCost: number; materials: { type: MaterialType; quantity: number }[] }> = [
+  { goldCost: 30000,  materials: [{ type: 'dragon_scale', quantity: 5  }, { type: 'ancient_rune', quantity: 5  }] },
+  { goldCost: 60000,  materials: [{ type: 'dragon_scale', quantity: 8  }, { type: 'ancient_rune', quantity: 5  }, { type: 'lynx_fang', quantity: 2 }] },
+  { goldCost: 100000, materials: [{ type: 'dragon_scale', quantity: 10 }, { type: 'lynx_fang',    quantity: 5  }, { type: 'nomic_core', quantity: 3 }] },
+  { goldCost: 150000, materials: [{ type: 'dragon_scale', quantity: 12 }, { type: 'lynx_fang',    quantity: 8  }, { type: 'nomic_core', quantity: 6 }] },
+  { goldCost: 200000, materials: [{ type: 'dragon_scale', quantity: 15 }, { type: 'lynx_fang',    quantity: 12 }, { type: 'nomic_core', quantity: 10 }] },
+];
+export const REFORGE_POWER_STEPS = [10, 10, 15, 20, 25]; // power gained at each reforge level
+export const MAX_REFORGE_LEVEL = REFORGE_COSTS.length;
+
+// ── Alchemy: convert common mats → legendary mats so they're never wasted
+export const ALCHEMY_RECIPES: Array<{ id: string; label: string; inputs: { type: MaterialType; quantity: number }[]; output: { type: MaterialType; quantity: number } }> = [
+  { id: 'make_lynx_fang',  label: 'Forge Lynx Fang',  inputs: [{ type: 'dragon_scale', quantity: 10 }, { type: 'ancient_rune', quantity: 10 }], output: { type: 'lynx_fang',  quantity: 1 } },
+  { id: 'make_nomic_core', label: 'Forge Nomic Core', inputs: [{ type: 'fire_crystal',  quantity: 10 }, { type: 'dragon_scale', quantity: 10 }], output: { type: 'nomic_core', quantity: 1 } },
+];
 
 export const RARITY_SCORES: Record<ItemRarity, number> = {
   common: 1, uncommon: 2, rare: 3, epic: 4, legendary: 5,
@@ -1571,12 +1592,20 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         // Item not found in inventory or equipment — it may have been lost due to a
         // server-state overwrite (race condition on Xaman return). Reconstruct it so
         // the NFT token ID is not silently dropped.
+        // Try to recover item info from localStorage (saved at startMint time)
+        let savedInfo: { name: string; itemType: ItemType; rarity: ItemRarity; power: number; basePower?: number; reforgeLevel?: number } | null = null;
+        try {
+          const raw = typeof window !== 'undefined' ? localStorage.getItem('ds_mint_item_info') : null;
+          if (raw) savedInfo = JSON.parse(raw);
+        } catch { /* ignore parse errors */ }
         const restoredItem: InventoryItem = {
           id: itemId,
-          itemType: (prev.walletNfts ?? []).find(n => n.itemId === itemId)?.itemType ?? 'weapon',
-          name: (prev.walletNfts ?? []).find(n => n.itemId === itemId)?.name ?? 'Unknown Item',
-          rarity: (prev.walletNfts ?? []).find(n => n.itemId === itemId)?.rarity ?? 'legendary',
-          power: (prev.walletNfts ?? []).find(n => n.itemId === itemId)?.power ?? 0,
+          itemType: savedInfo?.itemType ?? 'weapon',
+          name: savedInfo?.name ?? 'Unknown Item',
+          rarity: savedInfo?.rarity ?? 'legendary',
+          power: savedInfo?.power ?? 0,
+          basePower: savedInfo?.basePower ?? savedInfo?.power ?? 0,
+          reforgeLevel: savedInfo?.reforgeLevel ?? 0,
           nftTokenId: tokenId,
           obtainedVia: 'crafted',
           obtainedAt: Date.now(),
@@ -1700,6 +1729,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         name: recipe.name,
         rarity: recipe.rarity,
         power: recipe.power,
+        basePower: recipe.power,
+        reforgeLevel: 0,
         nftTokenId: null,
         obtainedVia: 'crafted',
         obtainedAt: Date.now(),
@@ -1761,6 +1792,85 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         }).catch(() => {});
       }
       return fusedState;
+    });
+  }, []);
+
+  const reforgeItem = useCallback((itemId: string) => {
+    setState((prev) => {
+      // Find item in inventory or equipment
+      let item: InventoryItem | null = null;
+      const invIdx = prev.inventory.findIndex(i => i.id === itemId);
+      const slotKey = invIdx === -1
+        ? (Object.keys(prev.equipment) as (keyof EquipmentSlots)[]).find(k => prev.equipment[k]?.id === itemId)
+        : null;
+      item = invIdx !== -1 ? prev.inventory[invIdx] : (slotKey ? prev.equipment[slotKey]! : null);
+      if (!item || item.rarity !== 'legendary') return prev;
+      const currentLevel = item.reforgeLevel ?? 0;
+      if (currentLevel >= MAX_REFORGE_LEVEL) return prev;
+      const cost = REFORGE_COSTS[currentLevel];
+      if (prev.gold < cost.goldCost) return prev;
+      for (const req of cost.materials) {
+        const held = prev.materials.find(m => m.type === req.type);
+        if (!held || held.quantity < req.quantity) return prev;
+      }
+      const powerGain = REFORGE_POWER_STEPS[currentLevel];
+      const updatedItem: InventoryItem = {
+        ...item,
+        reforgeLevel: currentLevel + 1,
+        power: item.power + powerGain,
+      };
+      const newMaterials = prev.materials
+        .map(m => {
+          const req = cost.materials.find(r => r.type === m.type);
+          return req ? { ...m, quantity: m.quantity - req.quantity } : m;
+        })
+        .filter(m => m.quantity > 0);
+      let newInventory = prev.inventory;
+      let newEquipment = prev.equipment;
+      if (invIdx !== -1) {
+        newInventory = [...prev.inventory];
+        newInventory[invIdx] = updatedItem;
+      } else if (slotKey) {
+        newEquipment = { ...prev.equipment, [slotKey]: updatedItem };
+      }
+      const newState = {
+        ...prev,
+        gold: prev.gold - cost.goldCost,
+        materials: newMaterials,
+        inventory: newInventory,
+        equipment: newEquipment,
+      };
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? '';
+      if (apiUrl && newState.playerId) {
+        fetch(`${apiUrl}/api/save/${newState.playerId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ save_json: newState }),
+        }).catch(() => {});
+      }
+      return newState;
+    });
+  }, []);
+
+  const alchemyConvert = useCallback((recipeId: string) => {
+    const recipe = ALCHEMY_RECIPES.find(r => r.id === recipeId);
+    if (!recipe) return;
+    setState((prev) => {
+      for (const req of recipe.inputs) {
+        const held = prev.materials.find(m => m.type === req.type);
+        if (!held || held.quantity < req.quantity) return prev;
+      }
+      const newMaterials = prev.materials
+        .map(m => {
+          const req = recipe.inputs.find(r => r.type === m.type);
+          return req ? { ...m, quantity: m.quantity - req.quantity } : m;
+        })
+        .filter(m => m.quantity > 0);
+      // Add output material
+      const existingOut = newMaterials.find(m => m.type === recipe.output.type);
+      if (existingOut) existingOut.quantity += recipe.output.quantity;
+      else newMaterials.push({ type: recipe.output.type, quantity: recipe.output.quantity });
+      return { ...prev, materials: newMaterials };
     });
   }, []);
 
@@ -2217,6 +2327,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         unequipItem,
         craftItem,
         fuseLegendaryItems,
+        reforgeItem,
+        alchemyConvert,
         setItemNftTokenId,
         clearItemNftTokenId,
         burnItemToWallet,

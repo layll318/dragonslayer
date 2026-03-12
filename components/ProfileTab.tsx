@@ -482,6 +482,50 @@ export default function ProfileTab() {
             })}
           </div>
         </div>
+        {/* ═══ NFT GALLERY ═══ */}
+        {(state.walletNfts ?? []).length > 0 && (
+          <div className="dragon-panel p-3">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-base">✨</span>
+              <h3 className="font-cinzel text-[#f0c040] font-bold text-xs uppercase tracking-widest">My NFT Items</h3>
+              <span className="text-[7px] font-bold px-1.5 py-0.5 rounded ml-auto" style={{ background: 'rgba(240,192,64,0.15)', color: '#f0c040' }}>XRPL</span>
+            </div>
+            <div className="flex flex-col gap-2">
+              {(state.walletNfts ?? []).map((nft) => {
+                const imgSrc = nft.name === 'Lynx Sword' ? '/images/lynxsword.png'
+                  : nft.name === 'Nomic Shield' ? '/images/nomicsshield.png'
+                  : '/images/salyer4.png';
+                const shortId = nft.tokenId ? `${nft.tokenId.slice(0, 8)}…${nft.tokenId.slice(-6)}` : '';
+                const xrpscanUrl = nft.tokenId ? `https://xrpscan.com/nft/${nft.tokenId}` : null;
+                const invItem = state.inventory.find(i => i.id === nft.itemId);
+                const eqItem = Object.values(state.equipment).find(e => e?.id === nft.itemId);
+                const liveItem = invItem ?? eqItem;
+                const displayPower = liveItem?.power ?? nft.power;
+                const reforgeLevel = liveItem?.reforgeLevel ?? 0;
+                return (
+                  <div key={nft.itemId} className="flex items-center gap-3 rounded-xl px-3 py-2.5" style={{ background: 'rgba(240,192,64,0.05)', border: '1px solid rgba(240,192,64,0.2)' }}>
+                    <img src={imgSrc} alt={nft.name} className="w-10 h-10 object-contain rounded-lg flex-shrink-0" style={{ border: '1px solid rgba(240,192,64,0.25)' }} onError={e => { (e.target as HTMLImageElement).style.opacity = '0'; }} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <span className="font-cinzel font-bold text-[11px] text-[#e8d8a8] truncate">{nft.name}</span>
+                        {reforgeLevel > 0 && <span className="text-[7px] font-bold px-1 rounded flex-shrink-0" style={{ background: 'rgba(96,165,250,0.15)', color: '#60a5fa' }}>+{reforgeLevel}</span>}
+                      </div>
+                      <p className="text-[9px] text-[#9a8a6a]">⚡ {displayPower} power · {nft.rarity}</p>
+                      {xrpscanUrl ? (
+                        <a href={xrpscanUrl} target="_blank" rel="noopener noreferrer" className="text-[8px] font-bold underline" style={{ color: '#6499ef' }}>
+                          {shortId}
+                        </a>
+                      ) : (
+                        <span className="text-[8px] text-[#3a2a1a]">{shortId}</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* ═══ LEADERBOARD ═══ */}
         <div className="dragon-panel p-3">
           <div className="flex items-center justify-between mb-3">
