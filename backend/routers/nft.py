@@ -235,10 +235,15 @@ async def server_mint_item(request: Request):
 
     try:
         client = AsyncJsonRpcClient(XRPL_NODE)
+        # flags = tfBurnable (0x01) | tfTransferable (0x08) | tfMutable (0x10) = 25
+        #   tfBurnable    — issuer can burn even when held by another account (NFTokenBurn)
+        #   tfTransferable — NFT can be traded/transferred between accounts
+        #   tfMutable      — URI can be updated via NFTokenModify (makes metadata truly dynamic)
+        # Source: https://xrpl.org/docs/references/protocol/transactions/types/nftokenmint
         mint_tx = NFTokenMint(
             account=server_wallet.classic_address,
             nftoken_taxon=1,
-            flags=8,
+            flags=25,
             uri=uri_hex,
         )
         mint_response = await submit_and_wait(mint_tx, client, server_wallet)
@@ -310,10 +315,13 @@ async def get_nft_item_metadata(player_id: int, item_id: str):
             fallback_img  = ITEM_IMAGE_BY_ID.get(item_id, PLACEHOLDER_IMAGE)
             fallback_name = ITEM_NAME_BY_ID.get(item_id, item_id.replace("_", " ").title())
             return {
+                "schema": "ipfs://QmNpi8rcXEkohca8iXu7zysKKSJYqCvBJn3xJwga8jXqWU",
+                "nftType": "art.v0",
                 "name": fallback_name,
                 "description": "Legendary DragonSlayer item · Minted on XRPL",
                 "image": fallback_img,
                 "external_url": FRONTEND_URL,
+                "collection": {"name": "DragonSlayer Items", "family": "DragonSlayer"},
                 "attributes": [{"trait_type": "Game", "value": "DragonSlayer"}],
             }
 
@@ -344,19 +352,25 @@ async def get_nft_item_metadata(player_id: int, item_id: str):
             attributes.append({"trait_type": "Reforge Level", "value": reforge_level})
 
         return {
+            "schema": "ipfs://QmNpi8rcXEkohca8iXu7zysKKSJYqCvBJn3xJwga8jXqWU",
+            "nftType": "art.v0",
             "name": name,
             "description": f"{rarity.title()} DragonSlayer {item_type} · Power {power} · Level {item_level} · Minted on XRPL",
             "image": image,
             "external_url": FRONTEND_URL,
+            "collection": {"name": "DragonSlayer Items", "family": "DragonSlayer"},
             "attributes": attributes,
         }
     except Exception as e:
         logger.exception("get_nft_item_metadata error for player=%s item=%s", player_id, item_id)
         return {
+            "schema": "ipfs://QmNpi8rcXEkohca8iXu7zysKKSJYqCvBJn3xJwga8jXqWU",
+            "nftType": "art.v0",
             "name": "DragonSlayer Item",
             "description": "A legendary DragonSlayer item.",
             "image": PLACEHOLDER_IMAGE,
             "external_url": FRONTEND_URL,
+            "collection": {"name": "DragonSlayer Items", "family": "DragonSlayer"},
             "attributes": [{"trait_type": "Status", "value": "Error"}],
         }
 
@@ -442,10 +456,13 @@ async def get_nft_metadata(token_id: str):
 
         if not player:
             return {
+                "schema": "ipfs://QmNpi8rcXEkohca8iXu7zysKKSJYqCvBJn3xJwga8jXqWU",
+                "nftType": "art.v0",
                 "name": "DragonSlayer — Placeholder",
                 "description": "A DragonSlayer fighter NFT. Art coming soon.",
                 "image": PLACEHOLDER_IMAGE,
                 "external_url": FRONTEND_URL,
+                "collection": {"name": "DragonSlayer Fighters", "family": "DragonSlayer"},
                 "attributes": [{"trait_type": "Status", "value": "Pre-mint Placeholder"}],
             }
 
@@ -459,10 +476,13 @@ async def get_nft_metadata(token_id: str):
 
         if not save or not save["save_json"]:
             return {
+                "schema": "ipfs://QmNpi8rcXEkohca8iXu7zysKKSJYqCvBJn3xJwga8jXqWU",
+                "nftType": "art.v0",
                 "name": f"DragonSlayer — {username}",
                 "description": "A DragonSlayer fighter NFT.",
                 "image": PLACEHOLDER_IMAGE,
                 "external_url": FRONTEND_URL,
+                "collection": {"name": "DragonSlayer Fighters", "family": "DragonSlayer"},
                 "attributes": [{"trait_type": "Level", "value": 1}],
             }
 
@@ -486,6 +506,8 @@ async def get_nft_metadata(token_id: str):
             return f"{prefix}{item.get('rarity', '').title()} {name}{suffix}"
 
         return {
+            "schema": "ipfs://QmNpi8rcXEkohca8iXu7zysKKSJYqCvBJn3xJwga8jXqWU",
+            "nftType": "art.v0",
             "name": f"DragonSlayer #{player_id} — {username}",
             "description": (
                 f"Level {level} DragonSlayer · "
@@ -494,6 +516,7 @@ async def get_nft_metadata(token_id: str):
             ),
             "image": PLACEHOLDER_IMAGE,
             "external_url": FRONTEND_URL,
+            "collection": {"name": "DragonSlayer Fighters", "family": "DragonSlayer"},
             "attributes": [
                 {"trait_type": "Level",            "value": level},
                 {"trait_type": "Dragons Slain",    "value": total_dragons},
