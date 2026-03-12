@@ -2028,11 +2028,23 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const SCRAP_SOUL_YIELD: Record<ItemRarity, number> = { common: 1, uncommon: 2, rare: 3, epic: 5, legendary: 10 };
+
   const dismissDrop = useCallback((dropId: string) => {
-    setState((prev) => ({
-      ...prev,
-      claimableDrops: (prev.claimableDrops ?? []).filter(d => d.id !== dropId),
-    }));
+    setState((prev) => {
+      const drop = (prev.claimableDrops ?? []).find(d => d.id === dropId);
+      if (!drop) return prev;
+      const soulsGained = SCRAP_SOUL_YIELD[drop.item.rarity] ?? 1;
+      const existing = prev.materials.find(m => m.type === 'dragon_soul');
+      const newMaterials = existing
+        ? prev.materials.map(m => m.type === 'dragon_soul' ? { ...m, quantity: m.quantity + soulsGained } : m)
+        : [...prev.materials, { type: 'dragon_soul' as MaterialType, quantity: soulsGained }];
+      return {
+        ...prev,
+        claimableDrops: prev.claimableDrops.filter(d => d.id !== dropId),
+        materials: newMaterials,
+      };
+    });
   }, []);
 
   const levelUpItem = useCallback((itemId: string) => {
@@ -2088,6 +2100,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         .map(m => { const req = recipe.materials.find(r => r.type === m.type); return req ? { ...m, quantity: m.quantity - req.quantity } : m; })
         .filter(m => m.quantity > 0);
       const newInventory = prev.inventory.filter(i => i.id !== itemId);
+      const slotEnchants = ENCHANT_OPTIONS[recipe.itemType] ?? [];
+      const randomEnchant = recipe.enchantId
+        ? recipe.enchantId
+        : slotEnchants.length > 0
+          ? slotEnchants[Math.floor(Math.random() * slotEnchants.length)].id
+          : null;
       const legendaryItem: InventoryItem = {
         id: `leg-${Date.now()}-${Math.random().toString(36).slice(2)}`,
         itemType: recipe.itemType,
@@ -2096,7 +2114,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         power: recipe.power,
         basePower: recipe.power,
         itemLevel: 25,
-        enchantId: recipe.enchantId ?? null,
+        enchantId: randomEnchant,
         nftTokenId: null,
         obtainedVia: 'crafted',
         obtainedAt: Date.now(),

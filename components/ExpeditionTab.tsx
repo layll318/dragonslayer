@@ -729,9 +729,10 @@ export default function ExpeditionTab() {
                         + Bag
                       </button>
                       <button onClick={() => dismissDrop(drop.id)}
-                        className="text-[8px] font-bold px-1.5 py-1 rounded"
-                        style={{ background: 'rgba(248,113,113,0.1)', color: '#f87171' }}>
-                        ✕
+                        className="text-[8px] font-bold px-2 py-1 rounded whitespace-nowrap"
+                        style={{ background: 'rgba(153,220,255,0.1)', color: '#9ddcff' }}
+                        title={`Scrap for Dragon Souls`}>
+                        🔨 +{({ common: 1, uncommon: 2, rare: 3, epic: 5, legendary: 10 } as Record<string,number>)[drop.item.rarity]}🧿
                       </button>
                     </div>
                   </div>
@@ -977,39 +978,20 @@ export default function ExpeditionTab() {
                         </div>
                       );
                     })()}
-                    {/* Enchant picker */}
-                    {!item.enchantId ? (
-                      <div className="border-t border-[rgba(240,192,64,0.15)] pt-2">
-                        <p className="text-[7px] font-bold text-[#c8b87a] mb-1.5">🔮 Choose enchant (permanent — pick carefully):</p>
-                        <div className="flex flex-col gap-1">
-                          {enchantOptions.map(enc => {
-                            const matsMet = !enc.materials || enc.materials.every(r =>
-                              (state.materials.find(m => m.type === r.type)?.quantity ?? 0) >= r.quantity
-                            );
-                            return (
-                              <button key={enc.id} onClick={() => enchantItem(item.id, enc.id)} disabled={!matsMet}
-                                className="flex items-center justify-between px-2 py-1 rounded text-left transition-all active:scale-95"
-                                style={{ background: enc.rare ? 'rgba(120,80,240,0.1)' : 'rgba(212,160,23,0.07)',
-                                  border: `1px solid ${enc.rare ? 'rgba(120,80,240,0.3)' : 'rgba(212,160,23,0.2)'}`,
-                                  opacity: matsMet ? 1 : 0.45 }}>
-                                <span className="text-[8px] font-bold" style={{ color: enc.rare ? '#c084fc' : '#c8b87a' }}>
-                                  {enc.rare && '🔮 '}{enc.label}
-                                </span>
-                                {enc.materials && (
-                                  <span className="text-[7px] text-[#6b5a3a] ml-2 flex-shrink-0">
-                                    {enc.materials.map(r => `${MATERIAL_LABELS[r.type as MaterialType].split(' ')[1] ?? ''}×${r.quantity}`).join(' ')}
-                                  </span>
-                                )}
-                              </button>
-                            );
-                          })}
+                    {/* Enchant — randomly assigned at forge time, read-only */}
+                    <div className="border-t border-[rgba(240,192,64,0.15)] pt-2">
+                      {currentEnchant ? (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[8px]">🔮</span>
+                          <span className="text-[8px] font-bold" style={{ color: currentEnchant.rare ? '#c084fc' : '#c8b87a' }}>
+                            {currentEnchant.label}
+                          </span>
+                          <span className="text-[7px] text-[#6b5a3a]">· assigned at forge</span>
                         </div>
-                      </div>
-                    ) : (
-                      <div className="border-t border-[rgba(240,192,64,0.15)] pt-2">
-                        <p className="text-[8px] font-bold" style={{ color: '#4ade80' }}>✓ Enchanted: <span className="text-[#c084fc]">{currentEnchant?.label ?? item.enchantId}</span></p>
-                      </div>
-                    )}
+                      ) : (
+                        <p className="text-[7px] text-[#4a3a2a]">No enchant assigned</p>
+                      )}
+                    </div>
                   </div>
                 );
               })}
