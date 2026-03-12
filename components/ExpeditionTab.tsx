@@ -133,10 +133,12 @@ function ItemCard({ item, onEquip, onUnequip, isEquipped, onMint, mintPhase, sho
           {isMinting ? '⏳ Minting…' : '✨ Mint NFT'}
         </button>
       )}
-      {onBurn && !item.nftTokenId && (
+      {onBurn && (
         <button
           onClick={() => {
-            if (item.rarity === 'legendary') {
+            if (item.nftTokenId) {
+              if (!window.confirm(`Remove "${item.name}" from your inventory? The NFT stays in your wallet — this only clears the in-game record.`)) return;
+            } else if (item.rarity === 'legendary') {
               if (!window.confirm(`Burn ${item.name} for ${BURN_SOUL_YIELD.legendary}🧿 Dragon Souls? This cannot be undone.`)) return;
             }
             onBurn();
@@ -144,7 +146,7 @@ function ItemCard({ item, onEquip, onUnequip, isEquipped, onMint, mintPhase, sho
           className="w-full mt-0.5 py-1 rounded text-[8px] font-bold transition-all active:scale-95"
           style={{ background: 'rgba(248,113,113,0.12)', color: '#f87171', border: '1px solid rgba(248,113,113,0.2)' }}
         >
-          🔥 Burn +{BURN_SOUL_YIELD[item.rarity] ?? 2}🧿
+          {item.nftTokenId ? '🗑 Remove record' : `🔥 Burn +${BURN_SOUL_YIELD[item.rarity] ?? 2}🧿`}
         </button>
       )}
     </div>

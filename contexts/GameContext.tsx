@@ -2168,7 +2168,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       const invIdx = prev.inventory.findIndex(i => i.id === itemId);
       if (invIdx === -1) return prev;
       const item = prev.inventory[invIdx];
-      if (item.nftTokenId) return prev; // never burn a minted NFT
+      // NFT items: remove in-game record only (NFT stays on-chain), no souls awarded
+      if (item.nftTokenId) {
+        return { ...prev, inventory: prev.inventory.filter(i => i.id !== itemId) };
+      }
       const soulsGained = BURN_SOUL_YIELD[item.rarity] ?? 2;
       const existing = prev.materials.find(m => m.type === 'dragon_soul');
       const newMaterials = existing
