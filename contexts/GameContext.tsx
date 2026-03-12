@@ -1771,14 +1771,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       })();
       const allCopies = equippedCopy ? [equippedCopy, ...invCopies] : invCopies;
       if (allCopies.length < 2) return prev;
-      const toRemove = new Set([allCopies[0].id, allCopies[1].id]);
+      // Only consume the duplicate (second copy). Keep the first (prefer equipped).
+      const sacrificeId = allCopies[1].id;
       const newEquipment = { ...prev.equipment };
-      if (equippedCopy && toRemove.has(equippedCopy.id)) {
+      const sacrificeIsEquipped = equippedCopy?.id === sacrificeId;
+      if (sacrificeIsEquipped) {
         newEquipment[recipe.itemType as keyof EquipmentSlots] = null as any;
       }
       const fusedState = {
         ...prev,
-        inventory: prev.inventory.filter(i => !toRemove.has(i.id)),
+        inventory: prev.inventory.filter(i => i.id !== sacrificeId),
         equipment: newEquipment,
         fusionBuffs: [...(prev.fusionBuffs ?? []), fusionDef.buffId],
       };
