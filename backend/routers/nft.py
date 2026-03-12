@@ -1,12 +1,20 @@
+import io
 import json
 import logging
 import os
+import aiohttp
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import Response
 from database import get_pool
 from xrpl.asyncio.clients import AsyncJsonRpcClient
 from xrpl.asyncio.transaction import submit_and_wait
 from xrpl.models.transactions import NFTokenMint, NFTokenCreateOffer
 from xrpl.wallet import Wallet
+try:
+    from PIL import Image, ImageDraw, ImageFont
+    PILLOW_AVAILABLE = True
+except ImportError:
+    PILLOW_AVAILABLE = False
 
 
 logger = logging.getLogger(__name__)
@@ -27,52 +35,55 @@ FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://dragonslayer-production.u
 XRPL_NODE = os.environ.get("XRPL_NODE", "https://s1.ripple.com:51234/")
 XRPL_WALLET_SEED = os.environ.get("XRPL_WALLET_SEED", "")
 
+# All artwork lives in public/images/nft/ on the frontend (Next.js serves it)
+_NFT = f"{FRONTEND_URL}/images/nft"
+_ROOT = f"{FRONTEND_URL}/images"
+
 ITEM_IMAGE_BY_NAME = {
-    # Legendary
-    "Lynx Sword":          f"{BACKEND_URL}/images/lynxsword.png",
-    "Nomic Shield":        f"{BACKEND_URL}/images/nomicsshield.png",
-    "Void Blade":          f"{BACKEND_URL}/images/lynxsword.png",
-    "Dragon's Aegis":      f"{BACKEND_URL}/images/nomicsshield.png",
-    "Dragonslayer Blade":  f"{BACKEND_URL}/images/lynxsword.png",
-    "Nomic Fortress":      f"{BACKEND_URL}/images/nomicsshield.png",
-    "Infernal Crown":      f"{BACKEND_URL}/images/helm_infernal_crown.png",
-    "Dragon Plate":        f"{BACKEND_URL}/images/armor_dragonscale.png",
-    "Dragon's Eye":        f"{BACKEND_URL}/images/ring_ancient_sigil.png",
-    "Eternal Ring":        f"{BACKEND_URL}/images/ring_ancient_sigil.png",
+    # Legendary — unique art where available, else best match from nft/
+    "Lynx Sword":          f"{_ROOT}/lynxsword.png",
+    "Nomic Shield":        f"{_ROOT}/nomicsshield.png",
+    "Void Blade":          f"{_NFT}/weapon_dragon_fang.png",
+    "Dragon's Aegis":      f"{_NFT}/shield_aegis.png",
+    "Dragonslayer Blade":  f"{_ROOT}/lynxsword.png",
+    "Nomic Fortress":      f"{_ROOT}/nomicsshield.png",
+    "Infernal Crown":      f"{_NFT}/helm_infernal_crown.png",
+    "Dragon Plate":        f"{_NFT}/armor_dragonscale.png",
+    "Dragon's Eye":        f"{_NFT}/ring_ancient_sigil.png",
+    "Eternal Ring":        f"{_NFT}/ring_ancient_sigil.png",
     # Epic (T4)
-    "Dragon Fang":         f"{BACKEND_URL}/images/weapon_dragon_fang.png",
-    "Aegis":               f"{BACKEND_URL}/images/shield_aegis.png",
-    "Demon Helm":          f"{BACKEND_URL}/images/helm_demon.png",
-    "Infernal Plate":      f"{BACKEND_URL}/images/armor_infernal_plate.png",
-    "Ancient Sigil":       f"{BACKEND_URL}/images/ring_ancient_sigil.png",
+    "Dragon Fang":         f"{_NFT}/weapon_dragon_fang.png",
+    "Aegis":               f"{_NFT}/shield_aegis.png",
+    "Demon Helm":          f"{_NFT}/helm_demon.png",
+    "Infernal Plate":      f"{_NFT}/armor_infernal_plate.png",
+    "Ancient Sigil":       f"{_NFT}/ring_ancient_sigil.png",
     # Rare (T3)
-    "Flame Blade":         f"{BACKEND_URL}/images/weapon_flame_blade.png",
-    "Dragon Shield":       f"{BACKEND_URL}/images/shield_dragon.png",
-    "Infernal Crown":      f"{BACKEND_URL}/images/helm_infernal_crown.png",
-    "Dragonscale Armor":   f"{BACKEND_URL}/images/armor_dragonscale.png",
-    "Dragon's Seal":       f"{BACKEND_URL}/images/ring_dragons_seal.png",
+    "Flame Blade":         f"{_NFT}/weapon_flame_blade.png",
+    "Dragon Shield":       f"{_NFT}/shield_dragon.png",
+    "Dragonscale Armor":   f"{_NFT}/armor_dragonscale.png",
+    "Dragon's Seal":       f"{_NFT}/ring_dragons_seal.png",
     # Uncommon (T2)
-    "Steel Sword":         f"{BACKEND_URL}/images/weapon_steel_sword.png",
-    "Iron Shield":         f"{BACKEND_URL}/images/shield_iron.png",
-    "Scale Helm":          f"{BACKEND_URL}/images/helm_scale.png",
-    "Chain Armor":         f"{BACKEND_URL}/images/armor_chain.png",
-    "Flame Ring":          f"{BACKEND_URL}/images/ring_flame.png",
+    "Steel Sword":         f"{_NFT}/weapon_steel_sword.png",
+    "Iron Shield":         f"{_NFT}/shield_iron.png",
+    "Scale Helm":          f"{_NFT}/helm_scale.png",
+    "Chain Armor":         f"{_NFT}/armor_chain.png",
+    "Flame Ring":          f"{_NFT}/ring_flame.png",
     # Common (T1)
-    "Iron Sword":          f"{BACKEND_URL}/images/weapon_iron_sword.png",
-    "Oak Shield":          f"{BACKEND_URL}/images/shield_oak.png",
-    "Iron Helm":           f"{BACKEND_URL}/images/helm_iron.png",
-    "Leather Armor":       f"{BACKEND_URL}/images/armor_leather.png",
-    "Iron Ring":           f"{BACKEND_URL}/images/ring_iron.png",
+    "Iron Sword":          f"{_NFT}/weapon_iron_sword.png",
+    "Oak Shield":          f"{_NFT}/shield_oak.png",
+    "Iron Helm":           f"{_NFT}/helm_iron.png",
+    "Leather Armor":       f"{_NFT}/armor_leather.png",
+    "Iron Ring":           f"{_NFT}/ring_iron.png",
 }
 
 ITEM_IMAGE_BY_ID = {
-    "lynx_sword":          f"{BACKEND_URL}/images/lynxsword.png",
-    "nomic_shield":        f"{BACKEND_URL}/images/nomicsshield.png",
-    "dragon_fang":         f"{BACKEND_URL}/images/weapon_dragon_fang.png",
-    "aegis":               f"{BACKEND_URL}/images/shield_aegis.png",
-    "demon_helm":          f"{BACKEND_URL}/images/helm_demon.png",
-    "infernal_plate":      f"{BACKEND_URL}/images/armor_infernal_plate.png",
-    "ancient_sigil":       f"{BACKEND_URL}/images/ring_ancient_sigil.png",
+    "lynx_sword":          f"{_ROOT}/lynxsword.png",
+    "nomic_shield":        f"{_ROOT}/nomicsshield.png",
+    "dragon_fang":         f"{_NFT}/weapon_dragon_fang.png",
+    "aegis":               f"{_NFT}/shield_aegis.png",
+    "demon_helm":          f"{_NFT}/helm_demon.png",
+    "infernal_plate":      f"{_NFT}/armor_infernal_plate.png",
+    "ancient_sigil":       f"{_NFT}/ring_ancient_sigil.png",
 }
 
 ITEM_NAME_BY_ID = {
@@ -85,8 +96,102 @@ ITEM_NAME_BY_ID = {
     "ancient_sigil":       "Ancient Sigil",
 }
 
+RARITY_BORDER_COLOR = {
+    "common":    (120, 120, 120),
+    "uncommon":  (74,  222, 128),
+    "rare":      (96,  165, 250),
+    "epic":      (192, 132, 252),
+    "legendary": (240, 192, 64),
+}
+
 # Keep legacy alias for backwards compat
 ITEM_IMAGE_MAP = ITEM_IMAGE_BY_NAME
+
+
+async def _fetch_image_bytes(url: str) -> bytes | None:
+    """Download image bytes from a URL; returns None on failure."""
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=aiohttp.ClientTimeout(total=8)) as resp:
+                if resp.status == 200:
+                    return await resp.read()
+    except Exception:
+        pass
+    return None
+
+
+def _render_item_card(
+    base_bytes: bytes,
+    name: str,
+    rarity: str,
+    power: int,
+    item_level: int,
+    enchant_id: str,
+    reforge_level: int,
+) -> bytes:
+    """
+    Composite a 600×600 item card PNG using Pillow:
+    • base artwork  • bottom gradient panel
+    • rarity-coloured border  • level / power / enchant overlay text
+    """
+    SIZE = 600
+    img = Image.open(io.BytesIO(base_bytes)).convert("RGBA").resize((SIZE, SIZE))
+
+    # ── Rarity border (8 px inset frame) ──────────────────────────────────────
+    border_color = RARITY_BORDER_COLOR.get(rarity.lower(), (120, 120, 120))
+    frame = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
+    fd = ImageDraw.Draw(frame)
+    bw = 8
+    fd.rectangle([0, 0, SIZE - 1, SIZE - 1], outline=(*border_color, 220), width=bw)
+    img = Image.alpha_composite(img, frame)
+
+    # ── Bottom gradient panel (bottom 120 px) ─────────────────────────────────
+    panel_h = 120
+    panel = Image.new("RGBA", (SIZE, panel_h), (0, 0, 0, 0))
+    for y in range(panel_h):
+        alpha = int(220 * (y / panel_h))
+        ImageDraw.Draw(panel).line([(0, y), (SIZE, y)], fill=(10, 6, 2, alpha))
+    img.paste(panel, (0, SIZE - panel_h), panel)
+
+    draw = ImageDraw.Draw(img)
+
+    # ── Fonts (fall back to default bitmap) ───────────────────────────────────
+    font_paths = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+    ]
+    def _font(size: int):
+        for p in font_paths:
+            try:
+                return ImageFont.truetype(p, size)
+            except Exception:
+                pass
+        return ImageFont.load_default()
+
+    font_name   = _font(26)
+    font_label  = _font(20)
+    font_small  = _font(16)
+
+    rc = border_color  # rarity colour
+    y_base = SIZE - panel_h + 8
+
+    # Item name
+    draw.text((16, y_base), name, font=font_name, fill=(*rc, 255))
+    # Level + Power row
+    draw.text((16, y_base + 32), f"Lv {item_level}  ⚡ {power} PWR", font=font_label, fill=(220, 200, 150, 255))
+    # Rarity + enchant row
+    enchant_label = f"  ·  {enchant_id.replace('_', ' ').title()}" if enchant_id else ""
+    reforge_label = f"  ·  Reforge {reforge_level}" if reforge_level else ""
+    sub = f"{rarity.title()}{enchant_label}{reforge_label}"
+    draw.text((16, y_base + 58), sub, font=font_small, fill=(160, 140, 100, 220))
+
+    # ── NFT watermark (top-right corner) ──────────────────────────────────────
+    draw.text((SIZE - 72, 12), "✦ NFT", font=font_small, fill=(*rc, 200))
+
+    buf = io.BytesIO()
+    img.convert("RGB").save(buf, format="PNG", optimize=True)
+    return buf.getvalue()
 
 
 @router.post("/mint-item")
@@ -193,8 +298,9 @@ async def get_nft_item_metadata(player_id: int, item_id: str):
             fallback_name = ITEM_NAME_BY_ID.get(item_id, item_id.replace("_", " ").title())
             return {
                 "name": fallback_name,
-                "description": f"Legendary DragonSlayer item · Minted on XRPL",
+                "description": "Legendary DragonSlayer item · Minted on XRPL",
                 "image": fallback_img,
+                "external_url": FRONTEND_URL,
                 "attributes": [{"trait_type": "Game", "value": "DragonSlayer"}],
             }
 
@@ -205,7 +311,11 @@ async def get_nft_item_metadata(player_id: int, item_id: str):
         item_level = item.get("itemLevel", 1)
         enchant_id = item.get("enchantId") or ""
         reforge_level = item.get("reforgeLevel", 0)
-        image = ITEM_IMAGE_BY_NAME.get(name) or ITEM_IMAGE_BY_ID.get(item_id, PLACEHOLDER_IMAGE)
+
+        # Use Pillow render endpoint as live image if available
+        render_url = f"{BACKEND_URL}/api/nft/render/{player_id}/{item_id}"
+        static_url = ITEM_IMAGE_BY_NAME.get(name) or ITEM_IMAGE_BY_ID.get(item_id, PLACEHOLDER_IMAGE)
+        image = render_url if PILLOW_AVAILABLE else static_url
 
         attributes = [
             {"trait_type": "Rarity",        "value": rarity.title()},
@@ -224,6 +334,7 @@ async def get_nft_item_metadata(player_id: int, item_id: str):
             "name": name,
             "description": f"{rarity.title()} DragonSlayer {item_type} · Power {power} · Level {item_level} · Minted on XRPL",
             "image": image,
+            "external_url": FRONTEND_URL,
             "attributes": attributes,
         }
     except Exception as e:
@@ -232,8 +343,73 @@ async def get_nft_item_metadata(player_id: int, item_id: str):
             "name": "DragonSlayer Item",
             "description": "A legendary DragonSlayer item.",
             "image": PLACEHOLDER_IMAGE,
+            "external_url": FRONTEND_URL,
             "attributes": [{"trait_type": "Status", "value": "Error"}],
         }
+
+
+@router.get("/render/{player_id}/{item_id}")
+async def render_nft_item_image(player_id: int, item_id: str):
+    """
+    Dynamically renders a 600×600 PNG for a crafted item card.
+    Overlays rarity border, item name, level, power and enchant onto
+    the base artwork using Pillow.  Falls back to a redirect to the
+    static artwork if Pillow is unavailable.
+    """
+    if not PILLOW_AVAILABLE:
+        static = ITEM_IMAGE_BY_ID.get(item_id, PLACEHOLDER_IMAGE)
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=static)
+
+    try:
+        pool = get_pool()
+        async with pool.acquire() as conn:
+            save = await conn.fetchrow(
+                "SELECT save_json FROM game_saves WHERE player_id=$1",
+                player_id,
+            )
+
+        def _matches(candidate: dict) -> bool:
+            if str(candidate.get("id", "")) == item_id:
+                return True
+            return candidate.get("name", "").strip().lower().replace(" ", "_") == item_id
+
+        item = None
+        if save and save["save_json"]:
+            s = _to_dict(save["save_json"])
+            for it in (s.get("inventory") or []):
+                if _matches(it):
+                    item = it
+                    break
+            if not item:
+                for it in (s.get("equipment") or {}).values():
+                    if it and _matches(it):
+                        item = it
+                        break
+
+        name         = (item or {}).get("name",        ITEM_NAME_BY_ID.get(item_id, item_id.replace("_", " ").title()))
+        rarity       = (item or {}).get("rarity",      "legendary")
+        power        = (item or {}).get("power",       0)
+        item_level   = (item or {}).get("itemLevel",   1)
+        enchant_id   = (item or {}).get("enchantId")   or ""
+        reforge_level= (item or {}).get("reforgeLevel",0)
+
+        base_url = ITEM_IMAGE_BY_NAME.get(name) or ITEM_IMAGE_BY_ID.get(item_id, PLACEHOLDER_IMAGE)
+        base_bytes = await _fetch_image_bytes(base_url)
+
+        if not base_bytes:
+            from fastapi.responses import RedirectResponse
+            return RedirectResponse(url=base_url)
+
+        png_bytes = _render_item_card(
+            base_bytes, name, rarity, power, item_level, enchant_id, reforge_level
+        )
+        return Response(content=png_bytes, media_type="image/png",
+                        headers={"Cache-Control": "public, max-age=300"})
+    except Exception:
+        logger.exception("render_nft_item_image error player=%s item=%s", player_id, item_id)
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=PLACEHOLDER_IMAGE)
 
 
 @router.get("/{token_id}")
@@ -252,14 +428,12 @@ async def get_nft_metadata(token_id: str):
         )
 
         if not player:
-            # Placeholder response for unminted tokens during dev
             return {
-                "name": f"DragonSlayer — Placeholder",
+                "name": "DragonSlayer — Placeholder",
                 "description": "A DragonSlayer fighter NFT. Art coming soon.",
                 "image": PLACEHOLDER_IMAGE,
-                "attributes": [
-                    {"trait_type": "Status", "value": "Pre-mint Placeholder"},
-                ],
+                "external_url": FRONTEND_URL,
+                "attributes": [{"trait_type": "Status", "value": "Pre-mint Placeholder"}],
             }
 
         player_id = player["id"]
@@ -275,6 +449,7 @@ async def get_nft_metadata(token_id: str):
                 "name": f"DragonSlayer — {username}",
                 "description": "A DragonSlayer fighter NFT.",
                 "image": PLACEHOLDER_IMAGE,
+                "external_url": FRONTEND_URL,
                 "attributes": [{"trait_type": "Level", "value": 1}],
             }
 
@@ -286,17 +461,16 @@ async def get_nft_metadata(token_id: str):
 
         equipment = s.get("equipment", {})
 
-        NFT_ITEM_NAMES = {"Lynx Sword", "Nomic Shield"}
-
         def equip_label(slot: str) -> str:
             item = equipment.get(slot)
             if not item:
                 return "None"
             name = item.get("name", "")
             nft_id = item.get("nftTokenId")
-            if name in NFT_ITEM_NAMES and nft_id:
-                return f"✨ {name} (NFT)"
-            return f"{item.get('rarity', '').title()} {name}"
+            lvl = item.get("itemLevel") or item.get("reforgeLevel") or 0
+            suffix = f" Lv{lvl}" if lvl else ""
+            prefix = "✨ " if nft_id else ""
+            return f"{prefix}{item.get('rarity', '').title()} {name}{suffix}"
 
         return {
             "name": f"DragonSlayer #{player_id} — {username}",
@@ -306,6 +480,7 @@ async def get_nft_metadata(token_id: str):
                 f"{total_expeditions} expeditions completed"
             ),
             "image": PLACEHOLDER_IMAGE,
+            "external_url": FRONTEND_URL,
             "attributes": [
                 {"trait_type": "Level",            "value": level},
                 {"trait_type": "Dragons Slain",    "value": total_dragons},
