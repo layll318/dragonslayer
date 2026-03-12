@@ -87,9 +87,17 @@ export interface InventoryItem {
   power: number;
   basePower?: number;
   reforgeLevel?: number;
+  itemLevel?: number;
+  enchantId?: string | null;
   nftTokenId: string | null;
   obtainedVia: 'crafted' | 'expedition_drop';
   obtainedAt: number;
+}
+
+export interface ClaimableDrop {
+  id: string;
+  item: InventoryItem;
+  expeditionId: string;
 }
 
 export type EquipmentSlots = {
@@ -233,6 +241,7 @@ export interface GameState {
   dungeonBestCompletion: Record<string, number>;
   walletNfts: WalletNft[];
   fusionBuffs: string[];
+  claimableDrops: ClaimableDrop[];
 }
 
 interface GameContextType {
@@ -257,6 +266,11 @@ interface GameContextType {
   reforgeItem: (itemId: string) => void;
   alchemyConvert: (recipeId: string) => void;
   reclaimNftItem: (tokenId: string) => void;
+  claimDrop: (dropId: string) => void;
+  dismissDrop: (dropId: string) => void;
+  levelUpItem: (itemId: string) => void;
+  forgeLegendary: (itemId: string, recipeId: string) => void;
+  enchantItem: (itemId: string, enchantId: string) => void;
   addMaterials: (drops: { type: MaterialType; quantity: number }[]) => void;
   connectWallet: (address: string) => Promise<void>;
   disconnectWallet: () => void;
@@ -284,22 +298,152 @@ interface GameContextType {
   refreshFromServer: () => Promise<void>;
   CRAFTING_RECIPES: CraftingRecipe[];
   ITEM_UNLOCK_LEVELS: Record<ItemType, number>;
+  LEGENDARY_RECIPES: LegendaryRecipe[];
+  ENCHANT_OPTIONS: typeof ENCHANT_OPTIONS;
+  FORGE_LEVEL_COSTS: typeof FORGE_LEVEL_COSTS;
 }
 
 // ============================================================
 // CONSTANTS
 // ============================================================
 
-// ── Reforge: upgrade a minted legendary item in-place (dynamic metadata updates on-chain automatically)
-export const REFORGE_COSTS: Array<{ goldCost: number; materials: { type: MaterialType; quantity: number }[] }> = [
-  { goldCost: 30000,  materials: [{ type: 'dragon_scale', quantity: 5  }, { type: 'ancient_rune', quantity: 5  }] },
-  { goldCost: 60000,  materials: [{ type: 'dragon_scale', quantity: 8  }, { type: 'ancient_rune', quantity: 5  }, { type: 'lynx_fang', quantity: 2 }] },
-  { goldCost: 100000, materials: [{ type: 'dragon_scale', quantity: 10 }, { type: 'lynx_fang',    quantity: 5  }, { type: 'nomic_core', quantity: 3 }] },
-  { goldCost: 150000, materials: [{ type: 'dragon_scale', quantity: 12 }, { type: 'lynx_fang',    quantity: 8  }, { type: 'nomic_core', quantity: 6 }] },
-  { goldCost: 200000, materials: [{ type: 'dragon_scale', quantity: 15 }, { type: 'lynx_fang',    quantity: 12 }, { type: 'nomic_core', quantity: 10 }] },
+// ── Legendary Forge: level items 25→100 via Dragon Souls
+export interface ForgeLevelTier {
+  fromLevel: number;
+  toLevel: number;
+  dragonSouls: number;
+  materials: { type: MaterialType; quantity: number }[];
+  goldCost: number;
+  powerPerLevel: number;
+}
+export const FORGE_LEVEL_COSTS: ForgeLevelTier[] = [
+  { fromLevel: 25, toLevel: 40, dragonSouls: 5,  materials: [{ type: 'dragon_scale', quantity: 8  }],                                                               goldCost: 50000,  powerPerLevel: 3 },
+  { fromLevel: 40, toLevel: 55, dragonSouls: 8,  materials: [{ type: 'dragon_scale', quantity: 12 }],                                                               goldCost: 100000, powerPerLevel: 3 },
+  { fromLevel: 55, toLevel: 70, dragonSouls: 10, materials: [{ type: 'lynx_fang',    quantity: 3  }],                                                               goldCost: 150000, powerPerLevel: 3 },
+  { fromLevel: 70, toLevel: 85, dragonSouls: 12, materials: [{ type: 'nomic_core',   quantity: 3  }],                                                               goldCost: 200000, powerPerLevel: 3 },
+  { fromLevel: 85, toLevel: 100, dragonSouls: 15, materials: [{ type: 'lynx_fang',   quantity: 5  }, { type: 'nomic_core', quantity: 5 }],                          goldCost: 300000, powerPerLevel: 3 },
 ];
-export const REFORGE_POWER_STEPS = [10, 10, 15, 20, 25]; // power gained at each reforge level
-export const MAX_REFORGE_LEVEL = REFORGE_COSTS.length;
+// Keep REFORGE_COSTS exported for backwards compat (legacy items)
+export const REFORGE_COSTS = FORGE_LEVEL_COSTS.map(t => ({ goldCost: t.goldCost, materials: [{type: t.materials[0].type, quantity: t.materials[0].quantity}] }));
+export const REFORGE_POWER_STEPS = FORGE_LEVEL_COSTS.map(t => t.powerPerLevel);
+export const MAX_REFORGE_LEVEL = FORGE_LEVEL_COSTS.length;
+
+// ── Item Leveling: Dragon Souls cost per level (1→25)
+export function getItemLevelCost(level: number): { dragonSouls: number; gold: number } {
+  if (level <= 5)  return { dragonSouls: 1, gold: 500 };
+  if (level <= 10) return { dragonSouls: 2, gold: 1500 };
+  if (level <= 20) return { dragonSouls: 3, gold: 5000 };
+  return                  { dragonSouls: 5, gold: 15000 };
+}
+
+// ── Legendary Recipes (replacing old T5 craft-chain legendaries)
+export interface LegendaryRecipe {
+  id: string;
+  itemType: ItemType;
+  name: string;
+  power: number;
+  goldCost: number;
+  materials: { type: MaterialType; quantity: number }[];
+  secret?: boolean;
+  holderOnly?: boolean;
+  enchantId?: string;
+}
+export const LEGENDARY_RECIPES: LegendaryRecipe[] = [
+  // ── Standard (one per slot) ──────────────────────────────────────────────
+  { id: 'lynx_sword',           itemType: 'weapon', name: 'Lynx Sword',          power: 98,  goldCost: 50000,  materials: [{ type: 'lynx_fang',    quantity: 5  }] },
+  { id: 'nomic_shield',         itemType: 'shield', name: 'Nomic Shield',         power: 95,  goldCost: 50000,  materials: [{ type: 'nomic_core',   quantity: 5  }] },
+  { id: 'infernal_crown_l',     itemType: 'helm',   name: 'Infernal Crown',       power: 90,  goldCost: 50000,  materials: [{ type: 'fire_crystal', quantity: 20 }] },
+  { id: 'dragon_plate',         itemType: 'armor',  name: 'Dragon Plate',         power: 100, goldCost: 50000,  materials: [{ type: 'ancient_rune', quantity: 20 }] },
+  { id: 'dragons_eye',          itemType: 'ring',   name: "Dragon's Eye",         power: 85,  goldCost: 50000,  materials: [{ type: 'dragon_scale', quantity: 25 }] },
+  // ── Secret recipes (visible, better stats, hard mats) ────────────────────
+  { id: 'void_blade',           itemType: 'weapon', name: 'Void Blade',           power: 118, goldCost: 75000,  secret: true, enchantId: 'weapon_rare',
+    materials: [{ type: 'dragon_soul', quantity: 20 }, { type: 'lynx_fang',   quantity: 10 }, { type: 'nomic_core',   quantity: 5  }] },
+  { id: 'dragons_aegis',        itemType: 'shield', name: "Dragon's Aegis",       power: 115, goldCost: 75000,  secret: true, enchantId: 'shield_rare',
+    materials: [{ type: 'dragon_soul', quantity: 20 }, { type: 'nomic_core',  quantity: 10 }, { type: 'ancient_rune', quantity: 15 }] },
+  { id: 'eternal_ring',         itemType: 'ring',   name: 'Eternal Ring',         power: 105, goldCost: 75000,  secret: true, enchantId: 'ring_unique',
+    materials: [{ type: 'dragon_soul', quantity: 15 }, { type: 'dragon_scale', quantity: 5 }, { type: 'fire_crystal', quantity: 5 }, { type: 'ancient_rune', quantity: 5 }] },
+  // ── Holder-only (wallet connected + token held) ───────────────────────────
+  { id: 'dragonslayer_blade',   itemType: 'weapon', name: 'Dragonslayer Blade',   power: 130, goldCost: 100000, holderOnly: true,
+    materials: [{ type: 'dragon_soul', quantity: 25 }, { type: 'lynx_fang',   quantity: 15 }] },
+  { id: 'nomic_fortress',       itemType: 'shield', name: 'Nomic Fortress',       power: 125, goldCost: 100000, holderOnly: true,
+    materials: [{ type: 'dragon_soul', quantity: 25 }, { type: 'nomic_core',  quantity: 15 }] },
+];
+
+// ── Enchant Options: 2 standard + 1 rare per slot ───────────────────────────
+export interface EnchantOption {
+  id: string;
+  label: string;
+  effect: string;
+  rare: boolean;
+  materials?: { type: MaterialType; quantity: number }[];
+}
+export const ENCHANT_OPTIONS: Record<ItemType, EnchantOption[]> = {
+  weapon: [
+    { id: 'weapon_a',    label: '+10% Expedition Gold',       effect: 'expedition_gold_pct:10',          rare: false },
+    { id: 'weapon_b',    label: '+15 Army Power',             effect: 'army_power_flat:15',              rare: false },
+    { id: 'weapon_rare', label: '+20% Gold/Tap',              effect: 'gold_tap_pct:20',                 rare: true,  materials: [{ type: 'dragon_soul', quantity: 10 }, { type: 'nomic_core',   quantity: 5  }] },
+  ],
+  shield: [
+    { id: 'shield_a',    label: '+10% Gold/Hour',             effect: 'gold_hour_pct:10',                rare: false },
+    { id: 'shield_b',    label: '+20 Army Power',             effect: 'army_power_flat:20',              rare: false },
+    { id: 'shield_rare', label: '+15% Defense',               effect: 'defense_pct:15',                  rare: true,  materials: [{ type: 'dragon_soul', quantity: 10 }, { type: 'lynx_fang',   quantity: 5  }] },
+  ],
+  helm: [
+    { id: 'helm_a',      label: '+8% Gold/Tap',               effect: 'gold_tap_pct:8',                  rare: false },
+    { id: 'helm_b',      label: '+12% Expedition Gold',       effect: 'expedition_gold_pct:12',          rare: false },
+    { id: 'helm_rare',   label: '+25% XP Gain',               effect: 'xp_pct:25',                       rare: true,  materials: [{ type: 'dragon_soul', quantity: 10 }, { type: 'ancient_rune', quantity: 15 }] },
+  ],
+  armor: [
+    { id: 'armor_a',     label: '+20 Army Power',             effect: 'army_power_flat:20',              rare: false },
+    { id: 'armor_b',     label: '+10% Gold/Hour',             effect: 'gold_hour_pct:10',                rare: false },
+    { id: 'armor_rare',  label: '+15% Expedition Gold',       effect: 'expedition_gold_pct:15',          rare: true,  materials: [{ type: 'dragon_soul', quantity: 10 }, { type: 'nomic_core',   quantity: 8  }] },
+  ],
+  ring: [
+    { id: 'ring_a',      label: '+5% Gold/Tap',               effect: 'gold_tap_pct:5',                  rare: false },
+    { id: 'ring_b',      label: '+10% Expedition Gold',       effect: 'expedition_gold_pct:10',          rare: false },
+    { id: 'ring_unique', label: '+15% Gold/Tap & +15 Army',   effect: 'gold_tap_pct:15,army_power_flat:15', rare: true, materials: [{ type: 'dragon_soul', quantity: 15 }, { type: 'fire_crystal', quantity: 15 }] },
+  ],
+};
+
+// ── Gear Drop Table: items that drop from expeditions ───────────────────────
+export const GEAR_DROP_TABLE: Record<ItemType, Partial<Record<Exclude<ItemRarity,'legendary'>, { id: string; name: string; power: number }[]>>> = {
+  weapon: {
+    common:   [{ id: 'iron_sword',        name: 'Iron Sword',        power: 5  }],
+    uncommon: [{ id: 'steel_sword',       name: 'Steel Sword',       power: 10 }],
+    rare:     [{ id: 'flame_blade',       name: 'Flame Blade',       power: 18 }],
+    epic:     [{ id: 'dragon_fang',       name: 'Dragon Fang',       power: 30 }],
+  },
+  shield: {
+    common:   [{ id: 'oak_shield',        name: 'Oak Shield',        power: 4  }],
+    uncommon: [{ id: 'iron_shield',       name: 'Iron Shield',       power: 9  }],
+    rare:     [{ id: 'dragon_shield',     name: 'Dragon Shield',     power: 16 }],
+    epic:     [{ id: 'aegis',             name: 'Aegis',             power: 26 }],
+  },
+  helm: {
+    common:   [{ id: 'iron_helm',         name: 'Iron Helm',         power: 3  }],
+    uncommon: [{ id: 'scale_helm',        name: 'Scale Helm',        power: 8  }],
+    rare:     [{ id: 'infernal_crown',    name: 'Infernal Crown',    power: 14 }],
+    epic:     [{ id: 'demon_helm',        name: 'Demon Helm',        power: 24 }],
+  },
+  armor: {
+    common:   [{ id: 'leather_armor',     name: 'Leather Armor',     power: 4  }],
+    uncommon: [{ id: 'chain_armor',       name: 'Chain Armor',       power: 10 }],
+    rare:     [{ id: 'dragonscale_armor', name: 'Dragonscale Armor', power: 20 }],
+    epic:     [{ id: 'infernal_plate',    name: 'Infernal Plate',    power: 34 }],
+  },
+  ring: {
+    common:   [{ id: 'iron_ring',         name: 'Iron Ring',         power: 2  }],
+    uncommon: [{ id: 'flame_ring',        name: 'Flame Ring',        power: 7  }],
+    rare:     [{ id: 'dragons_seal',      name: "Dragon's Seal",     power: 13 }],
+    epic:     [{ id: 'ancient_sigil',     name: 'Ancient Sigil',     power: 22 }],
+  },
+};
+
+// ── Fusion buffs (kept for backwards compat)
+export const FUSION_BUFF_BY_RECIPE_LEGACY: Record<string, { buffId: string; label: string; description: string }> = {
+  lynx_sword:   { buffId: 'twin_fangs', label: 'Twin Fangs', description: '+25% expedition gold' },
+  nomic_shield: { buffId: 'nomic_wall', label: 'Nomic Wall', description: '+15% gold per hour'   },
+};
 
 // ── Alchemy: convert common mats → legendary mats so they're never wasted
 export const ALCHEMY_RECIPES: Array<{ id: string; label: string; inputs: { type: MaterialType; quantity: number }[]; output: { type: MaterialType; quantity: number } }> = [
@@ -337,137 +481,25 @@ export const MATERIAL_LABELS: Record<MaterialType, string> = {
 // T2–T4 = consume previous tier item + drops
 export const CRAFTING_RECIPES: CraftingRecipe[] = [
 
-  // ── WEAPON ──────────────────────────────────────────────────────────────────
-  {
-    id: 'iron_sword', itemType: 'weapon', name: 'Iron Sword', rarity: 'common', power: 5, goldCost: 300,
-    materials: [{ type: 'dragon_scale', quantity: 2 }, { type: 'ancient_rune', quantity: 1 }],
-  },
-  {
-    id: 'steel_sword', itemType: 'weapon', name: 'Steel Sword', rarity: 'uncommon', power: 10, goldCost: 800,
-    upgradesFrom: { itemType: 'weapon', rarity: 'common' },
-    materials: [{ type: 'dragon_scale', quantity: 4 }, { type: 'fire_crystal', quantity: 2 }],
-  },
-  {
-    id: 'flame_blade', itemType: 'weapon', name: 'Flame Blade', rarity: 'rare', power: 18, goldCost: 2000,
-    upgradesFrom: { itemType: 'weapon', rarity: 'uncommon' },
-    materials: [{ type: 'fire_crystal', quantity: 4 }, { type: 'dragon_scale', quantity: 4 }],
-  },
-  {
-    id: 'dragon_fang', itemType: 'weapon', name: 'Dragon Fang', rarity: 'epic', power: 30, goldCost: 6000,
-    upgradesFrom: { itemType: 'weapon', rarity: 'rare' },
-    materials: [{ type: 'dragon_scale', quantity: 5 }, { type: 'ancient_rune', quantity: 3 }],
-  },
-
-  // ── SHIELD ──────────────────────────────────────────────────────────────────
-  {
-    id: 'oak_shield', itemType: 'shield', name: 'Oak Shield', rarity: 'common', power: 4, goldCost: 250,
-    materials: [{ type: 'dragon_scale', quantity: 2 }, { type: 'ancient_rune', quantity: 1 }],
-  },
-  {
-    id: 'iron_shield', itemType: 'shield', name: 'Iron Shield', rarity: 'uncommon', power: 9, goldCost: 700,
-    upgradesFrom: { itemType: 'shield', rarity: 'common' },
-    materials: [{ type: 'dragon_scale', quantity: 4 }, { type: 'fire_crystal', quantity: 2 }],
-  },
-  {
-    id: 'dragon_shield', itemType: 'shield', name: 'Dragon Shield', rarity: 'rare', power: 16, goldCost: 1800,
-    upgradesFrom: { itemType: 'shield', rarity: 'uncommon' },
-    materials: [{ type: 'dragon_scale', quantity: 4 }, { type: 'fire_crystal', quantity: 3 }],
-  },
-  {
-    id: 'aegis', itemType: 'shield', name: 'Aegis', rarity: 'epic', power: 26, goldCost: 5500,
-    upgradesFrom: { itemType: 'shield', rarity: 'rare' },
-    materials: [{ type: 'dragon_scale', quantity: 5 }, { type: 'ancient_rune', quantity: 4 }],
-  },
-
-  // ── HELM ────────────────────────────────────────────────────────────────────
-  {
-    id: 'iron_helm', itemType: 'helm', name: 'Iron Helm', rarity: 'common', power: 3, goldCost: 200,
-    materials: [{ type: 'dragon_scale', quantity: 2 }, { type: 'fire_crystal', quantity: 1 }],
-  },
-  {
-    id: 'scale_helm', itemType: 'helm', name: 'Scale Helm', rarity: 'uncommon', power: 8, goldCost: 600,
-    upgradesFrom: { itemType: 'helm', rarity: 'common' },
-    materials: [{ type: 'dragon_scale', quantity: 3 }, { type: 'ancient_rune', quantity: 2 }],
-  },
-  {
-    id: 'infernal_crown', itemType: 'helm', name: 'Infernal Crown', rarity: 'rare', power: 14, goldCost: 1600,
-    upgradesFrom: { itemType: 'helm', rarity: 'uncommon' },
-    materials: [{ type: 'fire_crystal', quantity: 4 }, { type: 'ancient_rune', quantity: 3 }],
-  },
-  {
-    id: 'demon_helm', itemType: 'helm', name: 'Demon Helm', rarity: 'epic', power: 24, goldCost: 5000,
-    upgradesFrom: { itemType: 'helm', rarity: 'rare' },
-    materials: [{ type: 'ancient_rune', quantity: 5 }, { type: 'fire_crystal', quantity: 3 }],
-  },
-
-  // ── ARMOR ───────────────────────────────────────────────────────────────────
-  {
-    id: 'leather_armor', itemType: 'armor', name: 'Leather Armor', rarity: 'common', power: 4, goldCost: 300,
-    materials: [{ type: 'dragon_scale', quantity: 2 }, { type: 'ancient_rune', quantity: 1 }],
-  },
-  {
-    id: 'chain_armor', itemType: 'armor', name: 'Chain Armor', rarity: 'uncommon', power: 10, goldCost: 900,
-    upgradesFrom: { itemType: 'armor', rarity: 'common' },
-    materials: [{ type: 'dragon_scale', quantity: 4 }, { type: 'fire_crystal', quantity: 2 }],
-  },
-  {
-    id: 'dragonscale_armor', itemType: 'armor', name: 'Dragonscale Armor', rarity: 'rare', power: 20, goldCost: 2500,
-    upgradesFrom: { itemType: 'armor', rarity: 'uncommon' },
-    materials: [{ type: 'dragon_scale', quantity: 5 }, { type: 'ancient_rune', quantity: 2 }],
-  },
-  {
-    id: 'infernal_plate', itemType: 'armor', name: 'Infernal Plate', rarity: 'epic', power: 34, goldCost: 7000,
-    upgradesFrom: { itemType: 'armor', rarity: 'rare' },
-    materials: [{ type: 'dragon_scale', quantity: 5 }, { type: 'fire_crystal', quantity: 4 }],
-  },
-
-  // ── RING ────────────────────────────────────────────────────────────────────
-  {
-    id: 'iron_ring', itemType: 'ring', name: 'Iron Ring', rarity: 'common', power: 2, goldCost: 150,
-    materials: [{ type: 'dragon_scale', quantity: 1 }, { type: 'ancient_rune', quantity: 1 }],
-  },
-  {
-    id: 'flame_ring', itemType: 'ring', name: 'Flame Ring', rarity: 'uncommon', power: 7, goldCost: 500,
-    upgradesFrom: { itemType: 'ring', rarity: 'common' },
-    materials: [{ type: 'fire_crystal', quantity: 3 }, { type: 'ancient_rune', quantity: 1 }],
-  },
-  {
-    id: 'dragons_seal', itemType: 'ring', name: "Dragon's Seal", rarity: 'rare', power: 13, goldCost: 1400,
-    upgradesFrom: { itemType: 'ring', rarity: 'uncommon' },
-    materials: [{ type: 'fire_crystal', quantity: 4 }, { type: 'ancient_rune', quantity: 3 }],
-  },
-  {
-    id: 'ancient_sigil', itemType: 'ring', name: 'Ancient Sigil', rarity: 'epic', power: 22, goldCost: 4500,
-    upgradesFrom: { itemType: 'ring', rarity: 'rare' },
-    materials: [{ type: 'ancient_rune', quantity: 4 }, { type: 'fire_crystal', quantity: 3 }],
-  },
-
-  // ── LEGENDARY NFT FORGE ─────────────────────────────────────────────────────
-  // T5 legendary: upgrade from epic by burning the epic item + rare materials.
-  // The resulting item is minted on XRPL via Xaman.
-  {
-    id: 'lynx_sword', itemType: 'weapon', name: 'Lynx Sword', rarity: 'legendary', power: 60, goldCost: 50000,
-    upgradesFrom: { itemType: 'weapon', rarity: 'epic' },
-    materials: [
-      { type: 'lynx_fang',    quantity: 5 },
-      { type: 'dragon_scale', quantity: 8 },
-      { type: 'ancient_rune', quantity: 5 },
-    ],
-  },
-  {
-    id: 'nomic_shield', itemType: 'shield', name: 'Nomic Shield', rarity: 'legendary', power: 50, goldCost: 50000,
-    upgradesFrom: { itemType: 'shield', rarity: 'epic' },
-    materials: [
-      { type: 'nomic_core',   quantity: 5 },
-      { type: 'dragon_scale', quantity: 8 },
-      { type: 'ancient_rune', quantity: 5 },
-    ],
-  },
+  // ── T4 EPIC (craft-only from materials, no upgrade chain) ───────────────────
+  { id: 'dragon_fang',    itemType: 'weapon', name: 'Dragon Fang',    rarity: 'epic', power: 30, goldCost: 6000,
+    materials: [{ type: 'dragon_scale', quantity: 5 }, { type: 'ancient_rune', quantity: 3 }] },
+  { id: 'aegis',          itemType: 'shield', name: 'Aegis',          rarity: 'epic', power: 26, goldCost: 5500,
+    materials: [{ type: 'dragon_scale', quantity: 5 }, { type: 'ancient_rune', quantity: 4 }] },
+  { id: 'demon_helm',     itemType: 'helm',   name: 'Demon Helm',     rarity: 'epic', power: 24, goldCost: 5000,
+    materials: [{ type: 'ancient_rune', quantity: 5 }, { type: 'fire_crystal', quantity: 3 }] },
+  { id: 'infernal_plate', itemType: 'armor',  name: 'Infernal Plate', rarity: 'epic', power: 34, goldCost: 7000,
+    materials: [{ type: 'dragon_scale', quantity: 5 }, { type: 'fire_crystal', quantity: 4 }] },
+  { id: 'ancient_sigil',  itemType: 'ring',   name: 'Ancient Sigil',  rarity: 'epic', power: 22, goldCost: 4500,
+    materials: [{ type: 'ancient_rune', quantity: 4 }, { type: 'fire_crystal', quantity: 3 }] },
 ];
 
 export const FUSION_BUFF_BY_RECIPE: Record<string, { buffId: string; label: string; description: string }> = {
   lynx_sword:   { buffId: 'twin_fangs', label: 'Twin Fangs',   description: '+25% expedition gold' },
   nomic_shield: { buffId: 'nomic_wall', label: 'Nomic Wall',   description: '+15% gold per hour'   },
+  // New legendary recipes also get fusion buffs via their id
+  void_blade:   { buffId: 'void_edge',  label: 'Void Edge',    description: '+30% expedition gold' },
+  dragons_aegis:{ buffId: 'aegis_wall', label: 'Aegis Wall',   description: '+20% gold per hour'   },
 };
 
 const RARITY_GPH_MULT: Record<string, number> = { common: 0.03, uncommon: 0.05, rare: 0.12, epic: 0.25, legendary: 0.40 };
@@ -529,7 +561,7 @@ function calcExpeditionYield(
   armyPwr: number,
   gearMult: number,
   hours: 4 | 8 | 12,
-): { dragonsSlain: number; goldEarned: number; materials: Material[] } {
+): { dragonsSlain: number; goldEarned: number; materials: Material[]; gearDrops: InventoryItem[] } {
   const rand = 0.85 + Math.random() * 0.30;
   const heroMult = 1 + level * 0.05;
   const dragonsSlain = Math.max(1, Math.floor(
@@ -538,12 +570,10 @@ function calcExpeditionYield(
   const goldEarned = dragonsSlain * (50 + level * 8);
 
   const coreTypes: MaterialType[] = ['dragon_scale', 'fire_crystal', 'ancient_rune'];
-  // Core 3 types always drop — qty: 4h=1-2, 8h=1-3, 12h=2-4
   const maxQty = hours === 4 ? 2 : hours === 8 ? 3 : 4;
   const materials: Material[] = coreTypes.map(type => ({
     type, quantity: Math.floor(Math.random() * maxQty) + 1,
   }));
-  // Legendary mats + Dragon Souls from 8h/12h expeditions
   if (hours >= 8) {
     materials.push({ type: 'dragon_soul', quantity: hours === 12 ? 2 + Math.floor(Math.random() * 2) : 1 });
   }
@@ -552,7 +582,44 @@ function calcExpeditionYield(
     materials.push({ type: 'nomic_core', quantity: 1 + Math.floor(Math.random() * 3) });
   }
 
-  return { dragonsSlain, goldEarned, materials };
+  // Gear drops
+  const slots: ItemType[] = ['weapon', 'shield', 'helm', 'armor', 'ring'];
+  const gearDrops: InventoryItem[] = [];
+  const dropCount = hours === 4 ? 1 : hours === 8 ? 1 : 2;
+  const shuffled = [...slots].sort(() => Math.random() - 0.5).slice(0, dropCount);
+  for (const slot of shuffled) {
+    let rarity: Exclude<ItemRarity, 'legendary'>;
+    const roll = Math.random();
+    if (hours === 12) {
+      if (roll < 0.10) rarity = 'epic';
+      else if (roll < 0.40) rarity = 'rare';
+      else if (roll < 0.75) rarity = 'uncommon';
+      else rarity = 'common';
+    } else if (hours === 8) {
+      if (roll < 0.40) rarity = 'uncommon';
+      else rarity = 'common';
+    } else {
+      rarity = 'common';
+    }
+    const pool = GEAR_DROP_TABLE[slot][rarity];
+    if (!pool || pool.length === 0) continue;
+    const template = pool[Math.floor(Math.random() * pool.length)];
+    gearDrops.push({
+      id: `drop-${Date.now()}-${slot}-${Math.random().toString(36).slice(2)}`,
+      itemType: slot,
+      name: template.name,
+      rarity,
+      power: template.power,
+      basePower: template.power,
+      itemLevel: 1,
+      enchantId: null,
+      nftTokenId: null,
+      obtainedVia: 'expedition_drop',
+      obtainedAt: Date.now(),
+    });
+  }
+
+  return { dragonsSlain, goldEarned, materials, gearDrops };
 }
 
 export interface EggVariant {
@@ -848,6 +915,7 @@ function createInitialState(): GameState {
     dungeonBestCompletion: {},
     walletNfts: [],
     fusionBuffs: [],
+    claimableDrops: [],
   };
 }
 
@@ -909,6 +977,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         equipment: savedEquipment,
         inventory: saved.inventory ?? [],
         materials: mergeMaterialsByType(migrateMaterials(saved.materials ?? [])),
+        claimableDrops: saved.claimableDrops ?? [],
         activeExpedition: saved.activeExpedition ?? null,
         lastExpeditionResult: saved.lastExpeditionResult ?? null,
         totalDragonsSlain: saved.totalDragonsSlain ?? 0,
@@ -1382,7 +1451,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       if (Date.now() < prev.activeExpedition.endsAt) return prev;
       const armyPwr = calcArmyPower(prev.buildings);
       const gearMult = calcGearMultiplier(prev.equipment);
-      const { dragonsSlain, goldEarned: rawGold, materials } = calcExpeditionYield(
+      const { dragonsSlain, goldEarned: rawGold, materials, gearDrops } = calcExpeditionYield(
         prev.level, armyPwr, gearMult, prev.activeExpedition.durationHours,
       );
       const twinFangs = (prev.fusionBuffs ?? []).includes('twin_fangs') ? 1.25 : 1;
@@ -1407,6 +1476,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       const newEggInventory = droppedEgg
         ? [...prev.eggInventory, droppedEgg]
         : prev.eggInventory;
+      const expeditionId = `exp-${Date.now()}`;
+      const newClaimableDrops = [
+        ...(prev.claimableDrops ?? []),
+        ...gearDrops.map(item => ({ id: `drop-${item.id}`, item, expeditionId })),
+      ];
       return {
         ...prev,
         ...xpUpdate,
@@ -1417,6 +1491,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         expeditionsToday: prev.expeditionsToday + 1,
         materials: newMaterials,
         eggInventory: newEggInventory,
+        claimableDrops: newClaimableDrops,
         activeExpedition: null,
         lastExpeditionResult: { dragonsSlain, goldEarned, materials: boostedMaterials, droppedEgg: droppedEgg ?? undefined },
         dailyQuests,
@@ -1941,6 +2016,132 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const claimDrop = useCallback((dropId: string) => {
+    setState((prev) => {
+      const drop = (prev.claimableDrops ?? []).find(d => d.id === dropId);
+      if (!drop) return prev;
+      return {
+        ...prev,
+        inventory: [...prev.inventory, drop.item].slice(-MAX_INVENTORY),
+        claimableDrops: prev.claimableDrops.filter(d => d.id !== dropId),
+      };
+    });
+  }, []);
+
+  const dismissDrop = useCallback((dropId: string) => {
+    setState((prev) => ({
+      ...prev,
+      claimableDrops: (prev.claimableDrops ?? []).filter(d => d.id !== dropId),
+    }));
+  }, []);
+
+  const levelUpItem = useCallback((itemId: string) => {
+    setState((prev) => {
+      // Find in inventory or equipment
+      const invIdx = prev.inventory.findIndex(i => i.id === itemId);
+      const slotKey = invIdx === -1
+        ? (Object.keys(prev.equipment) as (keyof EquipmentSlots)[]).find(k => prev.equipment[k]?.id === itemId)
+        : null;
+      const item = invIdx !== -1 ? prev.inventory[invIdx] : (slotKey ? prev.equipment[slotKey]! : null);
+      if (!item) return prev;
+      const currentLevel = item.itemLevel ?? 1;
+      if (currentLevel >= 25) return prev; // max level for non-legendary
+      const { dragonSouls, gold: goldCost } = getItemLevelCost(currentLevel);
+      if (prev.gold < goldCost) return prev;
+      const soulMat = prev.materials.find(m => m.type === 'dragon_soul');
+      if (!soulMat || soulMat.quantity < dragonSouls) return prev;
+      const newMaterials = prev.materials
+        .map(m => m.type === 'dragon_soul' ? { ...m, quantity: m.quantity - dragonSouls } : m)
+        .filter(m => m.quantity > 0);
+      const updatedItem: InventoryItem = {
+        ...item,
+        itemLevel: currentLevel + 1,
+        power: item.power + 2,
+      };
+      let newInventory = [...prev.inventory];
+      let newEquipment = { ...prev.equipment };
+      if (invIdx !== -1) {
+        newInventory[invIdx] = updatedItem;
+      } else if (slotKey) {
+        newEquipment = { ...newEquipment, [slotKey]: updatedItem };
+      }
+      return { ...prev, gold: prev.gold - goldCost, materials: newMaterials, inventory: newInventory, equipment: newEquipment };
+    });
+  }, []);
+
+  const forgeLegendary = useCallback((itemId: string, recipeId: string) => {
+    setState((prev) => {
+      const recipe = LEGENDARY_RECIPES.find(r => r.id === recipeId);
+      if (!recipe) return prev;
+      const invIdx = prev.inventory.findIndex(i => i.id === itemId);
+      const item = invIdx !== -1 ? prev.inventory[invIdx] : null;
+      if (!item) return prev;
+      if ((item.itemLevel ?? 1) < 25) return prev;
+      if (item.itemType !== recipe.itemType) return prev;
+      if (recipe.holderOnly && !(prev.tokenDiscount?.pct ?? 0 > 0) && !prev.walletAddress) return prev;
+      if (prev.gold < recipe.goldCost) return prev;
+      for (const req of recipe.materials) {
+        const held = prev.materials.find(m => m.type === req.type);
+        if (!held || held.quantity < req.quantity) return prev;
+      }
+      const newMaterials = prev.materials
+        .map(m => { const req = recipe.materials.find(r => r.type === m.type); return req ? { ...m, quantity: m.quantity - req.quantity } : m; })
+        .filter(m => m.quantity > 0);
+      const newInventory = prev.inventory.filter(i => i.id !== itemId);
+      const legendaryItem: InventoryItem = {
+        id: `leg-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        itemType: recipe.itemType,
+        name: recipe.name,
+        rarity: 'legendary',
+        power: recipe.power,
+        basePower: recipe.power,
+        itemLevel: 25,
+        enchantId: recipe.enchantId ?? null,
+        nftTokenId: null,
+        obtainedVia: 'crafted',
+        obtainedAt: Date.now(),
+      };
+      return {
+        ...prev,
+        gold: prev.gold - recipe.goldCost,
+        materials: newMaterials,
+        inventory: [...newInventory, legendaryItem].slice(-MAX_INVENTORY),
+      };
+    });
+  }, []);
+
+  const enchantItem = useCallback((itemId: string, enchantId: string) => {
+    setState((prev) => {
+      const invIdx = prev.inventory.findIndex(i => i.id === itemId);
+      const slotKey = invIdx === -1
+        ? (Object.keys(prev.equipment) as (keyof EquipmentSlots)[]).find(k => prev.equipment[k]?.id === itemId)
+        : null;
+      const item = invIdx !== -1 ? prev.inventory[invIdx] : (slotKey ? prev.equipment[slotKey]! : null);
+      if (!item || item.rarity !== 'legendary') return prev;
+      if (item.enchantId) return prev; // already enchanted
+      const options = ENCHANT_OPTIONS[item.itemType];
+      const enchant = options?.find(e => e.id === enchantId);
+      if (!enchant) return prev;
+      if (enchant.materials) {
+        for (const req of enchant.materials) {
+          const held = prev.materials.find(m => m.type === req.type);
+          if (!held || held.quantity < req.quantity) return prev;
+        }
+      }
+      const newMaterials = enchant.materials
+        ? prev.materials
+            .map(m => { const req = enchant.materials!.find(r => r.type === m.type); return req ? { ...m, quantity: m.quantity - req.quantity } : m; })
+            .filter(m => m.quantity > 0)
+        : prev.materials;
+      const updatedItem = { ...item, enchantId };
+      let newInventory = [...prev.inventory];
+      let newEquipment = { ...prev.equipment };
+      if (invIdx !== -1) { newInventory[invIdx] = updatedItem; }
+      else if (slotKey) { newEquipment = { ...newEquipment, [slotKey]: updatedItem }; }
+      return { ...prev, materials: newMaterials, inventory: newInventory, equipment: newEquipment };
+    });
+  }, []);
+
   const buyBuilding = useCallback((id: string, qty = 1) => {
     setState((prev) => {
       const idx = prev.buildings.findIndex((b) => b.id === id);
@@ -2397,6 +2598,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         reforgeItem,
         alchemyConvert,
         reclaimNftItem,
+        claimDrop,
+        dismissDrop,
+        levelUpItem,
+        forgeLegendary,
+        enchantItem,
         setItemNftTokenId,
         clearItemNftTokenId,
         burnItemToWallet,
@@ -2424,6 +2630,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         getCharacterTier,
         CRAFTING_RECIPES,
         ITEM_UNLOCK_LEVELS,
+        LEGENDARY_RECIPES,
+        ENCHANT_OPTIONS,
+        FORGE_LEVEL_COSTS,
       }}
     >
       {children}
