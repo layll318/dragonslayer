@@ -236,16 +236,17 @@ async def get_nft_metadata(token_id: str):
 
         equipment = s.get("equipment", {})
 
-        NFT_ITEM_NAMES = {"lynx_sword": "Lynx Sword", "nomic_shield": "Nomic Shield"}
+        NFT_ITEM_NAMES = {"Lynx Sword", "Nomic Shield"}
 
         def equip_label(slot: str) -> str:
             item = equipment.get(slot)
             if not item:
                 return "None"
-            item_id = item.get("id", "")
-            if item_id in NFT_ITEM_NAMES:
-                return f"✨ {NFT_ITEM_NAMES[item_id]} (NFT)"
-            return f"{item.get('rarity', '').title()} {item.get('name', '')}"
+            name = item.get("name", "")
+            nft_id = item.get("nftTokenId")
+            if name in NFT_ITEM_NAMES and nft_id:
+                return f"✨ {name} (NFT)"
+            return f"{item.get('rarity', '').title()} {name}"
 
         return {
             "name": f"DragonSlayer #{player_id} — {username}",

@@ -1567,7 +1567,39 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           newEquipment = { ...prev.equipment, [slotKey]: { ...found, nftTokenId: tokenId } };
         }
       }
-      if (!found) return prev; // item not found — no-op
+      if (!found) {
+        // Item not found in inventory or equipment — it may have been lost due to a
+        // server-state overwrite (race condition on Xaman return). Reconstruct it so
+        // the NFT token ID is not silently dropped.
+        const restoredItem: InventoryItem = {
+          id: itemId,
+          itemType: (prev.walletNfts ?? []).find(n => n.itemId === itemId)?.itemType ?? 'weapon',
+          name: (prev.walletNfts ?? []).find(n => n.itemId === itemId)?.name ?? 'Unknown Item',
+          rarity: (prev.walletNfts ?? []).find(n => n.itemId === itemId)?.rarity ?? 'legendary',
+          power: (prev.walletNfts ?? []).find(n => n.itemId === itemId)?.power ?? 0,
+          nftTokenId: tokenId,
+          obtainedVia: 'crafted',
+          obtainedAt: Date.now(),
+        };
+        // Only restore if we have enough info (name must not be 'Unknown Item')
+        if (restoredItem.name === 'Unknown Item') return prev;
+        const newState = {
+          ...prev,
+          inventory: [...prev.inventory, restoredItem].slice(-MAX_INVENTORY),
+          walletNfts: (prev.walletNfts ?? []).some(n => n.itemId === itemId)
+            ? prev.walletNfts ?? []
+            : [...(prev.walletNfts ?? []), { itemId, tokenId, name: restoredItem.name, itemType: restoredItem.itemType, rarity: restoredItem.rarity, power: restoredItem.power, mintedAt: Date.now() }],
+        };
+        const apiUrlR = process.env.NEXT_PUBLIC_API_URL ?? '';
+        if (apiUrlR && newState.playerId) {
+          fetch(`${apiUrlR}/api/save/${newState.playerId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ save_json: newState }),
+          }).catch(() => {});
+        }
+        return newState;
+      }
       // Deduplicate: don't add walletNfts entry if already present
       const alreadyIn = (prev.walletNfts ?? []).some(n => n.itemId === itemId);
       const walletEntry: WalletNft = {
@@ -1673,13 +1705,24 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         obtainedAt: Date.now(),
       };
       newInventory = [...newInventory, newItem].slice(-MAX_INVENTORY);
-      return {
+      const newState = {
         ...prev,
         gold: prev.gold - recipe.goldCost,
         materials: newMaterials,
         inventory: newInventory,
         equipment: newEquipment,
       };
+      // Immediately persist so server state doesn't overwrite the crafted item
+      // when the player navigates to Xaman and returns (connectWallet serverAhead check).
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? '';
+      if (apiUrl && newState.playerId) {
+        fetch(`${apiUrl}/api/save/${newState.playerId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ save_json: newState }),
+        }).catch(() => {});
+      }
+      return newState;
     });
   }, []);
 
@@ -1702,12 +1745,22 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       if (equippedCopy && toRemove.has(equippedCopy.id)) {
         newEquipment[recipe.itemType as keyof EquipmentSlots] = null as any;
       }
-      return {
+      const fusedState = {
         ...prev,
         inventory: prev.inventory.filter(i => !toRemove.has(i.id)),
         equipment: newEquipment,
         fusionBuffs: [...(prev.fusionBuffs ?? []), fusionDef.buffId],
       };
+      // Immediately persist so fusion buff survives a reload before the 30s auto-sync
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? '';
+      if (apiUrl && fusedState.playerId) {
+        fetch(`${apiUrl}/api/save/${fusedState.playerId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ save_json: fusedState }),
+        }).catch(() => {});
+      }
+      return fusedState;
     });
   }, []);
 

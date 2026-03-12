@@ -189,6 +189,7 @@ export default function ExpeditionTab() {
   const mintBurstRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mintUuidRef  = useRef<string | null>(null);
   const mintItemIdRef = useRef<string | null>(null);
+  const [fuseSuccess, setFuseSuccess] = useState<string | null>(null);
 
   const MINT_UUID_KEY    = 'ds_mint_uuid';
   const MINT_ITEMID_KEY  = 'ds_mint_item_id';
@@ -672,12 +673,11 @@ export default function ExpeditionTab() {
           // Find highest tier already owned in T1-T4 chain
           const ownedTiers = chain.filter(r => hasItem(r.itemType as ItemType, r.rarity));
           const highestOwned = ownedTiers[ownedTiers.length - 1] ?? null;
-          // Wrap back to T1 when complete so player can start another chain
           let nextIdx = highestOwned
             ? chain.findIndex(r => r.id === highestOwned.id) + 1
             : 0;
-          if (nextIdx >= chain.length) nextIdx = 0;
-          const nextRecipe = chain[nextIdx];
+          const chainComplete = nextIdx >= chain.length; // all T1–T4 tiers owned
+          const nextRecipe = chainComplete ? null : chain[nextIdx];
 
           return (
             <div key={slot} className="dragon-panel p-3">
@@ -734,44 +734,8 @@ export default function ExpeditionTab() {
                 })}
               </div>
 
-              {/* Fusion card — shown when 2+ of the same legendary are in inventory */}
-              {(() => {
-                const legendaryInChain = chain.find(r => r.rarity === 'legendary');
-                if (!legendaryInChain) return null;
-                const fusionDef = (FUSION_BUFF_BY_RECIPE as Record<string, { buffId: string; label: string; description: string }>)[legendaryInChain.id];
-                if (!fusionDef) return null;
-                const alreadyFused = (state.fusionBuffs ?? []).includes(fusionDef.buffId);
-                const copies = state.inventory.filter(i => i.name === legendaryInChain.name && i.rarity === 'legendary');
-                if (copies.length < 2 && !alreadyFused) return null;
-                return (
-                  <div className="rounded-lg p-2.5 mb-2 border" style={{ background: 'rgba(240,100,220,0.08)', borderColor: 'rgba(240,100,220,0.4)', boxShadow: '0 0 10px rgba(240,100,220,0.12)' }}>
-                    <div className="flex items-center justify-between gap-2">
-                      <div>
-                        <div className="flex items-center gap-1.5 mb-0.5">
-                          <span className="text-sm">🔮</span>
-                          <span className="font-cinzel font-bold text-[10px] tracking-wider" style={{ color: '#e879f9' }}>FUSION</span>
-                        </div>
-                        {alreadyFused ? (
-                          <span className="text-[9px] font-bold text-[#4ade80]">✓ {fusionDef.label} active — {fusionDef.description}</span>
-                        ) : (
-                          <span className="text-[9px] text-[#c084fc]">Combine 2× {legendaryInChain.name} → <b>{fusionDef.label}</b>: {fusionDef.description}</span>
-                        )}
-                      </div>
-                      {!alreadyFused && copies.length >= 2 && (
-                        <button
-                          onClick={() => fuseLegendaryItems(legendaryInChain.id)}
-                          className="text-[8px] font-bold px-2 py-1 rounded transition-all active:scale-95 whitespace-nowrap flex-shrink-0"
-                          style={{ background: 'linear-gradient(135deg,#7e22ce,#e879f9)', color: '#fff' }}
-                        >
-                          🔮 FUSE
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })()}
 
-              {/* Active recipe card */}
+              {/* Active recipe card or fully-upgraded message */}
               {nextRecipe ? (() => {
                 const isLegendary = nextRecipe.rarity === 'legendary';
                 const color = RARITY_COLORS[nextRecipe.rarity];
@@ -862,7 +826,7 @@ export default function ExpeditionTab() {
                           ? (isLegendary ? { background: 'linear-gradient(135deg,#b8860b,#f0c040)', boxShadow: '0 0 12px rgba(240,192,64,0.4)', color: '#1a0e00' } : {})
                           : { opacity: 0.4, cursor: 'not-allowed' }}
                       >
-                        {isLegendary ? '⛔ FORGE LEGENDARY' : isUpgrade ? '⬆ UPGRADE' : '⚒ FORGE'}
+                        {isLegendary ? '✨ FORGE LEGENDARY' : isUpgrade ? '⬆ UPGRADE' : '⚒ FORGE'}
                       </button>
                     </div>
 
@@ -913,45 +877,13 @@ export default function ExpeditionTab() {
                   </div>
                 );
               })() : (() => {
-                // All tiers owned — check if legendary is in this chain and handle mint
-                const legendaryInChain = chain.find(r => r.rarity === 'legendary');
-                const ownedLegendary = legendaryInChain
-                  ? findOwnedItem(legendaryInChain.itemType as ItemType, legendaryInChain.rarity as ItemRarity)
-                  : null;
-                const isMintingThis = ownedLegendary
-                  ? mintItemId === ownedLegendary.id && (mintPhase === 'loading' || mintPhase === 'waiting')
-                  : false;
-                const itemImg = ownedLegendary?.name === 'Lynx Sword'
-                  ? '/images/lynxsword.png'
-                  : ownedLegendary?.name === 'Nomic Shield'
-                  ? '/images/nomicsshield.png'
-                  : null;
                 return (
-                  <div className="py-2">
-                    {ownedLegendary ? (
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {itemImg && (
-                          <img src={itemImg} alt={ownedLegendary.name} className="w-10 h-10 object-contain rounded" onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                        )}
-                        <div className="flex flex-col gap-1">
-                          <span className="text-[9px] font-bold text-[#4ade80]">✓ {ownedLegendary.name} Forged!</span>
-                          {!ownedLegendary.nftTokenId ? (
-                            <button
-                              onClick={() => startMint(ownedLegendary)}
-                              disabled={isMintingThis}
-                              className="text-[8px] font-bold px-2 py-1 rounded transition-all active:scale-95 whitespace-nowrap"
-                              style={{ background: isMintingThis ? 'rgba(240,192,64,0.1)' : 'linear-gradient(135deg,#b8860b,#f0c040)', color: isMintingThis ? '#f0c040' : '#1a0e00' }}
-                            >
-                              {isMintingThis ? '⏳…' : '✨ Mint NFT to Wallet'}
-                            </button>
-                          ) : (
-                            <span className="text-[7px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(240,192,64,0.2)', color: '#f0c040' }}>✨ NFT Minted</span>
-                          )}
-                        </div>
-                      </div>
-                    ) : (
-                      <span className="text-[10px] text-[#4ade80] font-bold">✓ Fully upgraded!</span>
-                    )}
+                  <div className="flex items-center gap-2 py-2 px-1">
+                    <span className="text-[#4ade80] text-base">✓</span>
+                    <div>
+                      <p className="text-[9px] font-bold text-[#4ade80]">Epic tier fully upgraded</p>
+                      <p className="text-[8px] text-[#6b5a3a] mt-0.5">See ✨ Legendary Forge below to craft the NFT item</p>
+                    </div>
                   </div>
                 );
               })()}
@@ -1059,12 +991,12 @@ export default function ExpeditionTab() {
                     )}
                     {fusionDef && (
                       <div className="border-t border-[rgba(240,100,220,0.2)] pt-2 mt-1">
-                        {alreadyFused ? (
-                          <span className="text-[8px] font-bold text-[#4ade80]">🔮 {fusionDef.label} active — {fusionDef.description}</span>
+                        {alreadyFused || fuseSuccess === recipe.id ? (
+                          <span className="text-[8px] font-bold text-[#4ade80]">{fuseSuccess === recipe.id && !alreadyFused ? `✨ ${fusionDef.label} fused! Buff is now active.` : `🔮 ${fusionDef.label} active — ${fusionDef.description}`}</span>
                         ) : ownedCopies.length >= 2 ? (
                           <div className="flex items-center justify-between">
                             <span className="text-[8px] text-[#c084fc]">🔮 Fuse 2× → <b>{fusionDef.label}</b>: {fusionDef.description}</span>
-                            <button onClick={() => fuseLegendaryItems(recipe.id)} className="text-[8px] font-bold px-2 py-0.5 rounded ml-1" style={{ background: 'linear-gradient(135deg,#7e22ce,#e879f9)', color: '#fff' }}>FUSE</button>
+                            <button onClick={() => { fuseLegendaryItems(recipe.id); setFuseSuccess(recipe.id); setTimeout(() => setFuseSuccess(null), 3000); }} className="text-[8px] font-bold px-2 py-0.5 rounded ml-1" style={{ background: 'linear-gradient(135deg,#7e22ce,#e879f9)', color: '#fff' }}>🔮 FUSE</button>
                           </div>
                         ) : (
                           <span className="text-[8px] text-[#6b5a3a]">🔮 Fuse 2× → <b>{fusionDef.label}</b>: {fusionDef.description}</span>
