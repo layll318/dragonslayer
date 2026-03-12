@@ -155,11 +155,12 @@ def _render_item_card(
 
     draw = ImageDraw.Draw(img)
 
-    # ── Fonts (fall back to default bitmap) ───────────────────────────────────
+    # ── Fonts — try system TTFs, fall back to Pillow 10 scalable default ──────
     font_paths = [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
         "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     ]
     def _font(size: int):
         for p in font_paths:
@@ -167,27 +168,39 @@ def _render_item_card(
                 return ImageFont.truetype(p, size)
             except Exception:
                 pass
-        return ImageFont.load_default()
+        # Pillow ≥10.1 supports load_default(size=N)
+        try:
+            return ImageFont.load_default(size=size)
+        except TypeError:
+            return ImageFont.load_default()
 
-    font_name   = _font(26)
-    font_label  = _font(20)
-    font_small  = _font(16)
+    font_name  = _font(28)
+    font_label = _font(22)
+    font_small = _font(17)
+
+    def _text(d: ImageDraw.ImageDraw, xy, txt, font, fill):
+        """Draw text with a dark 1-px stroke for legibility on any background."""
+        x, y = xy
+        shadow = (0, 0, 0, 200)
+        for dx, dy in ((-1,-1),(1,-1),(-1,1),(1,1),(0,-1),(0,1),(-1,0),(1,0)):
+            d.text((x+dx, y+dy), txt, font=font, fill=shadow)
+        d.text(xy, txt, font=font, fill=fill)
 
     rc = border_color  # rarity colour
-    y_base = SIZE - panel_h + 8
+    y_base = SIZE - panel_h + 10
 
     # Item name
-    draw.text((16, y_base), name, font=font_name, fill=(*rc, 255))
+    _text(draw, (16, y_base), name, font_name, (*rc, 255))
     # Level + Power row
-    draw.text((16, y_base + 32), f"Lv {item_level}  ⚡ {power} PWR", font=font_label, fill=(220, 200, 150, 255))
+    _text(draw, (16, y_base + 34), f"Lv {item_level}   {power} PWR", font_label, (220, 200, 150, 255))
     # Rarity + enchant row
-    enchant_label = f"  ·  {enchant_id.replace('_', ' ').title()}" if enchant_id else ""
-    reforge_label = f"  ·  Reforge {reforge_level}" if reforge_level else ""
+    enchant_label = f"  |  {enchant_id.replace('_', ' ').title()}" if enchant_id else ""
+    reforge_label = f"  |  Reforge +{reforge_level}" if reforge_level else ""
     sub = f"{rarity.title()}{enchant_label}{reforge_label}"
-    draw.text((16, y_base + 58), sub, font=font_small, fill=(160, 140, 100, 220))
+    _text(draw, (16, y_base + 62), sub, font_small, (160, 140, 100, 230))
 
-    # ── NFT watermark (top-right corner) ──────────────────────────────────────
-    draw.text((SIZE - 72, 12), "✦ NFT", font=font_small, fill=(*rc, 200))
+    # ── NFT badge (top-right corner) ──────────────────────────────────────────
+    _text(draw, (SIZE - 80, 12), "* NFT", font_small, (*rc, 220))
 
     buf = io.BytesIO()
     img.convert("RGB").save(buf, format="PNG", optimize=True)

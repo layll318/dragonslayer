@@ -274,6 +274,7 @@ interface GameContextType {
   forgeLegendary: (itemId: string, recipeId: string) => void;
   enchantItem: (itemId: string, enchantId: string) => void;
   burnInventoryItem: (itemId: string) => void;
+  removeBurnedNft: (itemId: string) => void;
   dismissCraftingV2Modal: () => void;
   addMaterials: (drops: { type: MaterialType; quantity: number }[]) => void;
   connectWallet: (address: string) => Promise<void>;
@@ -2219,6 +2220,19 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  // Called after on-chain NFTokenBurn is confirmed in Xaman — removes item from inventory/equipment
+  const removeBurnedNft = useCallback((itemId: string) => {
+    setState((prev) => {
+      const newInventory = prev.inventory.filter(i => i.id !== itemId);
+      const newEquipment = Object.fromEntries(
+        Object.entries(prev.equipment).map(([k, v]) =>
+          v && v.id === itemId ? [k, null] : [k, v]
+        )
+      ) as EquipmentSlots;
+      return { ...prev, inventory: newInventory, equipment: newEquipment };
+    });
+  }, []);
+
   const dismissCraftingV2Modal = useCallback(() => {
     setState((prev) => ({ ...prev, craftingV2SoulsAwarded: 0 }));
   }, []);
@@ -2685,6 +2699,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         forgeLegendary,
         enchantItem,
         burnInventoryItem,
+        removeBurnedNft,
         setItemNftTokenId,
         clearItemNftTokenId,
         burnItemToWallet,

@@ -181,7 +181,7 @@ function ItemCard({ item, onEquip, onUnequip, isEquipped, onMint, mintPhase, sho
           className="w-full mt-0.5 py-1 rounded text-[8px] font-bold transition-all active:scale-95"
           style={{ background: 'rgba(248,113,113,0.12)', color: '#f87171', border: '1px solid rgba(248,113,113,0.2)' }}
         >
-          {item.nftTokenId ? '🗑 Remove record' : `🔥 Burn +${BURN_SOUL_YIELD[item.rarity] ?? 2}🧿`}
+          {item.nftTokenId ? '� Burn NFT' : `🔥 Burn +${BURN_SOUL_YIELD[item.rarity] ?? 2}🧿`}
         </button>
       )}
     </div>
@@ -229,6 +229,7 @@ export default function ExpeditionTab() {
     ENCHANT_OPTIONS,
     FORGE_LEVEL_COSTS,
     dismissCraftingV2Modal,
+    removeBurnedNft,
   } = useGame();
 
   const AD_VIDEOS = [
@@ -265,6 +266,103 @@ export default function ExpeditionTab() {
   const mintItemIdRef = useRef<string | null>(null);
   const [fuseSuccess, setFuseSuccess] = useState<string | null>(null);
   const [mintConfirmItem, setMintConfirmItem] = useState<InventoryItem | null>(null);
+
+  // ── NFT Burn state ────────────────────────────────────────────────────────
+  const [burnConfirmItem, setBurnConfirmItem] = useState<InventoryItem | null>(null);
+  const [burnPhase, setBurnPhase] = useState<'idle' | 'loading' | 'waiting' | 'success' | 'error'>('idle');
+  const [burnDeeplink, setBurnDeeplink] = useState<string | null>(null);
+  const [burnQr, setBurnQr] = useState<string | null>(null);
+  const [burnUuid, setBurnUuid] = useState<string | null>(null);
+  const [burnError, setBurnError] = useState<string | null>(null);
+  const [burnItemId, setBurnItemId] = useState<string | null>(null);
+  const burnPollRef  = useRef<ReturnType<typeof setInterval> | null>(null);
+  const burnUuidRef  = useRef<string | null>(null);
+  const burnItemIdRef = useRef<string | null>(null);
+
+  const clearBurnPoll = useCallback(() => {
+    if (burnPollRef.current) { clearInterval(burnPollRef.current); burnPollRef.current = null; }
+  }, []);
+
+  useEffect(() => () => clearBurnPoll(), [clearBurnPoll]);
+
+  const cancelBurn = useCallback(() => {
+    clearBurnPoll();
+    setBurnItemId(null);
+    setBurnPhase('idle');
+    setBurnDeeplink(null);
+    setBurnQr(null);
+    setBurnUuid(null);
+    setBurnError(null);
+    burnUuidRef.current   = null;
+    burnItemIdRef.current = null;
+  }, [clearBurnPoll]);
+
+  const doPollBurn = useCallback(async (uuid: string, itemId: string) => {
+    try {
+      const res = await fetch(`/frontend-api/nft/burn/status/${uuid}`, { cache: 'no-store' });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.signed) {
+        clearBurnPoll();
+        removeBurnedNft(itemId);
+        setBurnPhase('success');
+        burnUuidRef.current   = null;
+        burnItemIdRef.current = null;
+        return;
+      }
+      if (data.cancelled || data.expired) {
+        clearBurnPoll();
+        setBurnPhase('error');
+        setBurnError(data.cancelled ? 'Burn was cancelled.' : 'Burn request expired — please try again.');
+        burnUuidRef.current   = null;
+        burnItemIdRef.current = null;
+      }
+    } catch { /* network error — keep polling */ }
+  }, [clearBurnPoll, removeBurnedNft]);
+
+  const startNftBurn = useCallback(async (item: InventoryItem) => {
+    if (!item.nftTokenId) return;
+    setBurnConfirmItem(null);
+    setBurnItemId(item.id);
+    setBurnPhase('loading');
+    setBurnError(null);
+    clearBurnPoll();
+    try {
+      const res = await fetch('/frontend-api/nft/burn', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          wallet: state.walletAddress,
+          itemId: item.id,
+          itemName: item.name,
+          itemRarity: item.rarity,
+          nftTokenId: item.nftTokenId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.uuid) throw new Error(data.error || 'Failed to create burn request');
+      const { uuid, deeplink, qr_png } = data;
+      burnUuidRef.current   = uuid;
+      burnItemIdRef.current = item.id;
+      setBurnUuid(uuid);
+      setBurnDeeplink(deeplink);
+      setBurnQr(qr_png);
+      setBurnPhase('waiting');
+      if (deeplink) {
+        const twa = typeof window !== 'undefined' ? (window as any).Telegram?.WebApp : null;
+        if (twa?.openLink) {
+          twa.openLink(deeplink);
+        } else if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+          const w = window.open(deeplink, '_blank', 'noopener,noreferrer');
+          if (!w) window.location.href = deeplink;
+        }
+      }
+      burnPollRef.current = setInterval(() => doPollBurn(uuid, item.id), 2500);
+    } catch (err: any) {
+      setBurnPhase('error');
+      setBurnError(err.message || 'Burn failed');
+    }
+  }, [clearBurnPoll, doPollBurn, state.walletAddress]);
 
   const MINT_UUID_KEY       = 'ds_mint_uuid';
   const MINT_ITEMID_KEY     = 'ds_mint_item_id';
@@ -712,7 +810,9 @@ export default function ExpeditionTab() {
                 onMint={() => startMint(item)}
                 mintPhase={mintItemId === item.id ? mintPhase : 'idle'}
                 onClearNft={item.nftTokenId ? () => clearItemNftTokenId(item.id) : undefined}
-                onBurn={() => burnInventoryItem(item.id)}
+                onBurn={item.nftTokenId
+                  ? (state.walletAddress ? () => setBurnConfirmItem(item) : undefined)
+                  : () => burnInventoryItem(item.id)}
               />
             ))}
           </div>
@@ -1347,6 +1447,79 @@ export default function ExpeditionTab() {
                   ⚔️ Claim Boost
                 </button>
               </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── NFT Burn Confirm Modal ───────────────────────────────────── */}
+      {burnConfirmItem && burnPhase === 'idle' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: 'rgba(0,0,0,0.92)' }}>
+          <div className="w-full max-w-xs rounded-2xl p-5 flex flex-col gap-4" style={{ background: '#160604', border: '1px solid rgba(248,113,113,0.45)', boxShadow: '0 0 40px rgba(248,113,113,0.12)' }}>
+            <p className="font-cinzel font-bold text-[#f87171] text-sm tracking-widest text-center">🔥 BURN NFT</p>
+            <div className="flex items-center gap-3">
+              <img src={getItemImage(burnConfirmItem.name)} alt={burnConfirmItem.name}
+                className="w-16 h-16 object-contain rounded-xl" style={{ border: '1px solid rgba(248,113,113,0.3)' }}
+                onError={e => { (e.target as HTMLImageElement).style.opacity = '0'; }} />
+              <div className="flex flex-col gap-1">
+                <p className="font-cinzel font-bold text-[#e8d8a8] text-[13px]">{burnConfirmItem.name}</p>
+                <p className="text-[#9a8a6a] text-[10px]">⚡ {burnConfirmItem.power} power · {burnConfirmItem.rarity}</p>
+                <span className="text-[7px] font-bold px-1.5 py-0.5 rounded w-fit" style={{ background: 'rgba(240,192,64,0.2)', color: '#f0c040' }}>✨ NFT on XRPL</span>
+              </div>
+            </div>
+            <div className="rounded-xl p-3" style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)' }}>
+              <p className="text-[10px] text-[#f87171] font-bold mb-1">⚠️ This action is permanent</p>
+              <p className="text-[9px] text-[#9a8a6a] leading-relaxed">The NFT will be destroyed on-chain via XRPL <code>NFTokenBurn</code>. Sign in Xaman to confirm. This cannot be undone.</p>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setBurnConfirmItem(null)}
+                className="flex-1 py-2 rounded-xl text-[10px] font-bold"
+                style={{ background: 'rgba(255,255,255,0.05)', color: '#6b5a3a' }}>Cancel</button>
+              <button onClick={() => startNftBurn(burnConfirmItem)}
+                className="flex-1 py-2 rounded-xl text-[10px] font-bold"
+                style={{ background: 'linear-gradient(135deg,#7f1d1d,#f87171)', color: '#fff' }}>🔥 Open Xaman</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── NFT Burn Status Panel ─────────────────────────────────────── */}
+      {(burnPhase === 'loading' || burnPhase === 'waiting' || burnPhase === 'success' || burnPhase === 'error') && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: 'rgba(0,0,0,0.92)' }}>
+          <div className="w-full max-w-xs rounded-2xl p-5 flex flex-col gap-4" style={{ background: '#160604', border: '1px solid rgba(248,113,113,0.45)' }}>
+            <p className="font-cinzel font-bold text-[#f87171] text-sm tracking-widest text-center">🔥 NFT BURN</p>
+            {burnPhase === 'loading' && <p className="text-center text-[#c8b87a] text-[11px]">⏳ Creating burn request…</p>}
+            {burnPhase === 'waiting' && (
+              <div className="flex flex-col gap-3 items-center">
+                <p className="text-[11px] text-[#c8b87a] text-center">Sign in Xaman to burn this NFT on-chain.</p>
+                {burnQr && <img src={burnQr} alt="QR" className="w-36 h-36 rounded-xl" />}
+                {burnDeeplink && (
+                  <a href={burnDeeplink} target="_blank" rel="noopener noreferrer"
+                    className="w-full py-2 rounded-xl text-center text-[10px] font-bold"
+                    style={{ background: 'linear-gradient(135deg,#7f1d1d,#f87171)', color: '#fff' }}>Open Xaman</a>
+                )}
+                <p className="text-[9px] text-[#6b5a3a] text-center">Polling for signature…</p>
+              </div>
+            )}
+            {burnPhase === 'success' && (
+              <div className="flex flex-col gap-2 items-center">
+                <span className="text-3xl">🔥</span>
+                <p className="text-[#4ade80] font-bold text-[12px] text-center">NFT burned on-chain!</p>
+                <p className="text-[9px] text-[#6b5a3a] text-center">The item has been removed from your inventory.</p>
+              </div>
+            )}
+            {burnPhase === 'error' && (
+              <div className="flex flex-col gap-2 items-center">
+                <p className="text-[#f87171] font-bold text-[11px] text-center">{burnError}</p>
+              </div>
+            )}
+            {(burnPhase === 'success' || burnPhase === 'error') && (
+              <button onClick={cancelBurn} className="w-full py-2 rounded-xl text-[10px] font-bold"
+                style={{ background: 'rgba(255,255,255,0.07)', color: '#c8b87a' }}>Close</button>
+            )}
+            {burnPhase === 'waiting' && (
+              <button onClick={cancelBurn} className="w-full py-1.5 rounded-xl text-[9px] font-bold"
+                style={{ background: 'rgba(255,255,255,0.04)', color: '#4a3a2a' }}>Cancel</button>
             )}
           </div>
         </div>
