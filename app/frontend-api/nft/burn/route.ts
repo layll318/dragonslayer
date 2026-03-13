@@ -28,10 +28,6 @@ export async function POST(request: NextRequest) {
     const rarityLabel = itemRarity ? itemRarity.charAt(0).toUpperCase() + itemRarity.slice(1) : 'Legendary';
     const instruction = `Permanently burn "${itemName ?? 'item'}" NFT (${rarityLabel}) — this destroys it on-chain and cannot be undone.`;
 
-    const origin = request.headers.get('origin') || 'https://dragonslayer-production.up.railway.app';
-    const cleanOrigin = origin.replace(/\/$/, '').split('/').slice(0, 3).join('/');
-    const returnUrl = `${cleanOrigin}/`;
-
     const res = await fetch(`${XAMAN_BASE}/payload`, {
       method: 'POST',
       headers: {
@@ -48,7 +44,6 @@ export async function POST(request: NextRequest) {
         options: {
           submit: true,
           force_network: 'MAINNET',
-          return_url: { app: returnUrl, web: returnUrl },
         },
         custom_meta: {
           instruction,

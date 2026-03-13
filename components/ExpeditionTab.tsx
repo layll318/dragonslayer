@@ -236,6 +236,7 @@ export default function ExpeditionTab() {
     dismissCraftingV2Modal,
     removeBurnedNft,
     addDragonSouls,
+    forceSave,
   } = useGame();
 
   const AD_VIDEOS = [
@@ -282,8 +283,9 @@ export default function ExpeditionTab() {
   const [burnError, setBurnError] = useState<string | null>(null);
   const [burnItemId, setBurnItemId] = useState<string | null>(null);
   const burnPollRef  = useRef<ReturnType<typeof setInterval> | null>(null);
-  const burnUuidRef  = useRef<string | null>(null);
-  const burnItemIdRef = useRef<string | null>(null);
+  const burnUuidRef        = useRef<string | null>(null);
+  const burnItemIdRef       = useRef<string | null>(null);
+  const burnNftTokenIdRef   = useRef<string | null>(null);
 
   // ── Dragon Souls purchase state ───────────────────────────────────────────
   const [soulsPhase, setSoulsPhase] = useState<'idle'|'loading'|'waiting'|'success'|'error'>('idle');
@@ -383,6 +385,14 @@ export default function ExpeditionTab() {
         setBurnPhase('success');
         burnUuidRef.current   = null;
         burnItemIdRef.current = null;
+        const nftTokenId = burnNftTokenIdRef.current;
+        burnNftTokenIdRef.current = null;
+        // Persist removal immediately and clean up player_nfts
+        forceSave().catch(() => {});
+        if (nftTokenId) {
+          const apiBase = process.env.NEXT_PUBLIC_API_URL || 'https://dragonslayer-production.up.railway.app';
+          fetch(`${apiBase}/api/nft/player-nft/${nftTokenId}`, { method: 'DELETE' }).catch(() => {});
+        }
         return;
       }
       if (data.cancelled || data.expired) {
@@ -402,6 +412,7 @@ export default function ExpeditionTab() {
     setBurnPhase('loading');
     setBurnError(null);
     clearBurnPoll();
+    burnNftTokenIdRef.current = item.nftTokenId ?? null;
     try {
       const res = await fetch('/frontend-api/nft/burn', {
         method: 'POST',

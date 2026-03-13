@@ -215,8 +215,9 @@ def _render_item_card(
 
     # ── Fonts: system TTFs (nixpacks installs fonts-dejavu-core) then Pillow default
     font_paths = [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",     # nixpacks: fonts-dejavu-core
-        "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",               # some distros
+        "/tmp/DejaVuSans-Bold.ttf",                                   # downloaded at startup
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",      # nixpacks: fonts-dejavu-core
+        "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",                # some distros
         "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
         "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -373,6 +374,21 @@ async def server_mint_item(request: Request):
         raise
     except Exception as e:
         logger.exception("server_mint_item error")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/player-nft/{nft_token_id}")
+async def delete_player_nft(nft_token_id: str):
+    """Called by the frontend after on-chain NFTokenBurn is confirmed to clean up player_nfts."""
+    try:
+        pool = get_pool()
+        async with pool.acquire() as conn:
+            await conn.execute(
+                "DELETE FROM player_nfts WHERE nft_token_id=$1", nft_token_id
+            )
+        return {"success": True}
+    except Exception as e:
+        logger.exception("delete_player_nft error token=%s", nft_token_id)
         raise HTTPException(status_code=500, detail=str(e))
 
 

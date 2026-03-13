@@ -24,15 +24,31 @@ DATABASE_URL = os.getenv("DATABASE_URL", "")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 
+_FONT_URL  = "https://github.com/dejavu-fonts/dejavu-fonts/raw/main/ttf/DejaVuSans-Bold.ttf"
+_FONT_PATH = "/tmp/DejaVuSans-Bold.ttf"
+
+
+def _ensure_font() -> None:
+    import pathlib, urllib.request
+    if pathlib.Path(_FONT_PATH).exists():
+        return
+    try:
+        urllib.request.urlretrieve(_FONT_URL, _FONT_PATH)
+        logger.info("Font downloaded to %s", _FONT_PATH)
+    except Exception:
+        logger.warning("Font download failed — Pillow will use default bitmap font")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if not DATABASE_URL:
         raise RuntimeError("DATABASE_URL env var is required")
+    _ensure_font()
     await init_db(DATABASE_URL)
-    logger.info("🚀 DragonSlayer API started")
+    logger.info("DragonSlayer API started")
     yield
     await close_db()
-    logger.info("🛑 DragonSlayer API stopped")
+    logger.info("DragonSlayer API stopped")
 
 
 app = FastAPI(
