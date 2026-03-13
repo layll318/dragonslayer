@@ -76,14 +76,13 @@ async def upsert_save(player_id: int, req: SaveRequest):
         row = await conn.fetchrow(
             "SELECT save_json FROM game_saves WHERE player_id=$1", player_id
         )
+        # Sync player_nfts table for any minted items whose stats changed
+        asyncio.create_task(_sync_nft_items(player_id, req.save_json))
         return SaveResponse(
             success=True,
             player_id=player_id,
             save_json=_to_dict(row["save_json"]) if row else None,
         )
-
-    # Sync player_nfts table for any minted items whose stats changed
-    asyncio.create_task(_sync_nft_items(player_id, req.save_json))
 
 
 async def _sync_nft_items(player_id: int, save_json: dict) -> None:

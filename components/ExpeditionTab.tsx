@@ -514,13 +514,16 @@ export default function ExpeditionTab() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          wallet: state.walletAddress,
-          itemId: item.id,
-          itemName: item.name,
-          itemRarity: item.rarity,
-          itemPower: item.power,
-          itemType: item.itemType,
-          playerId: state.playerId,
+          wallet:       state.walletAddress,
+          itemId:       item.id,
+          itemName:     item.name,
+          itemRarity:   item.rarity,
+          itemPower:    item.power,
+          itemType:     item.itemType,
+          playerId:     state.playerId,
+          itemLevel:    item.itemLevel    ?? 25,
+          enchantId:    item.enchantId    ?? '',
+          reforgeLevel: item.reforgeLevel ?? 0,
         }),
       });
       const data = await res.json();

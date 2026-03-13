@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import pathlib
+import re
 import aiohttp
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
@@ -398,6 +399,13 @@ async def server_mint_item(request: Request):
     item_id = body.get("item_id")
     item_name = body.get("item_name", "")
     player_wallet = body.get("player_wallet")
+    # Full item fields — used to store accurate item_data at mint time
+    item_rarity      = body.get("item_rarity", "legendary")
+    item_type        = body.get("item_type", "weapon")
+    item_power       = int(body.get("item_power", 0))
+    item_level       = int(body.get("item_level", 25))
+    enchant_id       = body.get("enchant_id", "") or ""
+    reforge_level    = int(body.get("reforge_level", 0))
 
     if not player_id or not item_id or not player_wallet:
         raise HTTPException(status_code=400, detail="Missing player_id, item_id, or player_wallet")
@@ -405,9 +413,9 @@ async def server_mint_item(request: Request):
     if not XRPL_WALLET_SEED:
         raise HTTPException(status_code=500, detail="XRPL_WALLET_SEED not configured on server")
 
-    # Use a readable slug in the URI so the metadata endpoint can resolve the image
-    # even if the DB save hasn't been synced yet.
-    item_slug = item_name.strip().lower().replace(" ", "_") if item_name else item_id
+    # Sanitize slug: strip apostrophes + any non-alphanumeric/underscore chars
+    raw_slug = item_name.strip().lower().replace(" ", "_") if item_name else item_id
+    item_slug = re.sub(r"[^a-z0-9_]", "", raw_slug)
     meta_url = f"{BACKEND_URL}/api/nft/item/{player_id}/{item_slug}"
     uri_hex = meta_url.encode("utf-8").hex().upper()
 
@@ -451,6 +459,18 @@ async def server_mint_item(request: Request):
             raise HTTPException(status_code=500, detail="Failed to get offer index")
 
         # Save to player_nfts table (best-effort — don't fail the mint)
+        full_item_data = {
+            "id":           item_id,
+            "name":         item_name,
+            "rarity":       item_rarity,
+            "itemType":     item_type,
+            "power":        item_power,
+            "itemLevel":    item_level,
+            "enchantId":    enchant_id,
+            "reforgeLevel": reforge_level,
+            "player_id":    int(player_id),
+            "nftTokenId":   nft_token_id,
+        }
         try:
             pool = get_pool()
             async with pool.acquire() as conn:
@@ -464,7 +484,7 @@ async def server_mint_item(request: Request):
                           updated_at=NOW()
                     """,
                     nft_token_id, int(player_id), item_id, item_name,
-                    json.dumps({"name": item_name, "id": item_id, "player_id": player_id}),
+                    json.dumps(full_item_data),
                 )
         except Exception:
             logger.exception("player_nfts insert failed for token=%s", nft_token_id)
@@ -481,28 +501,45 @@ async def server_mint_item(request: Request):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _slug(text: str) -> str:
+    """Normalise a name/id to a clean URL slug matching what server_mint_item generates."""
+    return re.sub(r"[^a-z0-9_]", "", text.strip().lower().replace(" ", "_"))
+
+
 @router.get("/item/{player_id}/{item_id}")
 async def get_nft_item_metadata(player_id: int, item_id: str):
     """
     XRPL NFT metadata for a crafted legendary item.
     The mint URI points here: /api/nft/item/{player_id}/{item_id}
+    DB (player_nfts) is the primary source of truth; game_saves is the fallback.
     """
     try:
         pool = get_pool()
         async with pool.acquire() as conn:
-            save = await conn.fetchrow(
-                "SELECT save_json FROM game_saves WHERE player_id=$1",
-                player_id,
+            # Primary: player_nfts table (always up-to-date via save sync)
+            nft_row = await conn.fetchrow(
+                """
+                SELECT item_data FROM player_nfts
+                 WHERE player_id=$1 AND (item_id=$2 OR item_id=$3)
+                 LIMIT 1
+                """,
+                player_id, item_id, _slug(item_id),
             )
+            save = None
+            if not nft_row:
+                save = await conn.fetchrow(
+                    "SELECT save_json FROM game_saves WHERE player_id=$1", player_id
+                )
 
         def _matches(candidate: dict) -> bool:
-            if str(candidate.get("id", "")) == item_id:
+            if _slug(str(candidate.get("id", ""))) == _slug(item_id):
                 return True
-            name_slug = candidate.get("name", "").strip().lower().replace(" ", "_")
-            return name_slug == item_id
+            return _slug(candidate.get("name", "")) == _slug(item_id)
 
         item = None
-        if save and save["save_json"]:
+        if nft_row:
+            item = _to_dict(nft_row["item_data"])
+        elif save and save["save_json"]:
             s = _to_dict(save["save_json"])
             for inv_item in (s.get("inventory") or []):
                 if _matches(inv_item):
@@ -582,9 +619,8 @@ async def get_nft_item_metadata(player_id: int, item_id: str):
 async def render_nft_item_image(player_id: int, item_id: str):
     """
     Dynamically renders a 600×600 PNG for a crafted item card.
-    Overlays rarity border, item name, level, power and enchant onto
-    the base artwork using Pillow.  Falls back to a redirect to the
-    static artwork if Pillow is unavailable.
+    DB (player_nfts) is the primary source of truth for item stats.
+    Falls back to game_saves, then to a static image redirect.
     """
     if not PILLOW_AVAILABLE:
         static = ITEM_IMAGE_BY_ID.get(item_id, PLACEHOLDER_IMAGE)
@@ -594,26 +630,35 @@ async def render_nft_item_image(player_id: int, item_id: str):
     try:
         pool = get_pool()
         async with pool.acquire() as conn:
-            save = await conn.fetchrow(
-                "SELECT save_json FROM game_saves WHERE player_id=$1",
-                player_id,
+            # Primary: player_nfts (always current via save sync)
+            nft_row = await conn.fetchrow(
+                """
+                SELECT item_data FROM player_nfts
+                 WHERE player_id=$1 AND (item_id=$2 OR item_id=$3)
+                 LIMIT 1
+                """,
+                player_id, item_id, _slug(item_id),
             )
-
-        def _matches(candidate: dict) -> bool:
-            if str(candidate.get("id", "")) == item_id:
-                return True
-            return candidate.get("name", "").strip().lower().replace(" ", "_") == item_id
+            save = None
+            if not nft_row:
+                save = await conn.fetchrow(
+                    "SELECT save_json FROM game_saves WHERE player_id=$1", player_id
+                )
 
         item = None
-        if save and save["save_json"]:
+        if nft_row:
+            item = _to_dict(nft_row["item_data"])
+        elif save and save["save_json"]:
             s = _to_dict(save["save_json"])
             for it in (s.get("inventory") or []):
-                if _matches(it):
+                if _slug(str(it.get("id", ""))) == _slug(item_id) or \
+                   _slug(it.get("name", "")) == _slug(item_id):
                     item = it
                     break
             if not item:
                 for it in (s.get("equipment") or {}).values():
-                    if it and _matches(it):
+                    if it and (_slug(str(it.get("id", ""))) == _slug(item_id) or
+                               _slug(it.get("name", "")) == _slug(item_id)):
                         item = it
                         break
 

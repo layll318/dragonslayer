@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json().catch(() => ({}));
-    const { wallet, itemId, itemName, itemRarity, itemPower, itemType, playerId } = body as {
+    const { wallet, itemId, itemName, itemRarity, itemPower, itemType, playerId, itemLevel, enchantId, reforgeLevel } = body as {
       wallet?: string;
       itemId?: string;
       itemName?: string;
@@ -22,6 +22,9 @@ export async function POST(request: NextRequest) {
       itemPower?: number;
       itemType?: string;
       playerId?: number | string;
+      itemLevel?: number;
+      enchantId?: string;
+      reforgeLevel?: number;
     };
 
     if (!itemId || !itemName || !wallet || !playerId) {
@@ -32,7 +35,18 @@ export async function POST(request: NextRequest) {
     const mintRes = await fetch(`${BACKEND_URL}/api/nft/mint-item`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ player_id: playerId, item_id: itemId, item_name: itemName, player_wallet: wallet }),
+      body: JSON.stringify({
+        player_id:     playerId,
+        item_id:       itemId,
+        item_name:     itemName,
+        player_wallet: wallet,
+        item_rarity:   itemRarity   ?? 'legendary',
+        item_type:     itemType     ?? 'weapon',
+        item_power:    itemPower    ?? 0,
+        item_level:    itemLevel    ?? 25,
+        enchant_id:    enchantId    ?? '',
+        reforge_level: reforgeLevel ?? 0,
+      }),
     });
     if (!mintRes.ok) {
       const err = await mintRes.text();
