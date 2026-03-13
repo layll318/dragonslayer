@@ -451,8 +451,6 @@ async def get_nft_item_metadata(player_id: int, item_id: str):
             fallback_img  = ITEM_IMAGE_BY_ID.get(item_id, PLACEHOLDER_IMAGE)
             fallback_name = ITEM_NAME_BY_ID.get(item_id, item_id.replace("_", " ").title())
             return {
-                "schema": "ipfs://QmNpi8rcXEkohca8iXu7zysKKSJYqCvBJn3xJwga8jXqWU",
-                "nftType": "art.v0",
                 "name": fallback_name,
                 "description": "Legendary DragonSlayer item · Minted on XRPL",
                 "image": fallback_img,
@@ -488,8 +486,6 @@ async def get_nft_item_metadata(player_id: int, item_id: str):
             attributes.append({"trait_type": "Reforge Level", "value": reforge_level})
 
         return {
-            "schema": "ipfs://QmNpi8rcXEkohca8iXu7zysKKSJYqCvBJn3xJwga8jXqWU",
-            "nftType": "art.v0",
             "name": name,
             "description": f"{rarity.title()} DragonSlayer {item_type} - Power {power} - Level {item_level} - Minted on XRPL",
             "image": image,
@@ -500,8 +496,6 @@ async def get_nft_item_metadata(player_id: int, item_id: str):
     except Exception as e:
         logger.exception("get_nft_item_metadata error for player=%s item=%s", player_id, item_id)
         return {
-            "schema": "ipfs://QmNpi8rcXEkohca8iXu7zysKKSJYqCvBJn3xJwga8jXqWU",
-            "nftType": "art.v0",
             "name": "DragonSlayer Item",
             "description": "A legendary DragonSlayer item.",
             "image": PLACEHOLDER_IMAGE,
@@ -625,8 +619,6 @@ async def get_nft_by_token_id(nft_token_id: str):
                 attributes.append({"trait_type": "Reforge Level", "value": reforge})
 
             return {
-                "schema": "ipfs://QmNpi8rcXEkohca8iXu7zysKKSJYqCvBJn3xJwga8jXqWU",
-                "nftType": "art.v0",
                 "name": name,
                 "description": f"{rarity.title()} DragonSlayer {item_type} - Power {power} - Lv {item_level} - Minted on XRPL",
                 "image": image,
@@ -638,8 +630,6 @@ async def get_nft_by_token_id(nft_token_id: str):
         logger.exception("get_nft_by_token_id error token=%s", nft_token_id)
 
     return {
-        "schema": "ipfs://QmNpi8rcXEkohca8iXu7zysKKSJYqCvBJn3xJwga8jXqWU",
-        "nftType": "art.v0",
         "name": "DragonSlayer Item",
         "description": "A DragonSlayer item NFT.",
         "image": PLACEHOLDER_IMAGE,
@@ -666,8 +656,6 @@ async def get_nft_metadata(token_id: str):
 
         if not player:
             return {
-                "schema": "ipfs://QmNpi8rcXEkohca8iXu7zysKKSJYqCvBJn3xJwga8jXqWU",
-                "nftType": "art.v0",
                 "name": "DragonSlayer — Placeholder",
                 "description": "A DragonSlayer fighter NFT. Art coming soon.",
                 "image": PLACEHOLDER_IMAGE,
@@ -686,8 +674,6 @@ async def get_nft_metadata(token_id: str):
 
         if not save or not save["save_json"]:
             return {
-                "schema": "ipfs://QmNpi8rcXEkohca8iXu7zysKKSJYqCvBJn3xJwga8jXqWU",
-                "nftType": "art.v0",
                 "name": f"DragonSlayer — {username}",
                 "description": "A DragonSlayer fighter NFT.",
                 "image": PLACEHOLDER_IMAGE,
@@ -716,8 +702,6 @@ async def get_nft_metadata(token_id: str):
             return f"{prefix}{item.get('rarity', '').title()} {name}{suffix}"
 
         return {
-            "schema": "ipfs://QmNpi8rcXEkohca8iXu7zysKKSJYqCvBJn3xJwga8jXqWU",
-            "nftType": "art.v0",
             "name": f"DragonSlayer #{player_id} - {username}",
             "description": (
                 f"Level {level} DragonSlayer - "
