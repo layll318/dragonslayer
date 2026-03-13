@@ -85,23 +85,23 @@ def render(name, rarity, power, item_level, enchant_id, reforge_level, image_fil
 
 # All mintable items (commons skipped — never minted)
 SAMPLES = [
-    # ── Legendary ──
-    dict(name="Lynx Sword",         rarity="legendary", power=98,  item_level=25, enchant_id="weapon_rare",  reforge_level=0, image_file="lynxsword.png"),
-    dict(name="Nomic Shield",       rarity="legendary", power=95,  item_level=25, enchant_id="shield_rare", reforge_level=0, image_file="nomicsshield.png"),
-    dict(name="Infernal Crown",     rarity="legendary", power=90,  item_level=25, enchant_id="",            reforge_level=0, image_file="nft/helm_infernal_crown.png"),
-    dict(name="Dragon Plate",       rarity="legendary", power=100, item_level=25, enchant_id="",            reforge_level=0, image_file="nft/armor_dragonscale.png"),
-    dict(name="Dragon's Eye",       rarity="legendary", power=85,  item_level=25, enchant_id="",            reforge_level=0, image_file="nft/ring_dragons_seal.png"),
-    dict(name="Void Blade",         rarity="legendary", power=118, item_level=40, enchant_id="weapon_rare",  reforge_level=1, image_file="nft/weapon_dragon_fang.png"),
-    dict(name="Dragon's Aegis",     rarity="legendary", power=115, item_level=40, enchant_id="shield_rare", reforge_level=1, image_file="nft/shield_aegis.png"),
-    dict(name="Eternal Ring",       rarity="legendary", power=105, item_level=40, enchant_id="ring_unique", reforge_level=1, image_file="nft/ring_ancient_sigil.png"),
-    dict(name="Dragonslayer Blade", rarity="legendary", power=130, item_level=55, enchant_id="",            reforge_level=2, image_file="lynxsword.png"),
-    dict(name="Nomic Fortress",     rarity="legendary", power=125, item_level=55, enchant_id="",            reforge_level=2, image_file="nomicsshield.png"),
-    # ── Epic (T4) ──
-    dict(name="Dragon Fang",        rarity="epic",      power=30,  item_level=8,  enchant_id="",            reforge_level=0, image_file="nft/weapon_dragon_fang.png"),
-    dict(name="Aegis",              rarity="epic",      power=26,  item_level=7,  enchant_id="",            reforge_level=0, image_file="nft/shield_aegis.png"),
-    dict(name="Demon Helm",         rarity="epic",      power=24,  item_level=9,  enchant_id="",            reforge_level=0, image_file="nft/helm_demon.png"),
-    dict(name="Infernal Plate",     rarity="epic",      power=34,  item_level=10, enchant_id="",            reforge_level=0, image_file="nft/armor_infernal_plate.png"),
-    dict(name="Ancient Sigil",      rarity="epic",      power=22,  item_level=6,  enchant_id="ring_unique", reforge_level=0, image_file="nft/ring_ancient_sigil.png"),
+    # ── Legendary (unique art per item) ──
+    dict(name="Lynx Sword",         rarity="legendary", power=98,  item_level=25, enchant_id="weapon_rare",  reforge_level=0, image_file="nft/lynx_sword.png"),
+    dict(name="Nomic Shield",       rarity="legendary", power=95,  item_level=25, enchant_id="shield_rare",  reforge_level=0, image_file="nft/nomic_shield.png"),
+    dict(name="Infernal Crown",     rarity="legendary", power=90,  item_level=25, enchant_id="",             reforge_level=0, image_file="nft/infernal_crown_legendary.png"),
+    dict(name="Dragon Plate",       rarity="legendary", power=100, item_level=25, enchant_id="",             reforge_level=0, image_file="nft/dragon_plate.png"),
+    dict(name="Dragon's Eye",       rarity="legendary", power=85,  item_level=25, enchant_id="",             reforge_level=0, image_file="nft/dragons_eye.png"),
+    dict(name="Void Blade",         rarity="legendary", power=118, item_level=40, enchant_id="weapon_rare",  reforge_level=1, image_file="nft/void_blade.png"),
+    dict(name="Dragon's Aegis",     rarity="legendary", power=115, item_level=40, enchant_id="shield_rare",  reforge_level=1, image_file="nft/dragons_aegis.png"),
+    dict(name="Eternal Ring",       rarity="legendary", power=105, item_level=40, enchant_id="ring_unique",  reforge_level=1, image_file="nft/eternal_ring.png"),
+    dict(name="Dragonslayer Blade", rarity="legendary", power=130, item_level=55, enchant_id="",             reforge_level=2, image_file="nft/dragonslayer_blade.png"),
+    dict(name="Nomic Fortress",     rarity="legendary", power=125, item_level=55, enchant_id="",             reforge_level=2, image_file="nft/nomic_fortress.png"),
+    # ── Epic / T4 (unique art per item) ──
+    dict(name="Dragon Fang",        rarity="epic",      power=30,  item_level=8,  enchant_id="",             reforge_level=0, image_file="nft/dragon_fang.png"),
+    dict(name="Aegis",              rarity="epic",      power=26,  item_level=7,  enchant_id="",             reforge_level=0, image_file="nft/aegis.png"),
+    dict(name="Demon Helm",         rarity="epic",      power=24,  item_level=9,  enchant_id="",             reforge_level=0, image_file="nft/demon_helm.png"),
+    dict(name="Infernal Plate",     rarity="epic",      power=34,  item_level=10, enchant_id="",             reforge_level=0, image_file="nft/infernal_plate.png"),
+    dict(name="Ancient Sigil",      rarity="epic",      power=22,  item_level=6,  enchant_id="ring_unique",  reforge_level=0, image_file="nft/ancient_sigil.png"),
     # ── Rare (T3) ──
     dict(name="Flame Blade",        rarity="rare",      power=18,  item_level=5,  enchant_id="",            reforge_level=0, image_file="nft/weapon_flame_blade.png"),
     dict(name="Dragon Shield",      rarity="rare",      power=16,  item_level=4,  enchant_id="",            reforge_level=0, image_file="nft/shield_dragon.png"),

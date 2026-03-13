@@ -59,24 +59,23 @@ type MintPhase = 'idle' | 'loading' | 'waiting' | 'success' | 'error';
 const BURN_SOUL_YIELD: Record<string, number> = { common: 2, uncommon: 4, rare: 6, epic: 10, legendary: 20 };
 
 const ITEM_IMAGE_BY_NAME: Record<string, string> = {
-  // Legendary — unique root-level art
-  'Lynx Sword':         '/images/lynxsword.png',
-  'Nomic Shield':       '/images/nomicsshield.png',
-  'Void Blade':         '/images/nft/weapon_dragon_fang.png',
-  "Dragon's Aegis":     '/images/nft/shield_aegis.png',
-  'Dragonslayer Blade': '/images/lynxsword.png',
-  'Nomic Fortress':     '/images/nomicsshield.png',
-  // Legendary — nft subfolder art
-  'Infernal Crown':     '/images/nft/helm_infernal_crown.png',
-  'Dragon Plate':       '/images/nft/armor_dragonscale.png',
-  "Dragon's Eye":       '/images/nft/ring_dragons_seal.png',
-  'Eternal Ring':       '/images/nft/ring_ancient_sigil.png',
-  // Epic (T4)
-  'Dragon Fang':        '/images/nft/weapon_dragon_fang.png',
-  'Aegis':              '/images/nft/shield_aegis.png',
-  'Demon Helm':         '/images/nft/helm_demon.png',
-  'Infernal Plate':     '/images/nft/armor_infernal_plate.png',
-  'Ancient Sigil':      '/images/nft/ring_ancient_sigil.png',
+  // Legendary — unique art per item
+  'Lynx Sword':         '/images/nft/lynx_sword.png',
+  'Nomic Shield':       '/images/nft/nomic_shield.png',
+  'Void Blade':         '/images/nft/void_blade.png',
+  "Dragon's Aegis":     '/images/nft/dragons_aegis.png',
+  'Dragonslayer Blade': '/images/nft/dragonslayer_blade.png',
+  'Nomic Fortress':     '/images/nft/nomic_fortress.png',
+  'Infernal Crown':     '/images/nft/infernal_crown_legendary.png',
+  'Dragon Plate':       '/images/nft/dragon_plate.png',
+  "Dragon's Eye":       '/images/nft/dragons_eye.png',
+  'Eternal Ring':       '/images/nft/eternal_ring.png',
+  // Epic (T4) — unique art per item
+  'Dragon Fang':        '/images/nft/dragon_fang.png',
+  'Aegis':              '/images/nft/aegis.png',
+  'Demon Helm':         '/images/nft/demon_helm.png',
+  'Infernal Plate':     '/images/nft/infernal_plate.png',
+  'Ancient Sigil':      '/images/nft/ancient_sigil.png',
   // Rare (T3)
   'Flame Blade':        '/images/nft/weapon_flame_blade.png',
   'Dragon Shield':      '/images/nft/shield_dragon.png',

@@ -46,37 +46,38 @@ _NFT  = f"{BACKEND_URL}/images/nft"
 _ROOT = f"{BACKEND_URL}/images"
 
 # Human name → image filename (local file under backend/images/)
+# Legendary + Epic each have a UNIQUE filename — drop real art at that path to go live.
+# Rare / Uncommon / Common share generic tier art (never NFT-minted).
 _IMAGE_FILE: dict[str, str] = {
-    # Legendary — root-level art
-    "Lynx Sword":          "lynxsword.png",
-    "Nomic Shield":        "nomicsshield.png",
-    "Void Blade":          "nft/weapon_dragon_fang.png",
-    "Dragon's Aegis":      "nft/shield_aegis.png",
-    "Dragonslayer Blade":  "lynxsword.png",
-    "Nomic Fortress":      "nomicsshield.png",
-    # Legendary — nft subfolder art
-    "Infernal Crown":      "nft/helm_infernal_crown.png",
-    "Dragon Plate":        "nft/armor_dragonscale.png",
-    "Dragon's Eye":        "nft/ring_dragons_seal.png",
-    "Eternal Ring":        "nft/ring_ancient_sigil.png",
-    # Epic (T4)
-    "Dragon Fang":         "nft/weapon_dragon_fang.png",
-    "Aegis":               "nft/shield_aegis.png",
-    "Demon Helm":          "nft/helm_demon.png",
-    "Infernal Plate":      "nft/armor_infernal_plate.png",
-    "Ancient Sigil":       "nft/ring_ancient_sigil.png",
-    # Rare (T3)
+    # ── Legendary (unique art per item) ──────────────────────────────────────
+    "Lynx Sword":          "nft/lynx_sword.png",
+    "Nomic Shield":        "nft/nomic_shield.png",
+    "Void Blade":          "nft/void_blade.png",
+    "Dragon's Aegis":      "nft/dragons_aegis.png",
+    "Dragonslayer Blade":  "nft/dragonslayer_blade.png",
+    "Nomic Fortress":      "nft/nomic_fortress.png",
+    "Infernal Crown":      "nft/infernal_crown_legendary.png",
+    "Dragon Plate":        "nft/dragon_plate.png",
+    "Dragon's Eye":        "nft/dragons_eye.png",
+    "Eternal Ring":        "nft/eternal_ring.png",
+    # ── Epic / T4 (unique art per item) ──────────────────────────────────────
+    "Dragon Fang":         "nft/dragon_fang.png",
+    "Aegis":               "nft/aegis.png",
+    "Demon Helm":          "nft/demon_helm.png",
+    "Infernal Plate":      "nft/infernal_plate.png",
+    "Ancient Sigil":       "nft/ancient_sigil.png",
+    # ── Rare / T3 ─────────────────────────────────────────────────────────────
     "Flame Blade":         "nft/weapon_flame_blade.png",
     "Dragon Shield":       "nft/shield_dragon.png",
     "Dragonscale Armor":   "nft/armor_dragonscale.png",
     "Dragon's Seal":       "nft/ring_dragons_seal.png",
-    # Uncommon (T2)
+    # ── Uncommon / T2 ────────────────────────────────────────────────────────
     "Steel Sword":         "nft/weapon_steel_sword.png",
     "Iron Shield":         "nft/shield_iron.png",
     "Scale Helm":          "nft/helm_scale.png",
     "Chain Armor":         "nft/armor_chain.png",
     "Flame Ring":          "nft/ring_flame.png",
-    # Common (T1)
+    # ── Common / T1 (never minted) ───────────────────────────────────────────
     "Iron Sword":          "nft/weapon_iron_sword.png",
     "Oak Shield":          "nft/shield_oak.png",
     "Iron Helm":           "nft/helm_iron.png",
@@ -84,14 +85,32 @@ _IMAGE_FILE: dict[str, str] = {
     "Iron Ring":           "nft/ring_iron.png",
 }
 
+# ID-based fallback (catches items whose name lookup ambiguously hits the
+# legendary entry, e.g. rare 'infernal_crown' vs legendary 'infernal_crown_l')
 _IMAGE_FILE_BY_ID: dict[str, str] = {
-    "lynx_sword":   "lynxsword.png",
-    "nomic_shield": "nomicsshield.png",
-    "dragon_fang":  "nft/weapon_dragon_fang.png",
-    "aegis":        "nft/shield_aegis.png",
-    "demon_helm":   "nft/helm_demon.png",
-    "infernal_plate": "nft/armor_infernal_plate.png",
-    "ancient_sigil": "nft/ring_ancient_sigil.png",
+    # Legendary
+    "lynx_sword":            "nft/lynx_sword.png",
+    "nomic_shield":          "nft/nomic_shield.png",
+    "void_blade":            "nft/void_blade.png",
+    "dragons_aegis":         "nft/dragons_aegis.png",
+    "dragonslayer_blade":    "nft/dragonslayer_blade.png",
+    "nomic_fortress":        "nft/nomic_fortress.png",
+    "infernal_crown_l":      "nft/infernal_crown_legendary.png",
+    "dragon_plate":          "nft/dragon_plate.png",
+    "dragons_eye":           "nft/dragons_eye.png",
+    "eternal_ring":          "nft/eternal_ring.png",
+    # Epic
+    "dragon_fang":           "nft/dragon_fang.png",
+    "aegis":                 "nft/aegis.png",
+    "demon_helm":            "nft/demon_helm.png",
+    "infernal_plate":        "nft/infernal_plate.png",
+    "ancient_sigil":         "nft/ancient_sigil.png",
+    # Rare (id-specific so rare infernal_crown doesn't get legendary art)
+    "infernal_crown":        "nft/helm_infernal_crown.png",
+    "flame_blade":           "nft/weapon_flame_blade.png",
+    "dragon_shield":         "nft/shield_dragon.png",
+    "dragonscale_armor":     "nft/armor_dragonscale.png",
+    "dragons_seal":          "nft/ring_dragons_seal.png",
 }
 
 def _image_url(filename: str) -> str:
