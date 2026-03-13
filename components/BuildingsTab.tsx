@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   useGame,
   MaterialType,
@@ -21,6 +21,7 @@ export default function BuildingsTab() {
   const {
     state, buyBuilding, getBuildingCost, canAfford, goldPerHour, armyPower,
     buyFromMerchant, addMaterials, addEggs, addIncubatorSlot, addGold, refreshTokenDiscount,
+    addDragonSouls,
   } = useGame();
 
   const goldPackAmount = Math.max(10_000, Math.floor(goldPerHour * 24));
@@ -60,6 +61,73 @@ export default function BuildingsTab() {
   const [premiumType, setPremiumType] = useState('');
   const [premiumStatus, setPremiumStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [premiumMsg, setPremiumMsg] = useState('');
+
+  // ── Dragon Souls purchase state ───────────────────────────────────────────
+  const [soulsPhase, setSoulsPhase] = useState<'idle'|'loading'|'waiting'|'success'|'error'>('idle');
+  const [soulsDeeplink, setSoulsDeeplink] = useState<string | null>(null);
+  const [soulsQr, setSoulsQr] = useState<string | null>(null);
+  const [soulsError, setSoulsError] = useState<string | null>(null);
+  const [soulsCredited, setSoulsCredited] = useState(0);
+  const soulsPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const soulsUuidRef = useRef<string | null>(null);
+
+  const clearSoulsPoll = useCallback(() => {
+    if (soulsPollRef.current) { clearInterval(soulsPollRef.current); soulsPollRef.current = null; }
+  }, []);
+  useEffect(() => () => clearSoulsPoll(), [clearSoulsPoll]);
+
+  const cancelSouls = useCallback(() => {
+    clearSoulsPoll();
+    setSoulsPhase('idle');
+    setSoulsDeeplink(null); setSoulsQr(null); setSoulsError(null); setSoulsCredited(0);
+    soulsUuidRef.current = null;
+  }, [clearSoulsPoll]);
+
+  const doPollSouls = useCallback(async (uuid: string) => {
+    try {
+      const res = await fetch(`/frontend-api/souls/status/${uuid}`, { cache: 'no-store' });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.signed) {
+        clearSoulsPoll();
+        const qty: number = data.souls || 50;
+        addDragonSouls(qty);
+        setSoulsCredited(qty);
+        setSoulsPhase('success');
+        soulsUuidRef.current = null;
+        return;
+      }
+      if (data.cancelled || data.expired) {
+        clearSoulsPoll();
+        setSoulsPhase('error');
+        setSoulsError(data.cancelled ? 'Payment cancelled.' : 'Payment request expired — please try again.');
+        soulsUuidRef.current = null;
+      }
+    } catch { /* keep polling */ }
+  }, [clearSoulsPoll, addDragonSouls]);
+
+  const startSoulsBuy = useCallback(async (packId: string) => {
+    setSoulsPhase('loading');
+    setSoulsError(null);
+    try {
+      const res = await fetch('/frontend-api/souls/buy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ packId, wallet: state.walletAddress ?? undefined }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.uuid) throw new Error(data.error ?? 'Failed to create payment');
+      soulsUuidRef.current = data.uuid;
+      setSoulsDeeplink(data.deeplink);
+      setSoulsQr(data.qr_png ?? null);
+      setSoulsPhase('waiting');
+      if (data.deeplink) window.open(data.deeplink, '_blank');
+      soulsPollRef.current = setInterval(() => doPollSouls(data.uuid), 2500);
+    } catch (e: unknown) {
+      setSoulsPhase('error');
+      setSoulsError(e instanceof Error ? e.message : 'Unknown error');
+    }
+  }, [doPollSouls, state.walletAddress]);
 
   function copyTreasury() {
     navigator.clipboard.writeText(TREASURY).then(() => {
@@ -577,6 +645,71 @@ export default function BuildingsTab() {
               </button>
               {txMsg && <p className={`text-[9px] mt-1.5 text-center ${txStatus === 'error' ? 'text-red-400' : 'text-[#4ade80]'}`}>{txMsg}</p>}
             </div>
+          </div>
+
+          {/* Dragon Souls Shop */}
+          <div className="dragon-panel px-3 py-3" style={{ border: '1px solid rgba(96,165,250,0.2)', background: 'linear-gradient(180deg, rgba(96,165,250,0.04) 0%, rgba(10,6,20,0) 100%)' }}>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-base">🧿</span>
+              <p className="font-cinzel font-bold text-[#e8d8a8] text-[11px] tracking-wider">Dragon Soul Shop</p>
+              <span className="text-[7px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(96,165,250,0.15)', color: '#60a5fa' }}>XRP</span>
+            </div>
+            <p className="text-[8px] text-[#6b5a3a] mb-3">Buy Dragon Souls with XRP. Used to level items &amp; forge legendaries.</p>
+            {soulsPhase === 'idle' || soulsPhase === 'error' ? (
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between gap-2 rounded-xl px-3 py-2.5"
+                  style={{ background: 'rgba(96,165,250,0.06)', border: '1px solid rgba(96,165,250,0.2)' }}>
+                  <div>
+                    <p className="font-cinzel font-bold text-[11px] text-[#e8d8a8]">🧿 50 Dragon Souls</p>
+                    <p className="text-[8px] text-[#9a8a6a] mt-0.5">5 XRP</p>
+                  </div>
+                  <button onClick={() => startSoulsBuy('souls_50')}
+                    className="text-[9px] font-bold px-3 py-1.5 rounded-lg flex-shrink-0"
+                    style={{ background: 'linear-gradient(135deg,#1a4a7a,#2a6abf)', color: '#93c5fd' }}>
+                    Buy 5 XRP
+                  </button>
+                </div>
+                <div className="flex items-center justify-between gap-2 rounded-xl px-3 py-2.5"
+                  style={{ background: 'rgba(192,132,252,0.06)', border: '1px solid rgba(192,132,252,0.2)' }}>
+                  <div>
+                    <p className="font-cinzel font-bold text-[11px] text-[#e8d8a8]">🧿 125 Dragon Souls <span className="text-[8px] text-[#4ade80]">+25 bonus</span></p>
+                    <p className="text-[8px] text-[#9a8a6a] mt-0.5">10 XRP · best value</p>
+                  </div>
+                  <button onClick={() => startSoulsBuy('souls_125')}
+                    className="text-[9px] font-bold px-3 py-1.5 rounded-lg flex-shrink-0"
+                    style={{ background: 'linear-gradient(135deg,#4a1a7a,#7a2abf)', color: '#c4b5fd' }}>
+                    Buy 10 XRP
+                  </button>
+                </div>
+                {soulsPhase === 'error' && soulsError && (
+                  <p className="text-[8px] text-red-400 text-center mt-1">{soulsError}</p>
+                )}
+              </div>
+            ) : soulsPhase === 'loading' ? (
+              <div className="flex items-center justify-center py-4">
+                <span className="text-[#9a8a6a] text-[10px]">Creating payment…</span>
+              </div>
+            ) : soulsPhase === 'waiting' ? (
+              <div className="flex flex-col items-center gap-3 py-2">
+                <p className="text-[9px] text-[#e8d8a8] font-bold">Waiting for XRP payment…</p>
+                {soulsQr && <img src={soulsQr} alt="Scan QR" className="w-32 h-32 rounded-xl border border-[rgba(96,165,250,0.3)]" />}
+                {soulsDeeplink && (
+                  <a href={soulsDeeplink} target="_blank" rel="noopener noreferrer"
+                    className="text-[9px] font-bold px-4 py-2 rounded-lg"
+                    style={{ background: 'linear-gradient(135deg,#1a4a7a,#2a6abf)', color: '#93c5fd' }}>
+                    Open Xaman
+                  </a>
+                )}
+                <button onClick={cancelSouls} className="text-[8px] text-[#6b5a3a] underline">Cancel</button>
+              </div>
+            ) : soulsPhase === 'success' ? (
+              <div className="flex flex-col items-center gap-2 py-3">
+                <span className="text-3xl">🧿</span>
+                <p className="font-cinzel font-bold text-[#4ade80] text-[11px]">+{soulsCredited} Dragon Souls credited!</p>
+                <button onClick={cancelSouls} className="text-[9px] font-bold px-4 py-1.5 rounded-lg mt-1"
+                  style={{ background: 'rgba(74,222,128,0.15)', color: '#4ade80' }}>Done</button>
+              </div>
+            ) : null}
           </div>
 
           {/* Premium XRP Store */}
