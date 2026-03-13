@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from fastapi import APIRouter, HTTPException
@@ -80,6 +81,73 @@ async def upsert_save(player_id: int, req: SaveRequest):
             player_id=player_id,
             save_json=_to_dict(row["save_json"]) if row else None,
         )
+
+    # Sync player_nfts table for any minted items whose stats changed
+    asyncio.create_task(_sync_nft_items(player_id, req.save_json))
+
+
+async def _sync_nft_items(player_id: int, save_json: dict) -> None:
+    """
+    For each item in inventory/equipment that has an nftTokenId, compare its
+    current stats against the player_nfts row.  If power/reforgeLevel/enchantId/itemLevel
+    differ, update item_data so the live metadata endpoint stays accurate.
+    Runs as a fire-and-forget background task — never raises.
+    """
+    try:
+        # Collect all NFT items from both inventory and equipment
+        nft_items: list[dict] = []
+        for item in save_json.get("inventory") or []:
+            if item.get("nftTokenId"):
+                nft_items.append(item)
+        for item in (save_json.get("equipment") or {}).values():
+            if item and item.get("nftTokenId"):
+                nft_items.append(item)
+
+        if not nft_items:
+            return
+
+        pool = get_pool()
+        async with pool.acquire() as conn:
+            for item in nft_items:
+                token_id = item["nftTokenId"]
+                row = await conn.fetchrow(
+                    "SELECT item_data FROM player_nfts WHERE nft_token_id=$1", token_id
+                )
+                if not row:
+                    # New token not yet in table (minted before this feature) — insert it
+                    await conn.execute(
+                        """
+                        INSERT INTO player_nfts (nft_token_id, player_id, item_id, item_name, item_data)
+                        VALUES ($1, $2, $3, $4, $5::jsonb)
+                        ON CONFLICT (nft_token_id) DO NOTHING
+                        """,
+                        token_id, player_id,
+                        item.get("id", ""),
+                        item.get("name", ""),
+                        json.dumps(item),
+                    )
+                    continue
+
+                stored = _to_dict(row["item_data"])
+                changed = (
+                    stored.get("power")        != item.get("power") or
+                    stored.get("reforgeLevel") != item.get("reforgeLevel") or
+                    stored.get("enchantId")    != item.get("enchantId") or
+                    stored.get("itemLevel")    != item.get("itemLevel")
+                )
+                if changed:
+                    await conn.execute(
+                        """
+                        UPDATE player_nfts
+                           SET item_data=$1::jsonb, player_id=$2, updated_at=NOW()
+                         WHERE nft_token_id=$3
+                        """,
+                        json.dumps(item), player_id, token_id,
+                    )
+                    logger.info("player_nfts synced token=%s power=%s reforge=%s",
+                                token_id, item.get("power"), item.get("reforgeLevel"))
+    except Exception:
+        logger.exception("_sync_nft_items failed for player=%s", player_id)
 
 
 @router.post("/heartbeat/{player_id}")

@@ -62,14 +62,14 @@ const ITEM_IMAGE_BY_NAME: Record<string, string> = {
   // Legendary — unique root-level art
   'Lynx Sword':         '/images/lynxsword.png',
   'Nomic Shield':       '/images/nomicsshield.png',
-  'Void Blade':         '/images/lynxsword.png',
-  "Dragon's Aegis":     '/images/nomicsshield.png',
+  'Void Blade':         '/images/nft/weapon_dragon_fang.png',
+  "Dragon's Aegis":     '/images/nft/shield_aegis.png',
   'Dragonslayer Blade': '/images/lynxsword.png',
   'Nomic Fortress':     '/images/nomicsshield.png',
   // Legendary — nft subfolder art
   'Infernal Crown':     '/images/nft/helm_infernal_crown.png',
   'Dragon Plate':       '/images/nft/armor_dragonscale.png',
-  "Dragon's Eye":       '/images/nft/ring_ancient_sigil.png',
+  "Dragon's Eye":       '/images/nft/ring_dragons_seal.png',
   'Eternal Ring':       '/images/nft/ring_ancient_sigil.png',
   // Epic (T4)
   'Dragon Fang':        '/images/nft/weapon_dragon_fang.png',

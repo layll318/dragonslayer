@@ -35,3 +35,6 @@ Thumbs.db
 
 # TypeScript
 *.tsbuildinfo
+
+# Test artefacts
+backend/test_renders/

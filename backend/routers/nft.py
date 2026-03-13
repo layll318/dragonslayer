@@ -50,14 +50,14 @@ _IMAGE_FILE: dict[str, str] = {
     # Legendary — root-level art
     "Lynx Sword":          "lynxsword.png",
     "Nomic Shield":        "nomicsshield.png",
-    "Void Blade":          "lynxsword.png",
-    "Dragon's Aegis":      "nomicsshield.png",
+    "Void Blade":          "nft/weapon_dragon_fang.png",
+    "Dragon's Aegis":      "nft/shield_aegis.png",
     "Dragonslayer Blade":  "lynxsword.png",
     "Nomic Fortress":      "nomicsshield.png",
     # Legendary — nft subfolder art
     "Infernal Crown":      "nft/helm_infernal_crown.png",
     "Dragon Plate":        "nft/armor_dragonscale.png",
-    "Dragon's Eye":        "nft/ring_ancient_sigil.png",
+    "Dragon's Eye":        "nft/ring_dragons_seal.png",
     "Eternal Ring":        "nft/ring_ancient_sigil.png",
     # Epic (T4)
     "Dragon Fang":         "nft/weapon_dragon_fang.png",
