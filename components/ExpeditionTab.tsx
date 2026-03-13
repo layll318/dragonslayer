@@ -384,6 +384,7 @@ export default function ExpeditionTab() {
   const MINT_UUID_KEY       = 'ds_mint_uuid';
   const MINT_ITEMID_KEY     = 'ds_mint_item_id';
   const MINT_ITEM_INFO_KEY  = 'ds_mint_item_info';
+  const MINT_TOKEN_ID_KEY   = 'ds_mint_token_id';
 
   const clearMintPoll = useCallback(() => {
     if (mintPollRef.current)  { clearInterval(mintPollRef.current);  mintPollRef.current  = null; }
@@ -396,6 +397,7 @@ export default function ExpeditionTab() {
     clearMintPoll();
     localStorage.removeItem(MINT_UUID_KEY);
     localStorage.removeItem(MINT_ITEMID_KEY);
+    localStorage.removeItem(MINT_TOKEN_ID_KEY);
     setMintItemId(null);
     setMintPhase('idle');
     setMintDeeplink(null);
@@ -415,7 +417,8 @@ export default function ExpeditionTab() {
         clearMintPoll();
         localStorage.removeItem(MINT_UUID_KEY);
         localStorage.removeItem(MINT_ITEMID_KEY);
-        if (!data.tokenId) {
+        const resolvedTokenId = data.tokenId || localStorage.getItem(MINT_TOKEN_ID_KEY);
+        if (!resolvedTokenId) {
           setMintPhase('error');
           setMintError('NFT signed but token ID not received — tap ✨ Mint again to retry.');
           mintUuidRef.current = null;
@@ -423,7 +426,8 @@ export default function ExpeditionTab() {
           return;
         }
         localStorage.removeItem(MINT_ITEM_INFO_KEY);
-        burnItemToWallet(itemId, data.tokenId);
+        localStorage.removeItem(MINT_TOKEN_ID_KEY);
+        burnItemToWallet(itemId, resolvedTokenId);
         setMintPhase('success');
         mintUuidRef.current   = null;
         mintItemIdRef.current = null;
@@ -470,11 +474,12 @@ export default function ExpeditionTab() {
       });
       const data = await res.json();
       if (!res.ok || !data.uuid) throw new Error(data.error || 'Failed to create mint request');
-      const { uuid, deeplink, qr_png } = data;
+      const { uuid, deeplink, qr_png, nftTokenId } = data;
       mintUuidRef.current   = uuid;
       mintItemIdRef.current = item.id;
       localStorage.setItem(MINT_UUID_KEY,   uuid);
       localStorage.setItem(MINT_ITEMID_KEY, item.id);
+      if (nftTokenId) localStorage.setItem(MINT_TOKEN_ID_KEY, nftTokenId);
       localStorage.setItem(MINT_ITEM_INFO_KEY, JSON.stringify({
         id: item.id, name: item.name, itemType: item.itemType,
         rarity: item.rarity, power: item.power,
@@ -1357,16 +1362,20 @@ export default function ExpeditionTab() {
                 <div>
                   <p className="text-[#4a3a2a] text-[9px] mb-1.5">Empty slot — place an egg to incubate</p>
                   <div className="flex flex-wrap gap-1">
-                    {eggs.map(egg => (
-                      <button
-                        key={egg.id}
-                        onClick={() => placeEggInIncubator(egg.id, i)}
-                        className="flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-bold transition-all active:scale-95"
-                        style={{ background: 'rgba(212,160,23,0.08)', border: `1px solid ${EGG_RARITY_COLOR[egg.rarity]}40`, color: EGG_RARITY_COLOR[egg.rarity] }}
-                      >
-                        {EGG_EMOJI[egg.rarity]} {egg.rarity}
-                      </button>
-                    ))}
+                    {(['common','uncommon','rare','legendary'] as const)
+                      .map(r => ({ rarity: r, group: eggs.filter(e => e.rarity === r) }))
+                      .filter(({ group }) => group.length > 0)
+                      .map(({ rarity, group }) => (
+                        <button
+                          key={rarity}
+                          onClick={() => placeEggInIncubator(group[0].id, i)}
+                          className="flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-bold transition-all active:scale-95"
+                          style={{ background: 'rgba(212,160,23,0.08)', border: `1px solid ${EGG_RARITY_COLOR[rarity]}40`, color: EGG_RARITY_COLOR[rarity] }}
+                        >
+                          {EGG_EMOJI[rarity]} {rarity}{group.length > 1 ? ` ×${group.length}` : ''}
+                        </button>
+                      ))
+                    }
                     {eggs.length === 0 && (
                       <p className="text-[#4a3a2a] text-[8px]">No eggs — complete expeditions to find them</p>
                     )}
@@ -1377,21 +1386,34 @@ export default function ExpeditionTab() {
           ))}
         </div>
 
-        {/* Egg inventory */}
+        {/* Egg inventory — grouped by rarity */}
         {eggs.length > 0 && (
           <div className="dragon-panel px-3 py-3">
             <p className="font-cinzel font-bold text-[#e8d8a8] text-[10px] tracking-wider mb-2">🥚 EGG INVENTORY</p>
-            <div className="flex flex-wrap gap-1.5">
-              {eggs.map(egg => (
-                <div key={egg.id} className="flex items-center gap-1.5 px-2 py-1.5 rounded-xl"
-                  style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${EGG_RARITY_COLOR[egg.rarity]}30` }}>
-                  <span>{EGG_EMOJI[egg.rarity]}</span>
-                  <div>
-                    <p className="text-[9px] font-bold" style={{ color: EGG_RARITY_COLOR[egg.rarity] }}>{egg.variantName}</p>
-                    <p className="text-[8px] text-[#6b5a3a]">{egg.rarity} · {egg.bonusType === 'tap_gold_pct' ? `+${egg.bonusValue}% gold/tap` : egg.bonusType === 'army_power_flat' ? `+${egg.bonusValue} army pwr` : egg.bonusType === 'material_drop_pct' ? `+${egg.bonusValue}% mats` : `-${egg.bonusValue}% exp time`}</p>
-                  </div>
-                </div>
-              ))}
+            <div className="flex flex-col gap-1.5">
+              {(['common','uncommon','rare','legendary'] as const)
+                .map(r => ({ rarity: r, group: eggs.filter(e => e.rarity === r) }))
+                .filter(({ group }) => group.length > 0)
+                .map(({ rarity, group }) => {
+                  const sample = group[0];
+                  const bonusLabel = sample.bonusType === 'tap_gold_pct' ? `+${sample.bonusValue}% gold/tap`
+                    : sample.bonusType === 'army_power_flat' ? `+${sample.bonusValue} army pwr`
+                    : sample.bonusType === 'material_drop_pct' ? `+${sample.bonusValue}% mats`
+                    : `-${sample.bonusValue}% exp time`;
+                  return (
+                    <div key={rarity} className="flex items-center gap-2 px-2 py-1.5 rounded-xl"
+                      style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${EGG_RARITY_COLOR[rarity]}30` }}>
+                      <span className="text-lg">{EGG_EMOJI[rarity]}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[9px] font-bold" style={{ color: EGG_RARITY_COLOR[rarity] }}>
+                          {rarity.charAt(0).toUpperCase() + rarity.slice(1)}{group.length > 1 ? ` ×${group.length}` : ''}
+                        </p>
+                        <p className="text-[8px] text-[#6b5a3a]">{bonusLabel}{group.length > 1 ? ` (each)` : ` · ${sample.variantName}`}</p>
+                      </div>
+                    </div>
+                  );
+                })
+              }
             </div>
           </div>
         )}

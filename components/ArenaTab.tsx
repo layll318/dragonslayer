@@ -723,13 +723,31 @@ function ArenaHeader({ attacksLeft, arenaPoints, trophies }: { attacksLeft: numb
 // ── Hero Dungeon ─────────────────────────────────────────────────────────────
 
 const DUNGEONS = [
-  { tier: 1 as const, name: 'Goblin Cave',  emoji: '🪨', unlockLevel:  1, color: '#9a9a9a', border: 'rgba(154,154,154,0.45)' },
-  { tier: 2 as const, name: 'Dark Forest',  emoji: '🌲', unlockLevel: 10, color: '#4ade80', border: 'rgba(74,222,128,0.45)'  },
-  { tier: 3 as const, name: 'Dragon Lair',  emoji: '🐉', unlockLevel: 25, color: '#60a5fa', border: 'rgba(96,165,250,0.45)'  },
-  { tier: 4 as const, name: 'Shadow Realm', emoji: '🌑', unlockLevel: 50, color: '#c084fc', border: 'rgba(192,132,252,0.45)' },
+  { tier: 1 as const, name: 'Wyrmling Nest',         emoji: '�', unlockLevel:   1, color: '#9a9a9a', border: 'rgba(154,154,154,0.45)' },
+  { tier: 2 as const, name: 'Drake Swamp',            emoji: '🐊', unlockLevel:  10, color: '#4ade80', border: 'rgba(74,222,128,0.45)'  },
+  { tier: 3 as const, name: 'Dragon Stronghold',      emoji: '�', unlockLevel:  25, color: '#60a5fa', border: 'rgba(96,165,250,0.45)'  },
+  { tier: 4 as const, name: 'Shadow Dragon Realm',    emoji: '🌑', unlockLevel:  50, color: '#c084fc', border: 'rgba(192,132,252,0.45)' },
+  { tier: 5 as const, name: "Dragon Emperor's Tomb",  emoji: '💀', unlockLevel:  75, color: '#f87171', border: 'rgba(248,113,113,0.45)' },
+  { tier: 6 as const, name: "Dragon God's Sanctum",   emoji: '✨', unlockLevel: 100, color: '#f0c040', border: 'rgba(240,192,64,0.45)'  },
 ];
 
-type DungeonTier = 1 | 2 | 3 | 4;
+type DungeonTier = 1 | 2 | 3 | 4 | 5 | 6;
+
+/** Total rooms per tier — last room is always the final boss */
+const DUNGEON_ROOMS: Record<DungeonTier, number> = { 1: 6, 2: 6, 3: 8, 4: 8, 5: 10, 6: 10 };
+
+/** Boss gold reward multiplier (applied to goldPerHour) */
+const DUNGEON_BOSS_GOLD_MULT: Record<DungeonTier, number> = { 1: 1, 2: 2, 3: 3, 4: 5, 5: 8, 6: 12 };
+
+/** Between-room Loot pool per tier */
+const DUNGEON_LOOT_POOL: Record<DungeonTier, MaterialType[]> = {
+  1: ['dragon_scale'],
+  2: ['dragon_scale', 'fire_crystal'],
+  3: ['fire_crystal', 'ancient_rune', 'dragon_scale'],
+  4: ['ancient_rune', 'fire_crystal', 'dragon_soul'],
+  5: ['ancient_rune', 'fire_crystal', 'dragon_soul', 'lynx_fang'],
+  6: ['lynx_fang', 'nomic_core', 'dragon_soul', 'ancient_rune'],
+};
 
 interface DungeonEnemy {
   name: string; emoji: string; hp: number; atk: number; weakness: string;
@@ -738,51 +756,73 @@ interface DungeonEnemy {
 const DUNGEON_ENEMIES: Record<DungeonTier, { normal: DungeonEnemy[]; boss: DungeonEnemy }> = {
   1: {
     normal: [
-      { name: 'Goblin Scout',  emoji: '👺', hp:  30, atk:  5, weakness: 'Fire'  },
-      { name: 'Cave Troll',    emoji: '🧌', hp:  50, atk:  8, weakness: 'Light' },
-      { name: 'Goblin Shaman', emoji: '🔮', hp:  40, atk:  7, weakness: 'Steel' },
-      { name: 'Stone Golem',   emoji: '🗿', hp:  60, atk: 10, weakness: 'Magic' },
-      { name: 'Cave Bat',      emoji: '🦇', hp:  35, atk:  6, weakness: 'Fire'  },
+      { name: 'Cave Wyrmling',   emoji: '�', hp:  30, atk:  5, weakness: 'Fire'  },
+      { name: 'Frost Hatchling', emoji: '❄️',  hp:  50, atk:  8, weakness: 'Fire'  },
+      { name: 'Fire Whelp',      emoji: '�', hp:  40, atk:  7, weakness: 'Water' },
+      { name: 'Stone Drake',     emoji: '🪨', hp:  60, atk: 10, weakness: 'Magic' },
+      { name: 'Mud Wyrm',        emoji: '🐛', hp:  35, atk:  6, weakness: 'Light' },
     ],
-    boss: { name: 'Goblin King', emoji: '👑', hp: 150, atk: 20, weakness: 'Holy' },
+    boss: { name: 'Drake Mother', emoji: '�', hp: 150, atk: 20, weakness: 'Holy' },
   },
   2: {
     normal: [
-      { name: 'Shadow Wolf',   emoji: '🐺', hp:  80, atk: 15, weakness: 'Fire'   },
-      { name: 'Forest Wraith', emoji: '👻', hp: 100, atk: 20, weakness: 'Holy'   },
-      { name: 'Dark Archer',   emoji: '🏹', hp:  70, atk: 18, weakness: 'Shield' },
-      { name: 'Cursed Knight', emoji: '⚔️', hp: 120, atk: 25, weakness: 'Magic'  },
-      { name: 'Poison Vine',   emoji: '🌿', hp:  90, atk: 16, weakness: 'Fire'   },
+      { name: 'Swamp Wyvern', emoji: '�', hp:  80, atk: 15, weakness: 'Fire'  },
+      { name: 'Iron Drake',   emoji: '⚙️',  hp: 100, atk: 20, weakness: 'Magic' },
+      { name: 'Storm Drake',  emoji: '⚡', hp:  70, atk: 18, weakness: 'Earth' },
+      { name: 'Poison Fangs', emoji: '🐍', hp: 120, atk: 25, weakness: 'Fire'  },
+      { name: 'Feral Drake',  emoji: '🦎', hp:  90, atk: 16, weakness: 'Ice'   },
     ],
-    boss: { name: 'Forest Dragon', emoji: '🐲', hp: 300, atk: 50, weakness: 'Ice' },
+    boss: { name: 'Ancient Wyvern', emoji: '🦕', hp: 300, atk: 50, weakness: 'Ice' },
   },
   3: {
     normal: [
-      { name: 'Fire Drake',      emoji: '🔥', hp: 200, atk:  45, weakness: 'Water' },
-      { name: 'Lava Golem',      emoji: '🌋', hp: 250, atk:  55, weakness: 'Ice'   },
-      { name: 'Dragon Cultist',  emoji: '🧙', hp: 180, atk:  40, weakness: 'Holy'  },
-      { name: 'Ancient Serpent', emoji: '🐍', hp: 300, atk:  65, weakness: 'Steel' },
-      { name: 'Flame Imp',       emoji: '😈', hp: 160, atk:  35, weakness: 'Water' },
+      { name: 'Battle Dragon',   emoji: '�', hp: 200, atk:  45, weakness: 'Water' },
+      { name: 'Scale Titan',     emoji: '🛡️',  hp: 250, atk:  55, weakness: 'Magic' },
+      { name: 'Magma Drake',     emoji: '🌋', hp: 180, atk:  40, weakness: 'Ice'   },
+      { name: 'War Wyvern',      emoji: '�️',  hp: 300, atk:  65, weakness: 'Holy'  },
+      { name: 'Dragon Sentinel', emoji: '�️',  hp: 160, atk:  35, weakness: 'Steel' },
     ],
     boss: { name: 'Elder Dragon', emoji: '🐉', hp: 800, atk: 120, weakness: 'Ice' },
   },
   4: {
     normal: [
-      { name: 'Void Walker',  emoji: '🕳️', hp: 500, atk: 100, weakness: 'Light' },
-      { name: 'Shadow Demon', emoji: '😱', hp: 600, atk: 120, weakness: 'Holy'  },
-      { name: 'Chaos Knight', emoji: '💀', hp: 700, atk: 150, weakness: 'Order' },
-      { name: 'Ancient Lich', emoji: '☠️', hp: 800, atk: 180, weakness: 'Fire'  },
-      { name: 'Void Stalker', emoji: '👁️', hp: 550, atk: 110, weakness: 'Light' },
+      { name: 'Void Drake',     emoji: '🕳️', hp: 500, atk: 100, weakness: 'Light' },
+      { name: 'Shadow Wyvern',  emoji: '🌑', hp: 600, atk: 120, weakness: 'Holy'  },
+      { name: 'Chaos Dragon',   emoji: '💀', hp: 700, atk: 150, weakness: 'Order' },
+      { name: 'Abyssal Fangs',  emoji: '☠️',  hp: 800, atk: 180, weakness: 'Fire'  },
+      { name: 'Nightmare Wyrm', emoji: '👁️',  hp: 550, atk: 110, weakness: 'Light' },
     ],
     boss: { name: 'Shadow Dragon', emoji: '🌑', hp: 2000, atk: 300, weakness: 'Light' },
+  },
+  5: {
+    normal: [
+      { name: 'Bone Drake',     emoji: '🦴', hp:  900, atk: 200, weakness: 'Fire'  },
+      { name: 'Phantom Wyvern', emoji: '👻', hp: 1100, atk: 220, weakness: 'Holy'  },
+      { name: 'Cursed Dragon',  emoji: '🔮', hp: 1000, atk: 210, weakness: 'Light' },
+      { name: 'Death Wyrm',     emoji: '💀', hp: 1200, atk: 230, weakness: 'Steel' },
+      { name: 'Plague Drake',   emoji: '☠️',  hp:  950, atk: 205, weakness: 'Magic' },
+    ],
+    boss: { name: 'Undead Dragon King', emoji: '👑', hp: 4000, atk: 450, weakness: 'Holy' },
+  },
+  6: {
+    normal: [
+      { name: 'Primordial Drake', emoji: '🌌', hp: 2000, atk: 380, weakness: 'Order' },
+      { name: 'Storm Emperor',    emoji: '⛈️',  hp: 2500, atk: 420, weakness: 'Earth' },
+      { name: 'Flame Titan',      emoji: '🔥', hp: 2200, atk: 400, weakness: 'Water' },
+      { name: 'Celestial Wyrm',   emoji: '✨', hp: 2800, atk: 440, weakness: 'Dark'  },
+      { name: 'Apex Wyvern',      emoji: '🦅', hp: 1800, atk: 360, weakness: 'Ice'   },
+    ],
+    boss: { name: 'Dragon God', emoji: '🌟', hp: 10000, atk: 700, weakness: 'All' },
   },
 };
 
 const DUNGEON_BOSS_DROPS: Record<DungeonTier, { type: MaterialType; qty: number }[]> = {
   1: [{ type: 'dragon_scale', qty: 2 }],
-  2: [{ type: 'fire_crystal',  qty: 2 }],
-  3: [{ type: 'ancient_rune',  qty: 2 }],
-  4: [{ type: 'lynx_fang', qty: 1 }, { type: 'nomic_core', qty: 1 }],
+  2: [{ type: 'fire_crystal',  qty: 3 }],
+  3: [{ type: 'ancient_rune',  qty: 4 }, { type: 'lynx_fang',    qty: 1 }],
+  4: [{ type: 'ancient_rune',  qty: 2 }, { type: 'fire_crystal', qty: 2 }, { type: 'nomic_core',   qty: 1 }],
+  5: [{ type: 'dragon_scale',  qty: 2 }, { type: 'fire_crystal', qty: 2 }, { type: 'ancient_rune', qty: 2 }, { type: 'dragon_soul', qty: 3 }],
+  6: [{ type: 'dragon_scale',  qty: 3 }, { type: 'fire_crystal', qty: 3 }, { type: 'ancient_rune', qty: 3 }, { type: 'lynx_fang',    qty: 2 }, { type: 'nomic_core', qty: 2 }, { type: 'dragon_soul', qty: 5 }],
 };
 
 const DUNGEON_COMMON_MATS: MaterialType[] = ['dragon_scale', 'fire_crystal', 'ancient_rune'];
@@ -805,7 +845,14 @@ function getDungeonPlayerStats(eq: Record<string, { rarity?: string } | null | u
 }
 
 function getDungeonEnemy(tier: DungeonTier, room: number): DungeonEnemy {
-  return room === 6 ? DUNGEON_ENEMIES[tier].boss : DUNGEON_ENEMIES[tier].normal[(room - 1) % 5];
+  const totalRooms  = DUNGEON_ROOMS[tier];
+  const miniBossRoom = totalRooms > 6 ? Math.ceil(totalRooms / 2) : -1;
+  if (room === totalRooms) return DUNGEON_ENEMIES[tier].boss;
+  if (room === miniBossRoom) {
+    const b = DUNGEON_ENEMIES[tier].boss;
+    return { ...b, name: `${b.name} (Mini)`, hp: Math.ceil(b.hp / 2) };
+  }
+  return DUNGEON_ENEMIES[tier].normal[(room - 1) % DUNGEON_ENEMIES[tier].normal.length];
 }
 
 function useDungeonCooldownLabel(until: number) {
@@ -902,8 +949,8 @@ function DungeonSelect({ onEnter, onBack }: { onEnter: (tier: DungeonTier) => vo
               </div>
               {!locked && (
                 <div className="flex items-center justify-between text-[9px]">
-                  <span className="text-[#6b5a3a]">{tierBest > 0 ? `Best: Room ${tierBest}/6` : 'Not attempted yet'}</span>
-                  {tierBest >= 6 && <span className="font-bold" style={{ color: d.color }}>✓ CLEARED</span>}
+                  <span className="text-[#6b5a3a]">{tierBest > 0 ? `Best: Room ${tierBest}/${DUNGEON_ROOMS[d.tier]}` : 'Not attempted yet'}</span>
+                  {tierBest >= DUNGEON_ROOMS[d.tier] && <span className="font-bold" style={{ color: d.color }}>✓ CLEARED</span>}
                 </div>
               )}
             </div>
@@ -945,7 +992,7 @@ interface DungeonMove {
 const DUNGEON_MOVES: DungeonMove[] = [
   {
     id: 'strike',
-    label: 'Strike',    emoji: '⚔️',
+    label: 'Strike',        emoji: '⚔️',
     desc: '1× dmg · instant',
     cooldownMs: 0,
     color: '#f0c040', border: 'rgba(240,192,64,0.4)',
@@ -953,7 +1000,7 @@ const DUNGEON_MOVES: DungeonMove[] = [
   },
   {
     id: 'heavy',
-    label: 'Heavy Blow', emoji: '💥',
+    label: 'Heavy Blow',    emoji: '💥',
     desc: '2.5× dmg · 8s CD',
     cooldownMs: 8000,
     color: '#f87171', border: 'rgba(248,113,113,0.4)',
@@ -961,7 +1008,7 @@ const DUNGEON_MOVES: DungeonMove[] = [
   },
   {
     id: 'guard',
-    label: 'Guard',      emoji: '🛡️',
+    label: 'Guard',         emoji: '🛡️',
     desc: 'Block next hit · 10s CD',
     cooldownMs: 10000,
     color: '#60a5fa', border: 'rgba(96,165,250,0.4)',
@@ -969,11 +1016,27 @@ const DUNGEON_MOVES: DungeonMove[] = [
   },
   {
     id: 'exploit',
-    label: 'Exploit',    emoji: '🎯',
+    label: 'Exploit',       emoji: '🎯',
     desc: '3× dmg + weakness · 15s CD',
     cooldownMs: 15000,
     color: '#c084fc', border: 'rgba(192,132,252,0.4)',
     action: 'damage', dmgMult: 3.0, isExploit: true,
+  },
+  {
+    id: 'dragonbreath',
+    label: 'Dragon Breath', emoji: '🔥',
+    desc: '4× dmg · 25s CD',
+    cooldownMs: 25000,
+    color: '#fb923c', border: 'rgba(251,146,60,0.4)',
+    action: 'damage', dmgMult: 4.0,
+  },
+  {
+    id: 'rally',
+    label: 'Rally',         emoji: '💊',
+    desc: 'Heal 20% HP · 30s CD',
+    cooldownMs: 30000,
+    color: '#4ade80', border: 'rgba(74,222,128,0.4)',
+    action: 'regen', dmgMult: 0,
   },
 ];
 
@@ -984,13 +1047,14 @@ interface DungeonRunState {
   enemyHp: number;
   heroHp: number;
   floats: { id: number; value: string; color: string }[];
-  phase: 'fighting' | 'done';
+  phase: 'fighting' | 'choice' | 'done';
   won: boolean;
   goldEarned: number;
   xpEarned: number;
   materials: { type: MaterialType; quantity: number }[];
   guardActive: boolean;
   lastAction: string;
+  bossRaged: boolean;
 }
 
 function DungeonRunScreen({ tier, onComplete }: { tier: DungeonTier; onComplete: () => void }) {
@@ -1004,6 +1068,7 @@ function DungeonRunScreen({ tier, onComplete }: { tier: DungeonTier; onComplete:
     floats: [], phase: 'fighting', won: false,
     goldEarned: 0, xpEarned: 0, materials: [],
     guardActive: false, lastAction: '',
+    bossRaged: false,
   });
 
   const [moveCooldowns, setMoveCooldowns] = useState<Record<string, number>>({});
@@ -1024,16 +1089,17 @@ function DungeonRunScreen({ tier, onComplete }: { tier: DungeonTier; onComplete:
   }, []);
 
   useEffect(() => {
-    if (run.phase === 'done') return;
+    if (run.phase === 'done' || run.phase === 'choice') return;
     const intervalId = setInterval(() => {
       setRun(prev => {
-        if (prev.phase === 'done') return prev;
+        if (prev.phase !== 'fighting') return prev;
         if (prev.guardActive) {
           setTimeout(() => pushFloat('BLOCKED!', '#60a5fa'), 0);
           return { ...prev, guardActive: false };
         }
-        const enemy = getDungeonEnemy(tier, prev.room);
-        const dmg   = Math.max(1, Math.round(enemy.atk * (1 - reduction)));
+        const enemy     = getDungeonEnemy(tier, prev.room);
+        const rageBoost = (prev.bossRaged && prev.room === DUNGEON_ROOMS[tier]) ? 1.6 : 1.0;
+        const dmg       = Math.max(1, Math.round(enemy.atk * rageBoost * (1 - reduction)));
         setTimeout(() => pushFloat(`-${dmg}`, '#f87171'), 0);
         const newHp = prev.heroHp - dmg;
         if (newHp <= 0) return { ...prev, heroHp: 0, phase: 'done', won: false };
@@ -1044,18 +1110,33 @@ function DungeonRunScreen({ tier, onComplete }: { tier: DungeonTier; onComplete:
   }, [run.phase, run.room, tier, reduction, pushFloat]);
 
   const applyKill = useCallback((prev: DungeonRunState): DungeonRunState => {
-    const isBoss = prev.room === 6;
+    const totalRooms   = DUNGEON_ROOMS[tier];
+    const isFinalBoss  = prev.room === totalRooms;
+    const roomGold     = 200 * tier;
+    const roomXp       = tier * 3 * Math.max(1, state.level);
     const mats: { type: MaterialType; quantity: number }[] = [...prev.materials];
-    if (isBoss) {
+    if (isFinalBoss) {
       for (const d of (DUNGEON_BOSS_DROPS[tier] ?? [])) mats.push({ type: d.type, quantity: d.qty });
-      const randMat = DUNGEON_COMMON_MATS[Math.floor(Math.random() * DUNGEON_COMMON_MATS.length)];
+      const randMat   = DUNGEON_COMMON_MATS[Math.floor(Math.random() * DUNGEON_COMMON_MATS.length)];
       mats.push({ type: randMat, quantity: 2 + Math.floor(Math.random() * 3) });
-      const goldBonus = Math.floor(goldPerHour * 0.5);
-      const xpBonus   = tier * 15 * Math.max(1, state.level);
-      return { ...prev, enemyHp: 0, phase: 'done', won: true, goldEarned: goldBonus, xpEarned: xpBonus, materials: mats };
+      const goldBonus = Math.floor(goldPerHour * DUNGEON_BOSS_GOLD_MULT[tier]) + roomGold;
+      const xpBonus   = tier * 15 * Math.max(1, state.level) + roomXp;
+      return {
+        ...prev, enemyHp: 0, phase: 'done', won: true,
+        goldEarned: prev.goldEarned + goldBonus,
+        xpEarned:   prev.xpEarned   + xpBonus,
+        materials:  mats,
+      };
     }
-    const nextEnemy = getDungeonEnemy(tier, prev.room + 1);
-    return { ...prev, enemyHp: nextEnemy.hp, room: prev.room + 1, materials: mats, lastAction: '' };
+    // Non-final room: bank per-room reward and show between-room choice
+    return {
+      ...prev, enemyHp: 0,
+      phase:      'choice',
+      goldEarned: prev.goldEarned + roomGold,
+      xpEarned:   prev.xpEarned   + roomXp,
+      materials:  mats,
+      lastAction: '',
+    };
   }, [tier, goldPerHour, state.level]);
 
   const handleMove = useCallback((move: DungeonMove) => {
@@ -1068,15 +1149,26 @@ function DungeonRunScreen({ tier, onComplete }: { tier: DungeonTier; onComplete:
 
     if (move.action === 'guard') {
       setRun(prev => {
-        if (prev.phase === 'done') return prev;
+        if (prev.phase !== 'fighting') return prev;
         setTimeout(() => pushFloat('GUARD!', '#60a5fa'), 0);
         return { ...prev, guardActive: true, lastAction: '🛡️ Guarding next hit…' };
       });
       return;
     }
 
+    if (move.action === 'regen') {
+      setRun(prev => {
+        if (prev.phase !== 'fighting') return prev;
+        const heal  = Math.round(maxHp * 0.20);
+        const newHp = Math.min(maxHp, prev.heroHp + heal);
+        setTimeout(() => pushFloat(`+${heal} HP`, '#4ade80'), 0);
+        return { ...prev, heroHp: newHp, lastAction: `💊 Rally (+${heal} HP)` };
+      });
+      return;
+    }
+
     setRun(prev => {
-      if (prev.phase === 'done') return prev;
+      if (prev.phase !== 'fighting') return prev;
       const isCrit = hasRing && Math.random() < 0.10;
       const raw    = Math.round(atk * move.dmgMult);
       const dmg    = isCrit ? raw * 2 : raw;
@@ -1086,11 +1178,52 @@ function DungeonRunScreen({ tier, onComplete }: { tier: DungeonTier; onComplete:
       const color  = move.isExploit ? '#c084fc' : isCrit ? '#f0c040' : '#4ade80';
       setTimeout(() => pushFloat(label, color), 0);
       const newEnemyHp = prev.enemyHp - dmg;
-      const action = `${move.emoji} ${move.label}${isCrit ? ' (CRIT)' : ''}`;
-      if (newEnemyHp > 0) return { ...prev, enemyHp: newEnemyHp, lastAction: action };
-      return applyKill({ ...prev, lastAction: action });
+      const action     = `${move.emoji} ${move.label}${isCrit ? ' (CRIT)' : ''}`;
+      if (newEnemyHp <= 0) return applyKill({ ...prev, lastAction: action });
+      // Check for boss rage at 50% HP
+      const totalRooms     = DUNGEON_ROOMS[tier];
+      const isFinalBoss    = prev.room === totalRooms;
+      const rageThreshold  = Math.ceil(getDungeonEnemy(tier, prev.room).hp / 2);
+      if (isFinalBoss && !prev.bossRaged && newEnemyHp <= rageThreshold) {
+        setTimeout(() => pushFloat('⚠️ ENRAGED!', '#f87171'), 0);
+        return { ...prev, enemyHp: newEnemyHp, bossRaged: true, lastAction: `${action} — Boss ENRAGES!` };
+      }
+      return { ...prev, enemyHp: newEnemyHp, lastAction: action };
     });
-  }, [moveCooldowns, atk, hasRing, pushFloat, applyKill]);
+  }, [moveCooldowns, atk, maxHp, hasRing, pushFloat, applyKill, tier]);
+
+  const makeChoice = useCallback((choice: 'rest' | 'pressOn' | 'loot') => {
+    setRun(prev => {
+      if (prev.phase !== 'choice') return prev;
+      let newHp   = prev.heroHp;
+      let newGold = prev.goldEarned;
+      const newMats = [...prev.materials];
+      if (choice === 'rest') {
+        const heal = Math.round(maxHp * 0.20);
+        newHp = Math.min(maxHp, prev.heroHp + heal);
+      } else if (choice === 'pressOn') {
+        newGold += 150 * tier;
+      } else {
+        const pool   = DUNGEON_LOOT_POOL[tier];
+        const picked = pool[Math.floor(Math.random() * pool.length)];
+        newMats.push({ type: picked, quantity: 1 });
+      }
+      const nextRoom  = prev.room + 1;
+      const nextEnemy = getDungeonEnemy(tier, nextRoom);
+      return {
+        ...prev,
+        phase:      'fighting',
+        room:       nextRoom,
+        enemyHp:    nextEnemy.hp,
+        heroHp:     newHp,
+        goldEarned: newGold,
+        materials:  newMats,
+        lastAction: '',
+        guardActive: false,
+        bossRaged:  false,
+      };
+    });
+  }, [maxHp, tier]);
 
   useEffect(() => {
     if (run.phase !== 'done' || resultFired.current) return;
@@ -1101,9 +1234,66 @@ function DungeonRunScreen({ tier, onComplete }: { tier: DungeonTier; onComplete:
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [run.phase]);
 
-  const enemy  = getDungeonEnemy(tier, run.room);
-  const isBoss = run.room === 6;
-  const now    = Date.now();
+  const totalRooms = DUNGEON_ROOMS[tier];
+  const isBoss      = run.room === totalRooms;
+  const isMiniBoss  = totalRooms > 6 && run.room === Math.ceil(totalRooms / 2);
+  const enemy       = getDungeonEnemy(tier, run.room);
+  const now         = Date.now();
+
+  if (run.phase === 'choice') {
+    const hpPct = Math.max(0, Math.round(run.heroHp / maxHp * 100));
+    return (
+      <div className="flex flex-col flex-1 pb-6 overflow-y-auto relative z-10 page-fade">
+        <div className="top-bar sticky top-0 z-30 px-4 py-3">
+          <div className="flex items-center justify-between mb-2">
+            <p className="font-cinzel font-bold text-sm" style={{ color: dungeon.color }}>{dungeon.name}</p>
+            <p className="font-cinzel text-[#6b5a3a] text-[10px]">Room {run.room} of {totalRooms} cleared</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[9px] text-[#f87171] font-bold shrink-0">HP</span>
+            <div className="flex-1 h-3 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.07)' }}>
+              <div className="h-full rounded-full transition-all duration-300"
+                style={{ width: `${hpPct}%`, background: hpPct > 50 ? '#4ade80' : hpPct > 25 ? '#f0c040' : '#f87171' }} />
+            </div>
+            <span className="text-[9px] font-bold text-[#f87171] shrink-0">{run.heroHp}/{maxHp}</span>
+          </div>
+        </div>
+        <div className="px-3 mt-3 flex flex-col gap-3">
+          <div className="dragon-panel px-4 py-3 text-center">
+            <p className="font-cinzel font-bold text-[#f0c040] text-xs mb-0.5">✅ Room Cleared!</p>
+            <p className="text-[#6b5a3a] text-[9px]">+{formatNumber(200 * tier)} gold · +{tier * 3 * Math.max(1, state.level)} XP banked · choose your next action</p>
+          </div>
+          <button onClick={() => makeChoice('rest')}
+            className="dragon-panel px-4 py-3 flex items-center gap-3 active:scale-95 transition-all w-full text-left"
+            style={{ border: '1px solid rgba(74,222,128,0.4)' }}>
+            <span className="text-2xl">🛌</span>
+            <div>
+              <p className="font-bold text-[#4ade80] text-[11px]">Rest</p>
+              <p className="text-[#6b5a3a] text-[9px]">Restore 20% HP (+{Math.round(maxHp * 0.20)} HP)</p>
+            </div>
+          </button>
+          <button onClick={() => makeChoice('pressOn')}
+            className="dragon-panel px-4 py-3 flex items-center gap-3 active:scale-95 transition-all w-full text-left"
+            style={{ border: '1px solid rgba(240,192,64,0.4)' }}>
+            <span className="text-2xl">⚡</span>
+            <div>
+              <p className="font-bold text-[#f0c040] text-[11px]">Press On</p>
+              <p className="text-[#6b5a3a] text-[9px]">+{formatNumber(150 * tier)} bonus gold · advance immediately</p>
+            </div>
+          </button>
+          <button onClick={() => makeChoice('loot')}
+            className="dragon-panel px-4 py-3 flex items-center gap-3 active:scale-95 transition-all w-full text-left"
+            style={{ border: '1px solid rgba(192,132,252,0.4)' }}>
+            <span className="text-2xl">🎁</span>
+            <div>
+              <p className="font-bold text-[#c084fc] text-[11px]">Loot</p>
+              <p className="text-[#6b5a3a] text-[9px]">Guaranteed material drop from this tier</p>
+            </div>
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (run.phase === 'done') {
     return (
@@ -1119,7 +1309,7 @@ function DungeonRunScreen({ tier, onComplete }: { tier: DungeonTier; onComplete:
               {run.won ? 'DUNGEON CLEARED!' : 'DEFEATED'}
             </p>
             <p className="text-[#6b5a3a] text-xs mb-4">
-              {run.won ? 'All rooms cleared!' : `Reached Room ${run.room} of 6`}
+              {run.won ? 'All rooms cleared!' : `Reached Room ${run.room} of ${totalRooms}`}
             </p>
             {run.won ? (
               <>
@@ -1146,7 +1336,11 @@ function DungeonRunScreen({ tier, onComplete }: { tier: DungeonTier; onComplete:
                 </div>
               </>
             ) : (
-              <p className="text-[#f87171] font-bold text-sm">💸 −{formatNumber(Math.floor(state.gold * 0.10))} gold lost</p>
+              <div className="flex flex-col gap-1 items-center">
+                <p className="text-[#f87171] font-bold text-sm">💸 −{formatNumber(Math.floor(state.gold * 0.10))} gold lost</p>
+                {run.goldEarned > 0 && <p className="text-[#f0c040] text-xs">💰 +{formatNumber(run.goldEarned)} gold banked from cleared rooms</p>}
+                {run.xpEarned   > 0 && <p className="text-[#60a5fa] text-xs">✨ +{run.xpEarned} XP earned</p>}
+              </div>
             )}
           </div>
           <button onClick={onComplete} className="action-btn w-full py-3 text-sm font-black">← Back to Dungeon Select</button>
@@ -1163,7 +1357,7 @@ function DungeonRunScreen({ tier, onComplete }: { tier: DungeonTier; onComplete:
       <div className="top-bar sticky top-0 z-30 px-4 py-3">
         <div className="flex items-center justify-between mb-2">
           <p className="font-cinzel font-bold text-sm" style={{ color: dungeon.color }}>{dungeon.name}</p>
-          <p className="font-cinzel text-[#6b5a3a] text-[10px]">{isBoss ? '⚠️ BOSS' : `Room ${run.room} of 6`}</p>
+          <p className="font-cinzel text-[#6b5a3a] text-[10px]">{isBoss ? '⚠️ BOSS' : isMiniBoss ? '⚡ MINI-BOSS' : `Room ${run.room} of ${totalRooms}`}</p>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-[9px] text-[#f87171] font-bold shrink-0">HP</span>
@@ -1179,11 +1373,21 @@ function DungeonRunScreen({ tier, onComplete }: { tier: DungeonTier; onComplete:
 
         {/* Enemy card */}
         <div className="dragon-panel px-4 py-4 relative overflow-hidden"
-          style={{ border: isBoss ? `2px solid ${dungeon.border}` : '1px solid rgba(255,255,255,0.1)' }}>
-          {isBoss && (
+          style={{
+            border: (isBoss || isMiniBoss) ? `2px solid ${run.bossRaged ? '#f87171' : dungeon.border}` : '1px solid rgba(255,255,255,0.1)',
+            boxShadow: run.bossRaged && isBoss ? '0 0 20px rgba(248,113,113,0.35)' : 'none',
+            transition: 'box-shadow 0.4s ease',
+          }}>
+          {(isBoss || isMiniBoss) && (
             <div className="absolute top-2 right-2 px-2 py-0.5 rounded text-[8px] font-black"
               style={{ background: `${dungeon.color}20`, color: dungeon.color, border: `1px solid ${dungeon.border}` }}>
-              ⚠️ BOSS
+              {isBoss ? '⚠️ BOSS' : '⚡ MINI'}
+            </div>
+          )}
+          {run.bossRaged && isBoss && (
+            <div className="absolute top-2 left-2 px-2 py-0.5 rounded text-[8px] font-black animate-pulse"
+              style={{ background: 'rgba(248,113,113,0.2)', color: '#f87171', border: '1px solid rgba(248,113,113,0.5)' }}>
+              🔥 ENRAGED
             </div>
           )}
           <div className="relative text-center mb-3" style={{ minHeight: 80 }}>
@@ -1218,7 +1422,7 @@ function DungeonRunScreen({ tier, onComplete }: { tier: DungeonTier; onComplete:
         </div>
 
         {/* Move grid */}
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-1.5">
           {DUNGEON_MOVES.map(move => {
             const cdUntil  = moveCooldowns[move.id] ?? 0;
             const onCd     = cdUntil > now;

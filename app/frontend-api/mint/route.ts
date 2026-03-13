@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
     const qr_png: string   = data.refs?.qr_png ?? null;
 
     console.log(`[mint] created payload uuid=${uuid} item=${itemName} player=${playerId}`);
-    return NextResponse.json({ success: true, uuid, deeplink, qr_png });
+    return NextResponse.json({ success: true, uuid, deeplink, qr_png, nftTokenId: nft_token_id });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     console.error('Mint route error:', msg);
