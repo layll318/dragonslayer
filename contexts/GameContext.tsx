@@ -277,6 +277,7 @@ interface GameContextType {
   removeBurnedNft: (itemId: string) => void;
   dismissCraftingV2Modal: () => void;
   addMaterials: (drops: { type: MaterialType; quantity: number }[]) => void;
+  addDragonSouls: (quantity: number) => void;
   connectWallet: (address: string) => Promise<void>;
   disconnectWallet: () => void;
   setDisplayName: (name: string) => Promise<void>;
@@ -1549,6 +1550,25 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  const addDragonSouls = useCallback((quantity: number) => {
+    setState((prev) => {
+      const newMaterials = [...prev.materials];
+      const existing = newMaterials.find(m => m.type === 'dragon_soul');
+      if (existing) existing.quantity += quantity;
+      else newMaterials.push({ type: 'dragon_soul' as MaterialType, quantity });
+      const newState = { ...prev, materials: newMaterials };
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? '';
+      if (apiUrl && newState.playerId) {
+        fetch(`${apiUrl}/api/save/${newState.playerId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ save_json: newState }),
+        }).catch(() => {});
+      }
+      return newState;
+    });
+  }, []);
+
   const placeEggInIncubator = useCallback((eggId: string, slotIndex: number) => {
     setState((prev) => {
       const egg = prev.eggInventory.find(e => e.id === eggId);
@@ -2725,6 +2745,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         burnItemToWallet,
         refreshFromServer,
         addMaterials,
+        addDragonSouls,
         connectWallet,
         disconnectWallet,
         setDisplayName,
