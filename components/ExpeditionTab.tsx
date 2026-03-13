@@ -195,7 +195,7 @@ function ItemCard({ item, onEquip, onUnequip, isEquipped, onMint, mintPhase, sho
 
 // ─── main component ─────────────────────────────────────────────────────────
 
-type Section = 'expedition' | 'gear' | 'stash';
+type Section = 'expedition' | 'gear' | 'stash' | 'store';
 
 const EGG_RARITY_COLOR: Record<EggRarity, string> = {
   common: '#9a9a9a', uncommon: '#4ade80', rare: '#60a5fa', legendary: '#f0c040',
@@ -867,7 +867,7 @@ export default function ExpeditionTab() {
                         item={item}
                         isEquipped
                         onUnequip={() => unequipItem(slot)}
-                        showMintBtn={item.rarity === 'legendary' || (item.rarity === 'epic' && (item.itemType === 'weapon' || item.itemType === 'shield'))}
+                        showMintBtn={item.rarity === 'legendary' || item.rarity === 'epic'}
                         onMint={() => startMint(item)}
                         mintPhase={mintItemId === item.id ? mintPhase : 'idle'}
                         onClearNft={item.nftTokenId ? () => clearItemNftTokenId(item.id) : undefined}
@@ -897,7 +897,7 @@ export default function ExpeditionTab() {
                 key={item.id}
                 item={item}
                 onEquip={() => equipItem(item.id)}
-                showMintBtn={item.rarity === 'legendary' || (item.rarity === 'epic' && (item.itemType === 'weapon' || item.itemType === 'shield'))}
+                showMintBtn={item.rarity === 'legendary' || item.rarity === 'epic'}
                 onMint={() => startMint(item)}
                 mintPhase={mintItemId === item.id ? mintPhase : 'idle'}
                 onClearNft={item.nftTokenId ? () => clearItemNftTokenId(item.id) : undefined}
@@ -1325,86 +1325,87 @@ export default function ExpeditionTab() {
           </div>
         </div>
 
-        {/* ── Dragon Souls XRP Shop ──────────────────────────────────── */}
-        <div className="dragon-panel px-3 py-3">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-base">🧿</span>
-            <p className="font-cinzel font-bold text-[#e8d8a8] text-[11px] tracking-wider">Dragon Soul Shop</p>
-            <span className="text-[7px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(96,165,250,0.15)', color: '#60a5fa' }}>XRP</span>
-          </div>
-          <p className="text-[8px] text-[#6b5a3a] mb-3">Buy Dragon Souls with XRP. Souls are used to level items and forge legendaries.</p>
-
-          {soulsPhase === 'idle' || soulsPhase === 'error' ? (
-            <div className="flex flex-col gap-2">
-              {/* 5 XRP = 50 Souls */}
-              <div className="flex items-center justify-between gap-2 rounded-xl px-3 py-2.5"
-                style={{ background: 'rgba(96,165,250,0.06)', border: '1px solid rgba(96,165,250,0.2)' }}>
-                <div>
-                  <p className="font-cinzel font-bold text-[11px] text-[#e8d8a8]">🧿 50 Dragon Souls</p>
-                  <p className="text-[8px] text-[#9a8a6a] mt-0.5">5 XRP · level items &amp; forge legendaries</p>
-                </div>
-                <button
-                  onClick={() => startSoulsBuy('souls_50')}
-                  className="text-[9px] font-bold px-3 py-1.5 rounded-lg flex-shrink-0 whitespace-nowrap"
-                  style={{ background: 'linear-gradient(135deg,#1a4a7a,#2a6abf)', color: '#93c5fd' }}
-                >
-                  Buy 5 XRP
-                </button>
-              </div>
-              {/* 10 XRP = 125 Souls */}
-              <div className="flex items-center justify-between gap-2 rounded-xl px-3 py-2.5"
-                style={{ background: 'rgba(192,132,252,0.06)', border: '1px solid rgba(192,132,252,0.2)' }}>
-                <div>
-                  <p className="font-cinzel font-bold text-[11px] text-[#e8d8a8]">🧿 125 Dragon Souls <span className="text-[8px] text-[#4ade80]">+25 bonus</span></p>
-                  <p className="text-[8px] text-[#9a8a6a] mt-0.5">10 XRP · best value</p>
-                </div>
-                <button
-                  onClick={() => startSoulsBuy('souls_125')}
-                  className="text-[9px] font-bold px-3 py-1.5 rounded-lg flex-shrink-0 whitespace-nowrap"
-                  style={{ background: 'linear-gradient(135deg,#4a1a7a,#7a2abf)', color: '#c4b5fd' }}
-                >
-                  Buy 10 XRP
-                </button>
-              </div>
-              {soulsPhase === 'error' && soulsError && (
-                <p className="text-[8px] text-red-400 text-center mt-1">{soulsError}</p>
-              )}
-            </div>
-          ) : soulsPhase === 'loading' ? (
-            <div className="flex items-center justify-center py-4 gap-2">
-              <span className="text-[#9a8a6a] text-[10px]">Creating payment…</span>
-            </div>
-          ) : soulsPhase === 'waiting' ? (
-            <div className="flex flex-col items-center gap-3 py-2">
-              <p className="text-[9px] text-[#e8d8a8] font-bold text-center">Waiting for XRP payment…</p>
-              {soulsQr && (
-                <img src={soulsQr} alt="Scan QR" className="w-32 h-32 rounded-xl border border-[rgba(96,165,250,0.3)]" />
-              )}
-              {soulsDeeplink && (
-                <a href={soulsDeeplink} target="_blank" rel="noopener noreferrer"
-                  className="text-[9px] font-bold px-4 py-2 rounded-lg"
-                  style={{ background: 'linear-gradient(135deg,#1a4a7a,#2a6abf)', color: '#93c5fd' }}>
-                  Open Xaman
-                </a>
-              )}
-              <button onClick={cancelSouls} className="text-[8px] text-[#6b5a3a] underline mt-1">Cancel</button>
-            </div>
-          ) : soulsPhase === 'success' ? (
-            <div className="flex flex-col items-center gap-2 py-3">
-              <span className="text-3xl">🧿</span>
-              <p className="font-cinzel font-bold text-[#4ade80] text-[11px]">+{soulsCredited} Dragon Souls credited!</p>
-              <button onClick={cancelSouls}
-                className="text-[9px] font-bold px-4 py-1.5 rounded-lg mt-1"
-                style={{ background: 'rgba(74,222,128,0.15)', color: '#4ade80' }}>
-                Done
-              </button>
-            </div>
-          ) : null}
-        </div>
-
       </div>
     );
   };
+
+  const renderStore = () => (
+    <div className="flex flex-col gap-3">
+      <div className="dragon-panel px-3 py-3">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-base">🧿</span>
+          <p className="font-cinzel font-bold text-[#e8d8a8] text-[11px] tracking-wider">Dragon Soul Shop</p>
+          <span className="text-[7px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(96,165,250,0.15)', color: '#60a5fa' }}>XRP</span>
+        </div>
+        <p className="text-[8px] text-[#6b5a3a] mb-3">Buy Dragon Souls with XRP. Souls are used to level items and forge legendaries.</p>
+
+        {soulsPhase === 'idle' || soulsPhase === 'error' ? (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between gap-2 rounded-xl px-3 py-2.5"
+              style={{ background: 'rgba(96,165,250,0.06)', border: '1px solid rgba(96,165,250,0.2)' }}>
+              <div>
+                <p className="font-cinzel font-bold text-[11px] text-[#e8d8a8]">🧿 50 Dragon Souls</p>
+                <p className="text-[8px] text-[#9a8a6a] mt-0.5">5 XRP · level items &amp; forge legendaries</p>
+              </div>
+              <button
+                onClick={() => startSoulsBuy('souls_50')}
+                className="text-[9px] font-bold px-3 py-1.5 rounded-lg flex-shrink-0 whitespace-nowrap"
+                style={{ background: 'linear-gradient(135deg,#1a4a7a,#2a6abf)', color: '#93c5fd' }}
+              >
+                Buy 5 XRP
+              </button>
+            </div>
+            <div className="flex items-center justify-between gap-2 rounded-xl px-3 py-2.5"
+              style={{ background: 'rgba(192,132,252,0.06)', border: '1px solid rgba(192,132,252,0.2)' }}>
+              <div>
+                <p className="font-cinzel font-bold text-[11px] text-[#e8d8a8]">🧿 125 Dragon Souls <span className="text-[8px] text-[#4ade80]">+25 bonus</span></p>
+                <p className="text-[8px] text-[#9a8a6a] mt-0.5">10 XRP · best value</p>
+              </div>
+              <button
+                onClick={() => startSoulsBuy('souls_125')}
+                className="text-[9px] font-bold px-3 py-1.5 rounded-lg flex-shrink-0 whitespace-nowrap"
+                style={{ background: 'linear-gradient(135deg,#4a1a7a,#7a2abf)', color: '#c4b5fd' }}
+              >
+                Buy 10 XRP
+              </button>
+            </div>
+            {soulsPhase === 'error' && soulsError && (
+              <p className="text-[8px] text-red-400 text-center mt-1">{soulsError}</p>
+            )}
+          </div>
+        ) : soulsPhase === 'loading' ? (
+          <div className="flex items-center justify-center py-4">
+            <span className="text-[#9a8a6a] text-[10px]">Creating payment…</span>
+          </div>
+        ) : soulsPhase === 'waiting' ? (
+          <div className="flex flex-col items-center gap-3 py-2">
+            <p className="text-[9px] text-[#e8d8a8] font-bold text-center">Waiting for XRP payment…</p>
+            {soulsQr && (
+              <img src={soulsQr} alt="Scan QR" className="w-32 h-32 rounded-xl border border-[rgba(96,165,250,0.3)]" />
+            )}
+            {soulsDeeplink && (
+              <a href={soulsDeeplink} target="_blank" rel="noopener noreferrer"
+                className="text-[9px] font-bold px-4 py-2 rounded-lg"
+                style={{ background: 'linear-gradient(135deg,#1a4a7a,#2a6abf)', color: '#93c5fd' }}>
+                Open Xaman
+              </a>
+            )}
+            <button onClick={cancelSouls} className="text-[8px] text-[#6b5a3a] underline mt-1">Cancel</button>
+          </div>
+        ) : soulsPhase === 'success' ? (
+          <div className="flex flex-col items-center gap-2 py-3">
+            <span className="text-3xl">🧿</span>
+            <p className="font-cinzel font-bold text-[#4ade80] text-[11px]">+{soulsCredited} Dragon Souls credited!</p>
+            <button onClick={cancelSouls}
+              className="text-[9px] font-bold px-4 py-1.5 rounded-lg mt-1"
+              style={{ background: 'rgba(74,222,128,0.15)', color: '#4ade80' }}>
+              Done
+            </button>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
 
   // ── SECTION: EGGS ──────────────────────────────────────────────────────────
 
@@ -1546,10 +1547,12 @@ export default function ExpeditionTab() {
   const eggCount = state.eggInventory?.length || 0;
   const hatchReady = (state.incubator ?? []).some(s => s.egg && s.endsAt && Date.now() >= s.endsAt);
   const stashBadge = state.materials.reduce((n, m) => n + m.quantity, 0) + eggCount;
+  const souls = state.materials.find(m => m.type === 'dragon_soul')?.quantity ?? 0;
   const tabs: { id: Section; label: string; badge?: number; amber?: boolean }[] = [
     { id: 'expedition', label: '🗺️ Quest' },
     { id: 'gear',       label: '⚔️ Gear',   badge: state.inventory.length },
     { id: 'stash',      label: '🎒 Stash',  badge: stashBadge, amber: eggCount > 0 || hatchReady },
+    { id: 'store',      label: '🛒 Store',  badge: souls > 0 ? souls : undefined, amber: false },
   ];
 
   return (
@@ -1805,6 +1808,7 @@ export default function ExpeditionTab() {
             {craftOpen && renderCraft()}
           </>
         )}
+        {section === 'store' && renderStore()}
         {section === 'stash' && (
           <>
             {renderMaterials()}
