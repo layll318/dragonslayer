@@ -1019,88 +1019,81 @@ export default function ExpeditionTab() {
             <p className="font-cinzel font-bold text-[#f0c040] text-[11px] tracking-wider">Legendary Forge</p>
             <span className="text-[7px] font-bold px-1.5 py-0.5 rounded" style={{ background: 'rgba(240,192,64,0.2)', color: '#f0c040' }}>XRPL NFT</span>
           </div>
-          {forgeReadyItems.length === 0 && legendaryItems.length === 0 ? (
-            <>
-              <p className="text-[8px] text-[#6b5a3a] mb-3">Level any item to 25 using Dragon Souls, then choose a legendary recipe to forge it into a legendary NFT.</p>
-              <div className="flex flex-col gap-1.5">
-                {LEGENDARY_RECIPES.filter(r => !r.holderOnly).slice(0, 4).map(r => (
-                  <div key={r.id} className="flex items-center justify-between px-2 py-1.5 rounded-lg"
-                    style={{ background: r.secret ? 'rgba(120,80,240,0.06)' : 'rgba(240,192,64,0.05)', border: `1px solid ${r.secret ? 'rgba(120,80,240,0.2)' : 'rgba(240,192,64,0.12)'}` }}>
-                    <span className="font-cinzel text-[9px]" style={{ color: r.secret ? '#c084fc' : '#e8d8a8' }}>
-                      {r.secret && '🔮 '}{r.name}
-                    </span>
-                    <span className="text-[8px] text-[#9a8a6a]">⚡{r.power}</span>
-                  </div>
-                ))}
-                <p className="text-[7px] text-[#3a2a1a] text-center mt-1">+ {LEGENDARY_RECIPES.length - 4} more recipes including holder exclusives</p>
-              </div>
-            </>
-          ) : (
-            <>
-              <p className="text-[8px] text-[#6b5a3a] mb-3">Forge level-25 items into legendary NFTs. Multiple recipes per slot — secret & holder-exclusive available.</p>
+          <p className="text-[8px] text-[#6b5a3a] mb-3">Pick the legendary you want to forge. Level any item to 25 first, then it becomes the sacrifice.</p>
 
-              {/* Level-25 items ready to forge */}
-              {forgeReadyItems.map(item => {
-                const slotRecipes = LEGENDARY_RECIPES.filter(r =>
-                  r.itemType === item.itemType &&
-                  (!r.holderOnly || !!state.walletAddress)
-                );
-                return (
-                  <div key={item.id} className="mb-4">
-                    <p className="text-[9px] font-bold text-[#e8d8a8] mb-2">
-                      {item.name} <span className="text-[#f0c040]">(Lv{item.itemLevel ?? 25})</span> — pick a forge path:
-                    </p>
-                    <div className="flex flex-col gap-1.5">
-                      {slotRecipes.map(recipe => {
-                        const canAffordGold = state.gold >= recipe.goldCost;
-                        const matsMet = recipe.materials.every(req =>
-                          (state.materials.find(m => m.type === req.type)?.quantity ?? 0) >= req.quantity
-                        );
-                        const canForge = canAffordGold && matsMet;
-                        return (
-                          <div key={recipe.id} className="rounded-lg p-2 border"
-                            style={{ background: recipe.secret ? 'rgba(120,80,240,0.07)' : recipe.holderOnly ? 'rgba(240,192,64,0.06)' : 'rgba(240,192,64,0.05)',
-                              borderColor: recipe.secret ? 'rgba(120,80,240,0.35)' : 'rgba(240,192,64,0.28)' }}>
-                            <div className="flex items-center justify-between gap-2 mb-1">
-                              <div>
-                                <span className="font-cinzel font-bold text-[10px]" style={{ color: RARITY_COLORS['legendary'] }}>
-                                  {recipe.name}
-                                  {recipe.secret && <span className="ml-1 text-[7px] text-[#c084fc]">🔮 SECRET</span>}
-                                  {recipe.holderOnly && <span className="ml-1 text-[7px] text-[#f0c040]">👑 HOLDER</span>}
-                                </span>
-                                <p className="text-[8px] text-[#9a8a6a]">⚡ {recipe.power} power{recipe.enchantId ? ' · pre-enchanted' : ''}</p>
-                              </div>
-                              <button onClick={() => forgeLegendary(item.id, recipe.id)} disabled={!canForge}
-                                className="text-[8px] font-bold px-2 py-1 rounded whitespace-nowrap flex-shrink-0"
-                                style={canForge
-                                  ? { background: 'linear-gradient(135deg,#b8860b,#f0c040)', color: '#1a0e00' }
-                                  : { background: 'rgba(255,255,255,0.04)', color: '#4a3a2a' }}>
-                                ✨ FORGE
-                              </button>
-                            </div>
-                            <div className="flex flex-wrap gap-1">
-                              {recipe.materials.map((req, i) => {
-                                const have = state.materials.find(m => m.type === req.type)?.quantity ?? 0;
-                                const ok = have >= req.quantity;
-                                return (
-                                  <span key={i} className="text-[7px] px-1 py-0.5 rounded"
-                                    style={{ color: ok ? '#4ade80' : '#f87171', background: ok ? 'rgba(74,222,128,0.1)' : 'rgba(248,113,113,0.1)' }}>
-                                    {MATERIAL_LABELS[req.type as MaterialType]} {have}/{req.quantity}
-                                  </span>
-                                );
-                              })}
-                              <span className={`text-[7px] font-bold ml-1 ${canAffordGold ? 'text-[#b09a60]' : 'text-red-400'}`}>🪙{formatNumber(recipe.goldCost)}g</span>
-                            </div>
-                          </div>
-                        );
-                      })}
+          {/* ── All legendary recipes — always visible ── */}
+          <div className="flex flex-col gap-2 mb-3">
+            {LEGENDARY_RECIPES.filter(r => !r.holderOnly || !!state.walletAddress).map(recipe => {
+              const qualifying = allItems
+                .filter(i => i.rarity !== 'legendary' && i.itemType === recipe.itemType && (i.itemLevel ?? 1) >= 25)
+                .sort((a, b) => (b.itemLevel ?? 25) - (a.itemLevel ?? 25));
+              const sacrifice = qualifying[0] ?? null;
+              const canAffordGold = state.gold >= recipe.goldCost;
+              const matsMet = recipe.materials.every(req =>
+                (state.materials.find(m => m.type === req.type)?.quantity ?? 0) >= req.quantity
+              );
+              const canForge = !!sacrifice && canAffordGold && matsMet;
+              const locked = !sacrifice;
+              return (
+                <div key={recipe.id} className="rounded-lg p-2.5 border"
+                  style={{
+                    background: recipe.secret ? 'rgba(120,80,240,0.07)' : recipe.holderOnly ? 'rgba(240,192,64,0.06)' : 'rgba(240,192,64,0.05)',
+                    borderColor: locked ? 'rgba(255,255,255,0.07)' : recipe.secret ? 'rgba(120,80,240,0.35)' : 'rgba(240,192,64,0.28)',
+                    opacity: locked ? 0.55 : 1,
+                  }}>
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1 flex-wrap">
+                        <span className="font-cinzel font-bold text-[10px]" style={{ color: locked ? '#6b5a3a' : RARITY_COLORS['legendary'] }}>
+                          {recipe.secret && '🔮 '}{recipe.name}
+                        </span>
+                        {recipe.secret && <span className="text-[7px] text-[#c084fc]">SECRET</span>}
+                        {recipe.holderOnly && <span className="text-[7px] text-[#f0c040]">👑 HOLDER</span>}
+                      </div>
+                      <p className="text-[7px] text-[#9a8a6a]">⚡ {recipe.power} · {recipe.itemType}{recipe.enchantId ? ' · pre-enchanted' : ''}</p>
+                      {sacrifice ? (
+                        <p className="text-[7px] text-[#c8b87a] mt-0.5">🔥 Burns: {sacrifice.name} (Lv{sacrifice.itemLevel ?? 25})</p>
+                      ) : (
+                        <p className="text-[7px] text-[#6b5a3a] mt-0.5">⚠ Need a Lv25 {recipe.itemType}</p>
+                      )}
                     </div>
+                    <button
+                      onClick={() => sacrifice && forgeLegendary(sacrifice.id, recipe.id)}
+                      disabled={!canForge}
+                      className="text-[8px] font-bold px-2 py-1 rounded whitespace-nowrap flex-shrink-0"
+                      style={canForge
+                        ? { background: 'linear-gradient(135deg,#b8860b,#f0c040)', color: '#1a0e00' }
+                        : { background: 'rgba(255,255,255,0.04)', color: '#4a3a2a' }}>
+                      ✨ FORGE
+                    </button>
                   </div>
-                );
-              })}
+                  <div className="flex flex-wrap gap-1">
+                    {recipe.materials.map((req, i) => {
+                      const have = state.materials.find(m => m.type === req.type)?.quantity ?? 0;
+                      const ok = have >= req.quantity;
+                      return (
+                        <span key={i} className="text-[7px] px-1 py-0.5 rounded"
+                          style={{ color: ok ? '#4ade80' : '#f87171', background: ok ? 'rgba(74,222,128,0.1)' : 'rgba(248,113,113,0.1)' }}>
+                          {MATERIAL_LABELS[req.type as MaterialType]} {have}/{req.quantity}
+                        </span>
+                      );
+                    })}
+                    <span className={`text-[7px] font-bold ml-1 ${canAffordGold ? 'text-[#b09a60]' : 'text-red-400'}`}>
+                      🪙{formatNumber(recipe.goldCost)}g
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
 
-              {/* Owned legendary items — mint, forge 25→100, enchant */}
-              {legendaryItems.map(item => {
+          {/* ── Owned legendary items — mint, forge 25→100, enchant ── */}
+          {legendaryItems.length > 0 && (
+            <div className="pt-3" style={{ borderTop: '1px solid rgba(240,192,64,0.15)' }}>
+              <p className="font-cinzel font-bold text-[#e8d8a8] text-[10px] mb-2">✨ Your Legendaries</p>
+            </div>
+          )}
+          {legendaryItems.map(item => {
                 const lvl = item.itemLevel ?? 25;
                 const forgeTier = FORGE_LEVEL_COSTS.find(t => lvl >= t.fromLevel && lvl < t.toLevel);
                 const isMinting = mintItemId === item.id && (mintPhase === 'loading' || mintPhase === 'waiting');
@@ -1175,8 +1168,6 @@ export default function ExpeditionTab() {
                   </div>
                 );
               })}
-            </>
-          )}
         </div>
       </div>
     );
