@@ -32,8 +32,10 @@ def _to_dict(val) -> dict:
     return dict(val)
 
 PLACEHOLDER_IMAGE = "https://placehold.co/600x600/1a0e00/f0c040?text=DragonSlayer"
-BACKEND_URL  = os.environ.get("BACKEND_URL",  "https://backend-production-7363.up.railway.app")
-FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://dragonslayer-production.up.railway.app")
+_raw_backend  = os.environ.get("BACKEND_URL",  "https://backend-production-7363.up.railway.app")
+_raw_frontend = os.environ.get("FRONTEND_URL", "https://dragonslayer-production.up.railway.app")
+BACKEND_URL  = _raw_backend  if _raw_backend.startswith("http")  else f"https://{_raw_backend}"
+FRONTEND_URL = _raw_frontend if _raw_frontend.startswith("http") else f"https://{_raw_frontend}"
 XRPL_NODE = os.environ.get("XRPL_NODE", "https://s1.ripple.com:51234/")
 XRPL_WALLET_SEED = os.environ.get("XRPL_WALLET_SEED", "")
 PINATA_JWT     = os.environ.get("PINATA_JWT", "")
@@ -350,7 +352,7 @@ async def _pin_nft_async(nft_token_id: str, player_id: int, item_id: str, item_n
             "schema": "ipfs://QmNpi8rcXEkohca8iXu7zysKKSJYqCvBJn3xJwga8jXqWU",
             "nftType": "art.v0",
             "name": name,
-            "description": f"{rarity.title()} DragonSlayer {item_type} · Power {power} · Lv {item_level}",
+            "description": f"{rarity.title()} DragonSlayer {item_type} - Power {power} - Lv {item_level}",
             "image": image_ipfs,
             "external_url": FRONTEND_URL,
             "collection": {"name": "DragonSlayer Items", "family": "DragonSlayer"},
@@ -595,7 +597,7 @@ async def get_nft_item_metadata(player_id: int, item_id: str):
             "schema": "ipfs://QmNpi8rcXEkohca8iXu7zysKKSJYqCvBJn3xJwga8jXqWU",
             "nftType": "art.v0",
             "name": name,
-            "description": f"{rarity.title()} DragonSlayer {item_type} · Power {power} · Level {item_level} · Minted on XRPL",
+            "description": f"{rarity.title()} DragonSlayer {item_type} - Power {power} - Level {item_level} - Minted on XRPL",
             "image": image,
             "external_url": FRONTEND_URL,
             "collection": {"name": "DragonSlayer Items", "family": "DragonSlayer"},
@@ -733,7 +735,7 @@ async def get_nft_by_token_id(nft_token_id: str):
                 "schema": "ipfs://QmNpi8rcXEkohca8iXu7zysKKSJYqCvBJn3xJwga8jXqWU",
                 "nftType": "art.v0",
                 "name": name,
-                "description": f"{rarity.title()} DragonSlayer {item_type} · Power {power} · Lv {item_level} · Minted on XRPL",
+                "description": f"{rarity.title()} DragonSlayer {item_type} - Power {power} - Lv {item_level} - Minted on XRPL",
                 "image": image,
                 "external_url": FRONTEND_URL,
                 "collection": {"name": "DragonSlayer Items", "family": "DragonSlayer"},
@@ -817,16 +819,16 @@ async def get_nft_metadata(token_id: str):
             nft_id = item.get("nftTokenId")
             lvl = item.get("itemLevel") or item.get("reforgeLevel") or 0
             suffix = f" Lv{lvl}" if lvl else ""
-            prefix = "✨ " if nft_id else ""
+            prefix = "[NFT] " if nft_id else ""
             return f"{prefix}{item.get('rarity', '').title()} {name}{suffix}"
 
         return {
             "schema": "ipfs://QmNpi8rcXEkohca8iXu7zysKKSJYqCvBJn3xJwga8jXqWU",
             "nftType": "art.v0",
-            "name": f"DragonSlayer #{player_id} — {username}",
+            "name": f"DragonSlayer #{player_id} - {username}",
             "description": (
-                f"Level {level} DragonSlayer · "
-                f"{total_dragons:,} dragons slain · "
+                f"Level {level} DragonSlayer - "
+                f"{total_dragons:,} dragons slain - "
                 f"{total_expeditions} expeditions completed"
             ),
             "image": PLACEHOLDER_IMAGE,
