@@ -712,6 +712,22 @@ export default function ExpeditionTab() {
         </div>
       )}
 
+      {/* Secret recipe discovery notification */}
+      {claimed && result?.newSecretRecipe && (() => {
+        const rec = LEGENDARY_RECIPES.find(r => r.id === result.newSecretRecipe);
+        if (!rec) return null;
+        return (
+          <div className="dragon-panel px-3 py-2.5 flex items-center gap-2"
+            style={{ border: '1px solid rgba(192,132,252,0.5)', background: 'rgba(120,80,240,0.1)' }}>
+            <span className="text-2xl">🔮</span>
+            <div>
+              <p className="font-cinzel font-bold text-[11px] tracking-wide text-[#c084fc]">SECRET RECIPE DISCOVERED!</p>
+              <p className="text-[9px] text-[#a855f7]">{rec.name} · Check Legendary Forge → {rec.itemType}</p>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Last result */}
       {claimed && result && (
         <div className="dragon-panel px-3 py-3">
@@ -1025,8 +1041,14 @@ export default function ExpeditionTab() {
           {/* ── All legendary recipes — grouped by slot, collapsible ── */}
           {(['weapon','shield','helm','armor','ring'] as const).map(slot => {
             const slotEmoji: Record<string,string> = { weapon:'⚔️', shield:'🛡️', helm:'⛑️', armor:'🧥', ring:'💍' };
-            const slotRecipes = LEGENDARY_RECIPES.filter(r => r.itemType === slot && (!r.holderOnly || !!state.walletAddress));
-            if (slotRecipes.length === 0) return null;
+            const discovered = state.discoveredRecipes ?? [];
+            const slotRecipes = LEGENDARY_RECIPES.filter(r =>
+              r.itemType === slot &&
+              (!r.holderOnly || !!state.walletAddress) &&
+              (!r.secret || discovered.includes(r.id))
+            );
+            const hiddenSecretCount = LEGENDARY_RECIPES.filter(r => r.itemType === slot && r.secret && !discovered.includes(r.id)).length;
+            if (slotRecipes.length === 0 && hiddenSecretCount === 0) return null;
             const slotCollapsed = collapsedSlots[slot] ?? false;
             const slotHasReady = slotRecipes.some(r => {
               const q = allItems.filter(i => i.rarity !== 'legendary' && i.itemType === r.itemType && (i.itemLevel ?? 1) >= 25);
@@ -1047,6 +1069,18 @@ export default function ExpeditionTab() {
                 </button>
                 {!slotCollapsed && (
                   <div className="flex flex-col gap-1.5 pl-1">
+                    {hiddenSecretCount > 0 && (
+                      <div className="rounded-lg px-2.5 py-2 border flex items-center gap-2"
+                        style={{ background: 'rgba(120,80,240,0.05)', borderColor: 'rgba(120,80,240,0.2)', opacity: 0.7 }}>
+                        <span className="text-[14px]">🔮</span>
+                        <div>
+                          <p className="font-cinzel font-bold text-[9px] text-[#7c3aed]">
+                            {hiddenSecretCount} secret recipe{hiddenSecretCount > 1 ? 's' : ''} hidden
+                          </p>
+                          <p className="text-[7px] text-[#6b5a3a]">Discover via 8h or 12h expeditions</p>
+                        </div>
+                      </div>
+                    )}
                     {slotRecipes.map(recipe => {
                       const qualifying = allItems
                         .filter(i => i.rarity !== 'legendary' && i.itemType === recipe.itemType && (i.itemLevel ?? 1) >= 25)

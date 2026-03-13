@@ -129,6 +129,7 @@ export interface ExpeditionResult {
   goldEarned: number;
   materials: Material[];
   droppedEgg?: DragonEgg;
+  newSecretRecipe?: string;
 }
 
 export interface DungeonRewards {
@@ -242,6 +243,7 @@ export interface GameState {
   walletNfts: WalletNft[];
   fusionBuffs: string[];
   claimableDrops: ClaimableDrop[];
+  discoveredRecipes: string[];
   craftingV2Migrated?: boolean;
   craftingV2SoulsAwarded?: number;
 }
@@ -922,6 +924,7 @@ function createInitialState(): GameState {
     walletNfts: [],
     fusionBuffs: [],
     claimableDrops: [],
+    discoveredRecipes: [],
   };
 }
 
@@ -1012,6 +1015,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         inventory: v2Inventory,
         materials: v2BaseMats,
         claimableDrops: saved.claimableDrops ?? [],
+        discoveredRecipes: saved.discoveredRecipes ?? [],
         activeExpedition: saved.activeExpedition ?? null,
         lastExpeditionResult: saved.lastExpeditionResult ?? null,
         totalDragonsSlain: saved.totalDragonsSlain ?? 0,
@@ -1517,6 +1521,18 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         ...(prev.claimableDrops ?? []),
         ...gearDrops.map(item => ({ id: `drop-${item.id}`, item, expeditionId })),
       ];
+      // Secret recipe discovery
+      const hours = prev.activeExpedition.durationHours;
+      const secretDropChance = hours === 12 ? 0.08 : hours === 8 ? 0.03 : 0;
+      const knownRecipes = prev.discoveredRecipes ?? [];
+      const undiscovered = LEGENDARY_RECIPES.filter(r => r.secret && !knownRecipes.includes(r.id));
+      let newSecretRecipe: string | undefined;
+      let newDiscoveredRecipes = knownRecipes;
+      if (undiscovered.length > 0 && Math.random() < secretDropChance) {
+        const found = undiscovered[Math.floor(Math.random() * undiscovered.length)];
+        newSecretRecipe = found.id;
+        newDiscoveredRecipes = [...knownRecipes, found.id];
+      }
       return {
         ...prev,
         ...xpUpdate,
@@ -1528,8 +1544,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         materials: newMaterials,
         eggInventory: newEggInventory,
         claimableDrops: newClaimableDrops,
+        discoveredRecipes: newDiscoveredRecipes,
         activeExpedition: null,
-        lastExpeditionResult: { dragonsSlain, goldEarned, materials: boostedMaterials, droppedEgg: droppedEgg ?? undefined },
+        lastExpeditionResult: { dragonsSlain, goldEarned, materials: boostedMaterials, droppedEgg: droppedEgg ?? undefined, newSecretRecipe },
         dailyQuests,
       };
     });
