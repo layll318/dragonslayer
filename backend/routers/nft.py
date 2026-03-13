@@ -38,8 +38,6 @@ BACKEND_URL  = _raw_backend  if _raw_backend.startswith("http")  else f"https://
 FRONTEND_URL = _raw_frontend if _raw_frontend.startswith("http") else f"https://{_raw_frontend}"
 XRPL_NODE = os.environ.get("XRPL_NODE", "https://s1.ripple.com:51234/")
 XRPL_WALLET_SEED = os.environ.get("XRPL_WALLET_SEED", "")
-PINATA_JWT     = os.environ.get("PINATA_JWT", "")
-PINATA_GATEWAY = os.environ.get("PINATA_GATEWAY", "https://gateway.pinata.cloud")
 
 # Local images directory (backend/images/) — populated at deploy time
 _IMAGES_DIR = pathlib.Path(__file__).parent.parent / "images"
@@ -269,127 +267,6 @@ def _render_item_card(
     return buf.getvalue()
 
 
-async def _pin_nft_async(nft_token_id: str, player_id: int, item_id: str, item_name: str) -> None:
-    """
-    Render item card image + metadata JSON, pin both to Pinata IPFS,
-    then update the player_nfts row with the resulting CIDs.
-    Runs as a background task — failure is logged but never raises.
-    """
-    if not PINATA_JWT:
-        return
-    try:
-        # ── 1. Look up item data from DB ──────────────────────────────────────
-        pool = get_pool()
-        async with pool.acquire() as conn:
-            save_row = await conn.fetchrow(
-                "SELECT save_json FROM game_saves WHERE player_id=$1", player_id
-            )
-        item: dict = {}
-        if save_row and save_row["save_json"]:
-            s = _to_dict(save_row["save_json"])
-            name_slug = item_name.strip().lower().replace(" ", "_")
-            for candidate in (s.get("inventory") or []):
-                if candidate.get("id") == item_id or \
-                   candidate.get("name", "").strip().lower().replace(" ", "_") == name_slug:
-                    item = candidate
-                    break
-            if not item:
-                for candidate in (s.get("equipment") or {}).values():
-                    if candidate and (candidate.get("id") == item_id or \
-                       candidate.get("name", "").strip().lower().replace(" ", "_") == name_slug):
-                        item = candidate
-                        break
-
-        name          = item.get("name", item_name or item_id.replace("_", " ").title())
-        rarity        = item.get("rarity", "legendary")
-        power         = item.get("power", 0)
-        item_level    = item.get("itemLevel", 25)
-        enchant_id    = item.get("enchantId") or ""
-        reforge_level = item.get("reforgeLevel", 0)
-        item_type     = item.get("itemType", "weapon")
-
-        pinata_headers = {
-            "Authorization": f"Bearer {PINATA_JWT}",
-        }
-        upload_url = "https://uploads.pinata.cloud/v3/files"
-
-        # ── 2. Pin rendered image ─────────────────────────────────────────────
-        img_cid: str | None = None
-        if PILLOW_AVAILABLE:
-            base_bytes = await _load_item_image(name, item_id)
-            if base_bytes:
-                png_bytes = _render_item_card(
-                    base_bytes, name, rarity, power, item_level, enchant_id, reforge_level
-                )
-                form = aiohttp.FormData()
-                form.add_field("file", png_bytes,
-                               filename=f"{nft_token_id}.png", content_type="image/png")
-                form.add_field("name", f"DragonSlayer-{name}-{nft_token_id[:8]}")
-                async with aiohttp.ClientSession() as session:
-                    async with session.post(upload_url, headers=pinata_headers, data=form,
-                                            timeout=aiohttp.ClientTimeout(total=30)) as resp:
-                        if resp.status in (200, 201):
-                            data = await resp.json()
-                            img_cid = data.get("data", {}).get("cid") or data.get("IpfsHash")
-
-        # ── 3. Build and pin metadata JSON ────────────────────────────────────
-        image_ipfs = f"ipfs://{img_cid}" if img_cid else \
-            (ITEM_IMAGE_BY_NAME.get(name) or ITEM_IMAGE_BY_ID.get(item_id, PLACEHOLDER_IMAGE))
-
-        attributes = [
-            {"trait_type": "Rarity",     "value": rarity.title()},
-            {"trait_type": "Type",       "value": item_type.title()},
-            {"trait_type": "Power",      "value": power},
-            {"trait_type": "Item Level", "value": item_level},
-            {"trait_type": "Game",       "value": "DragonSlayer"},
-        ]
-        if enchant_id:
-            attributes.append({"trait_type": "Enchant", "value": enchant_id})
-        if reforge_level:
-            attributes.append({"trait_type": "Reforge Level", "value": reforge_level})
-
-        metadata = {
-            "schema": "ipfs://QmNpi8rcXEkohca8iXu7zysKKSJYqCvBJn3xJwga8jXqWU",
-            "nftType": "art.v0",
-            "name": name,
-            "description": f"{rarity.title()} DragonSlayer {item_type} - Power {power} - Lv {item_level}",
-            "image": image_ipfs,
-            "external_url": FRONTEND_URL,
-            "collection": {"name": "DragonSlayer Items", "family": "DragonSlayer"},
-            "attributes": attributes,
-        }
-        meta_bytes = json.dumps(metadata).encode()
-        meta_cid: str | None = None
-        form2 = aiohttp.FormData()
-        form2.add_field("file", meta_bytes,
-                        filename=f"{nft_token_id}.json", content_type="application/json")
-        form2.add_field("name", f"DragonSlayer-meta-{nft_token_id[:8]}")
-        async with aiohttp.ClientSession() as session:
-            async with session.post(upload_url, headers=pinata_headers, data=form2,
-                                    timeout=aiohttp.ClientTimeout(total=30)) as resp:
-                if resp.status in (200, 201):
-                    data = await resp.json()
-                    meta_cid = data.get("data", {}).get("cid") or data.get("IpfsHash")
-
-        # ── 4. Update player_nfts with CIDs ───────────────────────────────────
-        if img_cid or meta_cid:
-            async with pool.acquire() as conn:
-                await conn.execute(
-                    """
-                    UPDATE player_nfts
-                       SET ipfs_image_cid=$1, ipfs_meta_cid=$2,
-                           item_data=$3::jsonb, updated_at=NOW()
-                     WHERE nft_token_id=$4
-                    """,
-                    img_cid, meta_cid,
-                    json.dumps({**item, "name": name, "id": item_id}),
-                    nft_token_id,
-                )
-        logger.info("Pinata pin done token=%s img_cid=%s meta_cid=%s", nft_token_id, img_cid, meta_cid)
-    except Exception:
-        logger.exception("_pin_nft_async failed for token=%s", nft_token_id)
-
-
 @router.post("/mint-item")
 async def server_mint_item(request: Request):
     """
@@ -490,10 +367,6 @@ async def server_mint_item(request: Request):
                 )
         except Exception:
             logger.exception("player_nfts insert failed for token=%s", nft_token_id)
-
-        # Fire-and-forget Pinata pin (non-blocking)
-        import asyncio
-        asyncio.create_task(_pin_nft_async(nft_token_id, int(player_id), item_id, item_name))
 
         return {"nft_token_id": nft_token_id, "offer_index": offer_index}
     except HTTPException:
@@ -716,8 +589,7 @@ async def get_nft_by_token_id(nft_token_id: str):
 
             render_url = f"{BACKEND_URL}/api/nft/render/{player_id}/{item_id}" if player_id else None
             static_url = ITEM_IMAGE_BY_NAME.get(name) or ITEM_IMAGE_BY_ID.get(item_id, PLACEHOLDER_IMAGE)
-            ipfs_img   = f"ipfs://{row['ipfs_image_cid']}" if row["ipfs_image_cid"] else None
-            image      = ipfs_img or (render_url if PILLOW_AVAILABLE and player_id else static_url)
+            image      = render_url if PILLOW_AVAILABLE and player_id else static_url
 
             attributes = [
                 {"trait_type": "Rarity",     "value": rarity.title()},
