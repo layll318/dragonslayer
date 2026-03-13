@@ -14,8 +14,11 @@ from xrpl.models.transactions import NFTokenMint, NFTokenCreateOffer
 from xrpl.wallet import Wallet
 try:
     from PIL import Image, ImageDraw, ImageFont
+    import PIL as _PIL
+    _PIL_FONTS_DIR = os.path.join(os.path.dirname(_PIL.__file__), "fonts")
     PILLOW_AVAILABLE = True
 except ImportError:
+    _PIL_FONTS_DIR = ""
     PILLOW_AVAILABLE = False
 
 
@@ -215,6 +218,8 @@ def _render_item_card(
 
     # ── Fonts: system TTFs (nixpacks installs fonts-dejavu-core) then Pillow default
     font_paths = [
+        os.path.join(_PIL_FONTS_DIR, "DejaVuSans.ttf"),              # bundled inside Pillow package
+        os.path.join(_PIL_FONTS_DIR, "DejaVuSans-Bold.ttf"),         # bundled inside Pillow package
         "/tmp/DejaVuSans-Bold.ttf",                                   # downloaded at startup
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",      # nixpacks: fonts-dejavu-core
         "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",                # some distros
